@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM"],
+    "outDir": "./dist/browser",
+    "rootDir": "./src"
+  },
+  "include": ["src/browser/**/*", "src/constants.ts"],
+  "exclude": ["node_modules", "dist"]
+}
