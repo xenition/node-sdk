@@ -11,7 +11,7 @@
  *   "@xenition/sdk": "github:xenition/node-sdk"          // prod (main)
  */
 
-export const XENITION_BASE_URL = 'https://api-dev.xenition.com/v1';
+export const XENITION_BASE_URL = 'https://api.xenition.com/v1';
 
 export const API_ENDPOINTS = {
   AUTH: {
