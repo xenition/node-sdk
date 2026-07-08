@@ -12,6 +12,8 @@ import { SearchClient } from './search/search-client';
 import { PaymentClient } from './payment/payment-client';
 import { VideoConferencingClient } from './video/video-client';
 import { RealtimeClient } from './realtime/realtime-client';
+import { MigrationsClient } from './migrations/migrations-client';
+import { ModulesClient } from './modules/modules-client';
 import { API_ENDPOINTS } from './constants';
 
 jest.mock('axios');
@@ -70,7 +72,7 @@ describe('constructor / API key validation', () => {
 });
 
 describe('sub-clients', () => {
-  it('instantiates all 12 modules over the shared http client', () => {
+  it('instantiates all 12 platform modules plus migrations/modules over the shared http client', () => {
     const client = new XenitionClient('xen_service_abc123');
     expect(client.auth).toBeInstanceOf(AuthClient);
     expect(client.query).toBeInstanceOf(QueryClient);
@@ -84,6 +86,8 @@ describe('sub-clients', () => {
     expect(client.payment).toBeInstanceOf(PaymentClient);
     expect(client.videoConferencing).toBeInstanceOf(VideoConferencingClient);
     expect(client.realtime).toBeInstanceOf(RealtimeClient);
+    expect(client.migrations).toBeInstanceOf(MigrationsClient);
+    expect(client.modules).toBeInstanceOf(ModulesClient);
     // One HttpClient → one axios instance for the whole client.
     expect(mockedAxios.create).toHaveBeenCalledTimes(1);
   });

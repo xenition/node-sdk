@@ -12,6 +12,8 @@ import { SearchClient } from './search/search-client';
 import { PaymentClient } from './payment/payment-client';
 import { VideoConferencingClient } from './video/video-client';
 import { RealtimeClient } from './realtime/realtime-client';
+import { MigrationsClient } from './migrations/migrations-client';
+import { ModulesClient } from './modules/modules-client';
 
 export interface XenitionClientOptions extends HttpClientOptions {}
 
@@ -52,6 +54,10 @@ export class XenitionClient {
   readonly payment: PaymentClient;
   readonly videoConferencing: VideoConferencingClient;
   readonly realtime: RealtimeClient;
+  /** Content-addressed per-app migration ledger (service key). */
+  readonly migrations: MigrationsClient;
+  /** Content modules v0 (cms / forms / reviews) — see modules/core.ts. */
+  readonly modules: ModulesClient;
 
   constructor(apiKey: string, options: XenitionClientOptions = {}) {
     if (!apiKey) {
@@ -80,6 +86,8 @@ export class XenitionClient {
     this.payment = new PaymentClient(this.http);
     this.videoConferencing = new VideoConferencingClient(this.http);
     this.realtime = new RealtimeClient(this.http, apiKey);
+    this.migrations = new MigrationsClient(this.http);
+    this.modules = new ModulesClient(this.http, this.migrations);
   }
 
   /**

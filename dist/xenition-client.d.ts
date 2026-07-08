@@ -12,6 +12,8 @@ import { SearchClient } from './search/search-client';
 import { PaymentClient } from './payment/payment-client';
 import { VideoConferencingClient } from './video/video-client';
 import { RealtimeClient } from './realtime/realtime-client';
+import { MigrationsClient } from './migrations/migrations-client';
+import { ModulesClient } from './modules/modules-client';
 export interface XenitionClientOptions extends HttpClientOptions {
 }
 /**
@@ -50,6 +52,10 @@ export declare class XenitionClient {
     readonly payment: PaymentClient;
     readonly videoConferencing: VideoConferencingClient;
     readonly realtime: RealtimeClient;
+    /** Content-addressed per-app migration ledger (service key). */
+    readonly migrations: MigrationsClient;
+    /** Content modules v0 (cms / forms / reviews) — see modules/core.ts. */
+    readonly modules: ModulesClient;
     constructor(apiKey: string, options?: XenitionClientOptions);
     /**
      * Direct parameterized SQL against the per-app DB. Service-key only —

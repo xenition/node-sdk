@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
+exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
 var xenition_client_1 = require("./xenition-client");
 Object.defineProperty(exports, "XenitionClient", { enumerable: true, get: function () { return xenition_client_1.XenitionClient; } });
 // Auth module
@@ -41,6 +41,32 @@ Object.defineProperty(exports, "VideoConferencingClient", { enumerable: true, ge
 // Realtime module
 var realtime_1 = require("./realtime");
 Object.defineProperty(exports, "RealtimeClient", { enumerable: true, get: function () { return realtime_1.RealtimeClient; } });
+// Migrations (content-addressed per-app ledger)
+var migrations_1 = require("./migrations");
+Object.defineProperty(exports, "MigrationsClient", { enumerable: true, get: function () { return migrations_1.MigrationsClient; } });
+Object.defineProperty(exports, "MIGRATIONS_LEDGER_TABLE", { enumerable: true, get: function () { return migrations_1.MIGRATIONS_LEDGER_TABLE; } });
+// Module framework (content modules v0)
+var modules_1 = require("./modules");
+Object.defineProperty(exports, "defineModule", { enumerable: true, get: function () { return modules_1.defineModule; } });
+Object.defineProperty(exports, "ModulesClient", { enumerable: true, get: function () { return modules_1.ModulesClient; } });
+// cms module
+var cms_1 = require("./modules/cms");
+Object.defineProperty(exports, "CmsClient", { enumerable: true, get: function () { return cms_1.CmsClient; } });
+Object.defineProperty(exports, "cmsModule", { enumerable: true, get: function () { return cms_1.cmsModule; } });
+Object.defineProperty(exports, "CMS_MIGRATIONS", { enumerable: true, get: function () { return cms_1.CMS_MIGRATIONS; } });
+Object.defineProperty(exports, "CMS_TABLES", { enumerable: true, get: function () { return cms_1.CMS_TABLES; } });
+// forms module
+var forms_1 = require("./modules/forms");
+Object.defineProperty(exports, "FormsClient", { enumerable: true, get: function () { return forms_1.FormsClient; } });
+Object.defineProperty(exports, "formsModule", { enumerable: true, get: function () { return forms_1.formsModule; } });
+Object.defineProperty(exports, "FORMS_MIGRATIONS", { enumerable: true, get: function () { return forms_1.FORMS_MIGRATIONS; } });
+Object.defineProperty(exports, "FORMS_TABLES", { enumerable: true, get: function () { return forms_1.FORMS_TABLES; } });
+// reviews module
+var reviews_1 = require("./modules/reviews");
+Object.defineProperty(exports, "ReviewsClient", { enumerable: true, get: function () { return reviews_1.ReviewsClient; } });
+Object.defineProperty(exports, "reviewsModule", { enumerable: true, get: function () { return reviews_1.reviewsModule; } });
+Object.defineProperty(exports, "REVIEWS_MIGRATIONS", { enumerable: true, get: function () { return reviews_1.REVIEWS_MIGRATIONS; } });
+Object.defineProperty(exports, "REVIEWS_TABLE", { enumerable: true, get: function () { return reviews_1.REVIEWS_TABLE; } });
 // Errors
 var errors_1 = require("./core/errors");
 Object.defineProperty(exports, "XenitionError", { enumerable: true, get: function () { return errors_1.XenitionError; } });

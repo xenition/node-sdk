@@ -143,6 +143,54 @@ export type {
 export { RealtimeClient } from './realtime';
 export type { RealtimeMessage, RealtimeHandler, Subscription } from './realtime';
 
+// Migrations (content-addressed per-app ledger)
+export { MigrationsClient, MIGRATIONS_LEDGER_TABLE } from './migrations';
+export type { Migration, MigrationLedgerRow, ApplyResult } from './migrations';
+
+// Module framework (content modules v0)
+export { defineModule, ModulesClient } from './modules';
+export type { ModuleContext, ModuleDefinition, ModuleName } from './modules';
+
+// cms module
+export { CmsClient, cmsModule, CMS_MIGRATIONS, CMS_TABLES } from './modules/cms';
+export type {
+  CmsPage,
+  CreatePageInput,
+  UpdatePageInput,
+  CmsCollection,
+  CmsItem,
+  CreateItemInput,
+  UpdateItemInput,
+  CmsListOptions,
+} from './modules/cms';
+
+// forms module
+export { FormsClient, formsModule, FORMS_MIGRATIONS, FORMS_TABLES } from './modules/forms';
+export type {
+  FormField,
+  FormFieldType,
+  FormRecord,
+  FormSubmission,
+  SubmissionStatus,
+  ListSubmissionsOptions,
+} from './modules/forms';
+
+// reviews module
+export {
+  ReviewsClient,
+  reviewsModule,
+  REVIEWS_MIGRATIONS,
+  REVIEWS_TABLE,
+} from './modules/reviews';
+export type {
+  Review,
+  ReviewStatus,
+  ReviewTarget,
+  SubmitReviewInput,
+  ReviewAggregate,
+  ListReviewsOptions,
+} from './modules/reviews';
+
 // Errors
 export {
   XenitionError,
