@@ -81,22 +81,32 @@ class ReviewsClient {
         return qb.rows();
     }
     /**
-     * `{count, average}` over the target's *approved* reviews, computed by
-     * the database (one aggregate SELECT — no row fan-out). Postgres returns
-     * numerics as strings over JSON; both values are coerced here.
+     * `{count, average}` over the target's *approved* reviews.
+     *
+     * v0 reality (verified against the live dev runtime): the query endpoint
+     * rejects SQL expressions in select columns ("invalid identifier") — the
+     * only supported aggregate is the dedicated `/query/count` endpoint. So
+     * count uses `.count()` and the average is computed from the rating
+     * column client-side. Fine at content-site scale; switch back to one
+     * aggregate SELECT once the server supports aggregate IR (tracked in the
+     * platform plan).
      */
     async aggregate(target) {
         const context = 'ReviewsClient.aggregate';
         const t = this.validateTarget(context, target);
-        const row = await this.ctx.query
+        const scoped = () => this.ctx.query
             .from(exports.REVIEWS_TABLE)
-            .select('COUNT(*) as count', 'AVG(rating) as average')
             .where('target_type', t.type)
             .where('target_id', t.id)
-            .where('status', 'approved')
-            .first();
-        const count = (0, util_1.toNumber)(row?.count) ?? 0;
-        const average = count > 0 ? (0, util_1.toNumber)(row?.average) : null;
+            .where('status', 'approved');
+        const count = (0, util_1.toNumber)(await scoped().count()) ?? 0;
+        if (count === 0)
+            return { count: 0, average: null };
+        const rows = await scoped().select('rating').rows();
+        const ratings = rows
+            .map((r) => (0, util_1.toNumber)(r?.rating))
+            .filter((n) => n !== null && Number.isFinite(n));
+        const average = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
         return { count, average };
     }
     /** Flip a review's moderation status (service key). */

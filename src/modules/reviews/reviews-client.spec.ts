@@ -118,15 +118,32 @@ describe('listApproved', () => {
 });
 
 describe('aggregate', () => {
-  it('computes {count, average} in the database via aggregate select expressions', async () => {
+  // The live dev runtime rejects SQL expressions in select columns — only
+  // the dedicated /query/count endpoint aggregates. aggregate() therefore
+  // makes (1) a count() call and, when count > 0, (2) a rating-column
+  // select averaged client-side.
+  it('counts via the count endpoint, then averages the rating column client-side', async () => {
     const { post, reviews } = makeReviews();
-    post.mockResolvedValue({ data: [{ count: '3', average: '4.3333333333333333' }] });
+    post
+      .mockResolvedValueOnce({ count: 3 })
+      .mockResolvedValueOnce({ data: [{ rating: 5 }, { rating: 4 }, { rating: '4' }] });
     const agg = await reviews.aggregate(TARGET);
     expect(agg.count).toBe(3);
     expect(agg.average).toBeCloseTo(4.3333, 3);
+    // call 0: the scoped count
     expect(payloadOf(post, 0)).toEqual(
       expect.objectContaining({
-        columns: ['COUNT(*) as count', 'AVG(rating) as average'],
+        table: REVIEWS_TABLE,
+        where: expect.arrayContaining([
+          { column: 'status', operator: '=', value: 'approved', type: 'AND' },
+        ]),
+      }),
+    );
+    // call 1: the rating-only select, same scope
+    expect(payloadOf(post, 1)).toEqual(
+      expect.objectContaining({
+        table: REVIEWS_TABLE,
+        columns: ['rating'],
         where: expect.arrayContaining([
           { column: 'status', operator: '=', value: 'approved', type: 'AND' },
         ]),
@@ -134,22 +151,25 @@ describe('aggregate', () => {
     );
   });
 
-  it('coerces Postgres string numerics and passes real numbers through', async () => {
+  it('coerces Postgres string numerics and skips non-numeric ratings', async () => {
     const { post, reviews } = makeReviews();
-    post.mockResolvedValue({ data: [{ count: 2, average: 4.5 }] });
+    post
+      .mockResolvedValueOnce({ count: '2' })
+      .mockResolvedValueOnce({ data: [{ rating: '4' }, { rating: 5 }, { rating: 'junk' }] });
     await expect(reviews.aggregate(TARGET)).resolves.toEqual({ count: 2, average: 4.5 });
   });
 
-  it('returns {count: 0, average: null} when the target has no approved reviews', async () => {
+  it('returns {count: 0, average: null} without a second call when there are no approved reviews', async () => {
     const { post, reviews } = makeReviews();
-    post.mockResolvedValue({ data: [{ count: '0', average: null }] });
+    post.mockResolvedValueOnce({ count: 0 });
     await expect(reviews.aggregate(TARGET)).resolves.toEqual({ count: 0, average: null });
+    expect(post).toHaveBeenCalledTimes(1);
   });
 
-  it('survives an empty result set entirely', async () => {
+  it('survives a count with an empty rating result set', async () => {
     const { post, reviews } = makeReviews();
-    post.mockResolvedValue({ data: [] });
-    await expect(reviews.aggregate(TARGET)).resolves.toEqual({ count: 0, average: null });
+    post.mockResolvedValueOnce({ count: 2 }).mockResolvedValueOnce({ data: [] });
+    await expect(reviews.aggregate(TARGET)).resolves.toEqual({ count: 2, average: null });
   });
 });
 

@@ -171,9 +171,10 @@ describe('ModulesClient lifecycle', () => {
     const modules = new ModulesClient(http, new MigrationsClient(http));
     modules.use('reviews');
     await modules.reviews.aggregate({ type: 'product', id: 'p_1' });
-    // The aggregate ran through the standard query endpoint of the shared http mock.
+    // The aggregate ran through the shared http mock's query layer (its
+    // first call is the scoped count — see ReviewsClient.aggregate).
     expect(post).toHaveBeenCalledWith(
-      '/app-platform/query',
+      '/app-platform/query/count',
       expect.objectContaining({ table: 'reviews__reviews' }),
     );
   });
