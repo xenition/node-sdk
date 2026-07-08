@@ -6,29 +6,43 @@
  * instead of parsing error messages — messages may change, codes don't.
  */
 
-export type XenitionErrorCode =
+export const XENITION_ERROR_CODES = [
   // Transport / infra
-  | 'NETWORK_ERROR'
-  | 'TIMEOUT'
-  | 'SERVER_ERROR'
-  | 'RATE_LIMITED'
+  'NETWORK_ERROR',
+  'TIMEOUT',
+  'SERVER_ERROR',
+  'RATE_LIMITED',
   // Auth
-  | 'AUTH_INVALID_CREDENTIALS'
-  | 'AUTH_INVALID_TOKEN'
-  | 'AUTH_EXPIRED_TOKEN'
-  | 'AUTH_EMAIL_EXISTS'
-  | 'AUTH_WEAK_PASSWORD'
-  | 'AUTH_FORBIDDEN'
-  | 'AUTH_PROVIDER_NOT_CONFIGURED'
+  'AUTH_INVALID_CREDENTIALS',
+  'AUTH_INVALID_TOKEN',
+  'AUTH_EXPIRED_TOKEN',
+  'AUTH_EMAIL_EXISTS',
+  'AUTH_WEAK_PASSWORD',
+  'AUTH_FORBIDDEN',
+  'AUTH_PROVIDER_NOT_CONFIGURED',
   // Resources
-  | 'NOT_FOUND'
-  | 'VALIDATION_ERROR'
-  | 'CONFLICT'
+  'NOT_FOUND',
+  'VALIDATION_ERROR',
+  'CONFLICT',
   // Data access
-  | 'QUERY_FAILED'
-  | 'QUERY_TABLE_NOT_FOUND'
+  'QUERY_FAILED',
+  'QUERY_TABLE_NOT_FOUND',
   // Generic fallback
-  | 'UNKNOWN';
+  'UNKNOWN',
+] as const;
+
+export type XenitionErrorCode = (typeof XENITION_ERROR_CODES)[number];
+
+/**
+ * Runtime guard for the code union. Server responses cross a network
+ * boundary, so `error.code` is untrusted input — validate before it is
+ * allowed to inhabit `XenitionErrorCode`. Unknown codes should fall back
+ * to status-based classification (or 'UNKNOWN'), with the raw server
+ * code preserved in the error's `details`.
+ */
+export const isXenitionErrorCode = (code: unknown): code is XenitionErrorCode =>
+  typeof code === 'string' &&
+  (XENITION_ERROR_CODES as readonly string[]).includes(code);
 
 export class XenitionError extends Error {
   readonly code: XenitionErrorCode;

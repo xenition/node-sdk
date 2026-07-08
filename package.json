@@ -21,7 +21,7 @@
     "build:node": "tsc",
     "build:browser": "tsc --project tsconfig.browser.json",
     "dev": "tsc --watch",
-    "test": "jest --passWithNoTests",
+    "test": "jest",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },

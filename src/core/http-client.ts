@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { XENITION_BASE_URL } from '../constants';
-import { XenitionError, XenitionErrorCode } from './errors';
+import { XenitionError, XenitionErrorCode, isXenitionErrorCode } from './errors';
 
 export interface HttpClientOptions {
   timeout?: number;
@@ -46,6 +46,15 @@ export class HttpClient {
 
   setHeader(key: string, value: string): void {
     this.axios.defaults.headers.common[key] = value;
+  }
+
+  /**
+   * The effective API base URL this client was constructed with (the
+   * per-deploy override when given, otherwise XENITION_BASE_URL). Used by
+   * the realtime module to derive the socket origin.
+   */
+  get baseUrl(): string {
+    return this.axios.defaults.baseURL || XENITION_BASE_URL;
   }
 
   get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
@@ -136,7 +145,13 @@ export class HttpClient {
         error?: { code?: string; message?: string };
       };
       if (env.success === false) {
-        const code = (env.error?.code as XenitionErrorCode) ?? 'UNKNOWN';
+        // No HTTP status here (2xx body with success:false), so unknown
+        // server codes fall back to 'UNKNOWN'. The raw code survives in
+        // `details` (the whole error object) either way.
+        const rawCode = env.error?.code;
+        const code: XenitionErrorCode = isXenitionErrorCode(rawCode)
+          ? rawCode
+          : 'UNKNOWN';
         const message = env.error?.message ?? 'Request failed';
         throw new XenitionError(code, message, { details: env.error });
       }
@@ -171,8 +186,12 @@ export class HttpClient {
     status: number | null,
     serverCode?: string,
   ): XenitionErrorCode {
-    if (serverCode && this.isValidCode(serverCode)) {
-      return serverCode as XenitionErrorCode;
+    // Only accept codes that are actually in the XenitionErrorCode union —
+    // unknown server codes fall through to status-based classification.
+    // The raw server code is not lost: normalizeError stores the full
+    // response envelope (including `error.code`) in the error's `details`.
+    if (isXenitionErrorCode(serverCode)) {
+      return serverCode;
     }
     if (status === null) return 'NETWORK_ERROR';
     if (status === 400) return 'VALIDATION_ERROR';
@@ -183,12 +202,6 @@ export class HttpClient {
     if (status === 429) return 'RATE_LIMITED';
     if (status >= 500) return 'SERVER_ERROR';
     return 'UNKNOWN';
-  }
-
-  private isValidCode(code: string): boolean {
-    // Any string matching the XenitionErrorCode pattern; we accept anything
-    // and let type narrowing surface unexpected codes during development.
-    return typeof code === 'string' && code.length > 0;
   }
 
   private shouldRetry(err: XenitionError): boolean {

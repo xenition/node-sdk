@@ -117,14 +117,18 @@ export class RealtimeClient {
   }
 
   private deriveWsUrl(): string {
+    const base = this.http.baseUrl || XENITION_BASE_URL;
     try {
-      const u = new URL(XENITION_BASE_URL);
-      // Strip trailing `/api/v1` — socket.io server is mounted at the root.
-      const path = u.pathname.replace(/\/api\/v1\/?$/, '');
-      u.pathname = path;
-      return u.origin + (path ? path : '');
+      const u = new URL(base);
+      // Strip the trailing versioned API prefix (`/v1` — xenition's base
+      // path — or a legacy `/api/v1`) — socket.io server is mounted at
+      // the root of the same host.
+      const path = u.pathname
+        .replace(/\/(?:api\/)?v1\/?$/, '')
+        .replace(/\/+$/, '');
+      return u.origin + path;
     } catch {
-      return XENITION_BASE_URL;
+      return base;
     }
   }
 }

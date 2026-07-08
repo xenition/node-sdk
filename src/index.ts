@@ -149,6 +149,8 @@ export {
   isAuthError,
   isNotFound,
   isRateLimited,
+  isXenitionErrorCode,
+  XENITION_ERROR_CODES,
 } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 
