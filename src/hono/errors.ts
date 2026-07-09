@@ -54,7 +54,7 @@ function statusForCode(code: XenitionErrorCode): ErrorStatus {
  * collection", which is a 404.
  */
 const SDK_VALIDATION_RE = /^[A-Z][A-Za-z]*Client\.[A-Za-z]+: /;
-const SDK_NOT_FOUND_RE = /unknown (form|collection) /;
+const SDK_NOT_FOUND_RE = /unknown (form|collection|event) /;
 
 function errorBody(code: string, message: string) {
   return { error: { code, message } };

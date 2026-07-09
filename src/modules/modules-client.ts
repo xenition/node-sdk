@@ -7,8 +7,9 @@ import { CmsClient, cmsModule } from './cms';
 import { FormsClient, formsModule } from './forms';
 import { ReviewsClient, reviewsModule } from './reviews';
 import { ListingsClient, listingsModule } from './listings';
+import { EventsClient, eventsModule } from './events';
 
-export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings';
+export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events';
 
 /**
  * `client.modules` — the module framework entry point.
@@ -37,6 +38,7 @@ export class ModulesClient {
     forms: formsModule,
     reviews: reviewsModule,
     listings: listingsModule,
+    events: eventsModule,
   };
 
   constructor(
@@ -102,6 +104,10 @@ export class ModulesClient {
 
   get listings(): ListingsClient {
     return this.access<ListingsClient>('listings');
+  }
+
+  get events(): EventsClient {
+    return this.access<EventsClient>('events');
   }
 
   // ───────── internals ─────────

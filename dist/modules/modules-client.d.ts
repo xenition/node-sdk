@@ -4,7 +4,8 @@ import { CmsClient } from './cms';
 import { FormsClient } from './forms';
 import { ReviewsClient } from './reviews';
 import { ListingsClient } from './listings';
-export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings';
+import { EventsClient } from './events';
+export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events';
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -48,6 +49,7 @@ export declare class ModulesClient {
     get forms(): FormsClient;
     get reviews(): ReviewsClient;
     get listings(): ListingsClient;
+    get events(): EventsClient;
     private definition;
     private access;
 }

@@ -36,6 +36,8 @@ export { ReviewsClient, reviewsModule, REVIEWS_MIGRATIONS, REVIEWS_TABLE, } from
 export type { Review, ReviewStatus, ReviewTarget, SubmitReviewInput, ReviewAggregate, ListReviewsOptions, } from './modules/reviews';
 export { ListingsClient, listingsModule, LISTINGS_MIGRATIONS, LISTINGS_TABLE, } from './modules/listings';
 export type { Listing, ListingStatus, CreateListingInput, ListListingsOptions, GetBySlugOptions, SearchListingsOptions, } from './modules/listings';
+export { EventsClient, eventsModule, EVENTS_MIGRATIONS, EVENTS_TABLES, } from './modules/events';
+export type { EventRecord, EventStatus, EventWhen, EventWithCounts, EventCounts, CreateEventInput, ListEventsOptions, Rsvp, RsvpStatus, RsvpInput, ListRsvpsOptions, } from './modules/events';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 export { XENITION_BASE_URL } from './constants';

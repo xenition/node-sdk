@@ -207,6 +207,27 @@ export type {
   SearchListingsOptions,
 } from './modules/listings';
 
+// events module
+export {
+  EventsClient,
+  eventsModule,
+  EVENTS_MIGRATIONS,
+  EVENTS_TABLES,
+} from './modules/events';
+export type {
+  EventRecord,
+  EventStatus,
+  EventWhen,
+  EventWithCounts,
+  EventCounts,
+  CreateEventInput,
+  ListEventsOptions,
+  Rsvp,
+  RsvpStatus,
+  RsvpInput,
+  ListRsvpsOptions,
+} from './modules/events';
+
 // Errors
 export {
   XenitionError,

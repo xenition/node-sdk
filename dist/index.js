@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
+exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
 var xenition_client_1 = require("./xenition-client");
 Object.defineProperty(exports, "XenitionClient", { enumerable: true, get: function () { return xenition_client_1.XenitionClient; } });
 // Auth module
@@ -73,6 +73,12 @@ Object.defineProperty(exports, "ListingsClient", { enumerable: true, get: functi
 Object.defineProperty(exports, "listingsModule", { enumerable: true, get: function () { return listings_1.listingsModule; } });
 Object.defineProperty(exports, "LISTINGS_MIGRATIONS", { enumerable: true, get: function () { return listings_1.LISTINGS_MIGRATIONS; } });
 Object.defineProperty(exports, "LISTINGS_TABLE", { enumerable: true, get: function () { return listings_1.LISTINGS_TABLE; } });
+// events module
+var events_1 = require("./modules/events");
+Object.defineProperty(exports, "EventsClient", { enumerable: true, get: function () { return events_1.EventsClient; } });
+Object.defineProperty(exports, "eventsModule", { enumerable: true, get: function () { return events_1.eventsModule; } });
+Object.defineProperty(exports, "EVENTS_MIGRATIONS", { enumerable: true, get: function () { return events_1.EVENTS_MIGRATIONS; } });
+Object.defineProperty(exports, "EVENTS_TABLES", { enumerable: true, get: function () { return events_1.EVENTS_TABLES; } });
 // Errors
 var errors_1 = require("./core/errors");
 Object.defineProperty(exports, "XenitionError", { enumerable: true, get: function () { return errors_1.XenitionError; } });

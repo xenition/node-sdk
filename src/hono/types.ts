@@ -1,7 +1,7 @@
 import type { XenitionClient } from '../xenition-client';
 
 /** Modules that ship a prebuilt router. */
-export type XenitionApiModule = 'cms' | 'forms' | 'reviews' | 'listings';
+export type XenitionApiModule = 'cms' | 'forms' | 'reviews' | 'listings' | 'events';
 
 /**
  * Options shared by every router (and `createXenitionApi`, which adds
