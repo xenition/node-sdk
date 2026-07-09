@@ -41,16 +41,25 @@ function createAppClient(baseUrl) {
             throw await (0, errors_1.errorFromResponse)(res);
         return (await res.json());
     }
-    /** POST a JSON body; throws AppClientError on non-2xx (surfacing 400 msg). */
-    async function postJson(path, body) {
-        const res = await fetch(url(path), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
+    /**
+     * Send a write (`POST`/`PATCH`/`DELETE`); throws AppClientError on non-2xx
+     * (surfacing the 400/409 message). A `body` of `undefined` sends no body /
+     * Content-Type — used by DELETE and the body-less `POST /cart`.
+     */
+    async function sendJson(method, path, body) {
+        const init = { method };
+        if (body !== undefined) {
+            init.headers = { 'Content-Type': 'application/json' };
+            init.body = JSON.stringify(body);
+        }
+        const res = await fetch(url(path), init);
         if (!res.ok)
             throw await (0, errors_1.errorFromResponse)(res);
         return (await res.json());
+    }
+    /** POST a JSON body; throws AppClientError on non-2xx (surfacing 400 msg). */
+    function postJson(path, body) {
+        return sendJson('POST', path, body);
     }
     return {
         cms: {
@@ -129,6 +138,107 @@ function createAppClient(baseUrl) {
             },
             submit(targetType, targetId, input) {
                 return postJson(`/reviews/${encodeURIComponent(targetType)}/${encodeURIComponent(targetId)}`, input);
+            },
+        },
+        booking: {
+            async resources(options = {}) {
+                const qs = query({ status: options.status });
+                const body = await getJson(`/booking/resources${qs}`);
+                return body.resources ?? [];
+            },
+            resource(slug) {
+                return getOrNull(`/booking/resources/${encodeURIComponent(slug)}`);
+            },
+            async slots(slug, range) {
+                const qs = query({ from: range.from, to: range.to });
+                const body = await getJson(`/booking/resources/${encodeURIComponent(slug)}/slots${qs}`);
+                return body.slots ?? [];
+            },
+            book(slug, input) {
+                return postJson(`/booking/resources/${encodeURIComponent(slug)}/bookings`, input);
+            },
+        },
+        media: {
+            async albums(options = {}) {
+                const qs = query({
+                    published: options.published,
+                    orderBy: options.orderBy,
+                    direction: options.direction,
+                    limit: options.limit,
+                    offset: options.offset,
+                });
+                const body = await getJson(`/media/albums${qs}`);
+                return body.albums ?? [];
+            },
+            album(slug) {
+                return getOrNull(`/media/albums/${encodeURIComponent(slug)}`);
+            },
+        },
+        catalog: {
+            async products(options = {}) {
+                const qs = query({
+                    collection: options.collection,
+                    status: options.status,
+                    orderBy: options.orderBy,
+                    direction: options.direction,
+                    limit: options.limit,
+                    offset: options.offset,
+                });
+                const body = await getJson(`/catalog/products${qs}`);
+                return body.products ?? [];
+            },
+            product(slug) {
+                return getOrNull(`/catalog/products/${encodeURIComponent(slug)}`);
+            },
+            async collections() {
+                const body = await getJson(`/catalog/collections`);
+                return body.collections ?? [];
+            },
+            async collectionProducts(slug) {
+                const body = await getJson(`/catalog/collections/${encodeURIComponent(slug)}/products`);
+                return body.products ?? [];
+            },
+        },
+        inventory: {
+            stock(variantId) {
+                return getJson(`/inventory/${encodeURIComponent(variantId)}`);
+            },
+        },
+        cart: {
+            create() {
+                return postJson(`/cart`, {});
+            },
+            get(token) {
+                return getOrNull(`/cart/${encodeURIComponent(token)}`);
+            },
+            addItem(token, input) {
+                return postJson(`/cart/${encodeURIComponent(token)}/items`, input);
+            },
+            updateItem(token, itemId, input) {
+                return sendJson('PATCH', `/cart/${encodeURIComponent(token)}/items/${encodeURIComponent(itemId)}`, input);
+            },
+            removeItem(token, itemId) {
+                return sendJson('DELETE', `/cart/${encodeURIComponent(token)}/items/${encodeURIComponent(itemId)}`);
+            },
+        },
+        orders: {
+            get(id) {
+                return getOrNull(`/orders/${encodeURIComponent(id)}`);
+            },
+            byNumber(number, email) {
+                const qs = query({ email });
+                return getOrNull(`/orders/by-number/${encodeURIComponent(number)}${qs}`);
+            },
+        },
+        checkout: {
+            start(cartToken, input) {
+                return postJson(`/checkout/${encodeURIComponent(cartToken)}`, input);
+            },
+            mockComplete(orderId) {
+                return postJson(`/checkout/mock/complete`, { orderId });
+            },
+            order(id) {
+                return getOrNull(`/checkout/order/${encodeURIComponent(id)}`);
             },
         },
     };

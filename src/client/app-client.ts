@@ -1,9 +1,20 @@
 import { errorFromResponse } from './errors';
 import type {
   AppClient,
+  BookForm,
+  BookResult,
+  BookingResource,
+  BookingResourcesOptions,
+  BookingSlot,
+  Cart,
+  CartAddItemInput,
+  CartUpdateItemInput,
+  CheckoutStartInput,
+  CheckoutStartResult,
   CmsItem,
   CmsItemsOptions,
   CmsPage,
+  Collection,
   EventDetail,
   EventSummary,
   EventsListOptions,
@@ -13,6 +24,13 @@ import type {
   ListingSubmitInput,
   ListingSubmitResult,
   ListingsListOptions,
+  MediaAlbum,
+  MediaAlbumWithItems,
+  MediaAlbumsOptions,
+  Order,
+  Product,
+  ProductWithVariants,
+  ProductsListOptions,
   Review,
   ReviewAggregate,
   ReviewSubmitInput,
@@ -20,6 +38,8 @@ import type {
   ReviewsResult,
   RsvpInput,
   RsvpResult,
+  SlotsRange,
+  Stock,
 } from './types';
 
 /**
@@ -61,15 +81,25 @@ export function createAppClient(baseUrl: string): AppClient {
     return (await res.json()) as T;
   }
 
-  /** POST a JSON body; throws AppClientError on non-2xx (surfacing 400 msg). */
-  async function postJson<T>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(url(path), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+  /**
+   * Send a write (`POST`/`PATCH`/`DELETE`); throws AppClientError on non-2xx
+   * (surfacing the 400/409 message). A `body` of `undefined` sends no body /
+   * Content-Type — used by DELETE and the body-less `POST /cart`.
+   */
+  async function sendJson<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const init: RequestInit = { method };
+    if (body !== undefined) {
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = JSON.stringify(body);
+    }
+    const res = await fetch(url(path), init);
     if (!res.ok) throw await errorFromResponse(res);
     return (await res.json()) as T;
+  }
+
+  /** POST a JSON body; throws AppClientError on non-2xx (surfacing 400 msg). */
+  function postJson<T>(path: string, body: unknown): Promise<T> {
+    return sendJson<T>('POST', path, body);
   }
 
   return {
@@ -162,6 +192,128 @@ export function createAppClient(baseUrl: string): AppClient {
           `/reviews/${encodeURIComponent(targetType)}/${encodeURIComponent(targetId)}`,
           input,
         );
+      },
+    },
+
+    booking: {
+      async resources(options: BookingResourcesOptions = {}) {
+        const qs = query({ status: options.status });
+        const body = await getJson<{ resources: BookingResource[] }>(`/booking/resources${qs}`);
+        return body.resources ?? [];
+      },
+      resource(slug) {
+        return getOrNull<BookingResource>(`/booking/resources/${encodeURIComponent(slug)}`);
+      },
+      async slots(slug, range: SlotsRange) {
+        const qs = query({ from: range.from, to: range.to });
+        const body = await getJson<{ slots: BookingSlot[] }>(
+          `/booking/resources/${encodeURIComponent(slug)}/slots${qs}`,
+        );
+        return body.slots ?? [];
+      },
+      book(slug, input: BookForm) {
+        return postJson<BookResult>(
+          `/booking/resources/${encodeURIComponent(slug)}/bookings`,
+          input,
+        );
+      },
+    },
+
+    media: {
+      async albums(options: MediaAlbumsOptions = {}) {
+        const qs = query({
+          published: options.published,
+          orderBy: options.orderBy,
+          direction: options.direction,
+          limit: options.limit,
+          offset: options.offset,
+        });
+        const body = await getJson<{ albums: MediaAlbum[] }>(`/media/albums${qs}`);
+        return body.albums ?? [];
+      },
+      album(slug) {
+        return getOrNull<MediaAlbumWithItems>(`/media/albums/${encodeURIComponent(slug)}`);
+      },
+    },
+
+    catalog: {
+      async products(options: ProductsListOptions = {}) {
+        const qs = query({
+          collection: options.collection,
+          status: options.status,
+          orderBy: options.orderBy,
+          direction: options.direction,
+          limit: options.limit,
+          offset: options.offset,
+        });
+        const body = await getJson<{ products: Product[] }>(`/catalog/products${qs}`);
+        return body.products ?? [];
+      },
+      product(slug) {
+        return getOrNull<ProductWithVariants>(`/catalog/products/${encodeURIComponent(slug)}`);
+      },
+      async collections() {
+        const body = await getJson<{ collections: Collection[] }>(`/catalog/collections`);
+        return body.collections ?? [];
+      },
+      async collectionProducts(slug) {
+        const body = await getJson<{ products: Product[] }>(
+          `/catalog/collections/${encodeURIComponent(slug)}/products`,
+        );
+        return body.products ?? [];
+      },
+    },
+
+    inventory: {
+      stock(variantId) {
+        return getJson<Stock>(`/inventory/${encodeURIComponent(variantId)}`);
+      },
+    },
+
+    cart: {
+      create() {
+        return postJson<{ token: string }>(`/cart`, {});
+      },
+      get(token) {
+        return getOrNull<Cart>(`/cart/${encodeURIComponent(token)}`);
+      },
+      addItem(token, input: CartAddItemInput) {
+        return postJson<Cart>(`/cart/${encodeURIComponent(token)}/items`, input);
+      },
+      updateItem(token, itemId, input: CartUpdateItemInput) {
+        return sendJson<Cart>(
+          'PATCH',
+          `/cart/${encodeURIComponent(token)}/items/${encodeURIComponent(itemId)}`,
+          input,
+        );
+      },
+      removeItem(token, itemId) {
+        return sendJson<Cart>(
+          'DELETE',
+          `/cart/${encodeURIComponent(token)}/items/${encodeURIComponent(itemId)}`,
+        );
+      },
+    },
+
+    orders: {
+      get(id) {
+        return getOrNull<Order>(`/orders/${encodeURIComponent(id)}`);
+      },
+      byNumber(number, email) {
+        const qs = query({ email });
+        return getOrNull<Order>(`/orders/by-number/${encodeURIComponent(number)}${qs}`);
+      },
+    },
+
+    checkout: {
+      start(cartToken, input: CheckoutStartInput) {
+        return postJson<CheckoutStartResult>(`/checkout/${encodeURIComponent(cartToken)}`, input);
+      },
+      mockComplete(orderId) {
+        return postJson<Order>(`/checkout/mock/complete`, { orderId });
+      },
+      order(id) {
+        return getOrNull<Order>(`/checkout/order/${encodeURIComponent(id)}`);
       },
     },
   };

@@ -291,6 +291,338 @@ describe('reviews.submit', () => {
   });
 });
 
+/* ============================ booking ============================ */
+
+describe('booking.resources', () => {
+  it('unwraps { resources } and passes the status filter', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ resources: [{ id: '1', slotMinutes: 30 }] }));
+    const rows = await api().booking.resources({ status: 'all' });
+    expect(calledUrl()).toBe('/api/booking/resources?status=all');
+    expect(rows).toHaveLength(1);
+    // camelCase passthrough — slotMinutes stays slotMinutes
+    expect(rows[0]!.slotMinutes).toBe(30);
+  });
+
+  it('has no query string with no options and returns [] when empty', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    const rows = await api().booking.resources();
+    expect(calledUrl()).toBe('/api/booking/resources');
+    expect(rows).toEqual([]);
+  });
+});
+
+describe('booking.resource', () => {
+  it('GETs the resource route and returns it', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: '1', slug: 'chair-1', maxAdvanceDays: 60 }));
+    const r = await api().booking.resource('chair-1');
+    expect(calledUrl()).toBe('/api/booking/resources/chair-1');
+    expect(r?.maxAdvanceDays).toBe(60);
+  });
+
+  it('returns null on 404', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().booking.resource('nope')).toBeNull();
+  });
+});
+
+describe('booking.slots', () => {
+  it('unwraps { slots } and builds from/to', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ slots: [{ startsAt: 'a', endsAt: 'b', spotsLeft: 2 }] }));
+    const slots = await api().booking.slots('chair-1', { from: '2026-07-01', to: '2026-07-08' });
+    expect(calledUrl()).toBe('/api/booking/resources/chair-1/slots?from=2026-07-01&to=2026-07-08');
+    expect(slots[0]!.spotsLeft).toBe(2);
+  });
+
+  it('returns [] when the envelope is empty', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    expect(await api().booking.slots('chair-1', { from: 'a', to: 'b' })).toEqual([]);
+  });
+});
+
+describe('booking.book', () => {
+  it('POSTs the booking body and returns {id, startsAt, status}', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'bk1', startsAt: 'a', status: 'confirmed' }, 201));
+    const input = { startsAt: 'a', customerName: 'Ada', customerEmail: 'a@b.co', partySize: 2, notes: 'hi' };
+    const res = await api().booking.book('chair-1', input);
+    expect(calledUrl()).toBe('/api/booking/resources/chair-1/bookings');
+    const init = calledInit();
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual(input);
+    expect(res).toEqual({ id: 'bk1', startsAt: 'a', status: 'confirmed' });
+  });
+
+  it('surfaces a 409 SLOT_UNAVAILABLE as AppClientError', async () => {
+    fetchMock.mockResolvedValue(jsonErr(409, 'SLOT_UNAVAILABLE', 'That slot was just taken.'));
+    await expect(
+      api().booking.book('chair-1', { startsAt: 'a', customerName: 'Ada', customerEmail: 'a@b.co' }),
+    ).rejects.toMatchObject({ status: 409, code: 'SLOT_UNAVAILABLE', message: 'That slot was just taken.' });
+  });
+});
+
+/* ============================= media ============================= */
+
+describe('media.albums', () => {
+  it('unwraps { albums } and builds every query param', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ albums: [{ id: '1', coverUrl: null }] }));
+    await api().media.albums({ published: true, orderBy: 'sort', direction: 'ASC', limit: 5, offset: 10 });
+    expect(calledUrl()).toBe('/api/media/albums?published=1&orderBy=sort&direction=ASC&limit=5&offset=10');
+  });
+
+  it('has no query string with no options and returns [] when empty', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    const albums = await api().media.albums();
+    expect(calledUrl()).toBe('/api/media/albums');
+    expect(albums).toEqual([]);
+  });
+});
+
+describe('media.album', () => {
+  it('GETs the album and returns it merged with items', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: '1', slug: 'trip', coverUrl: 'u', items: [{ id: 'i1', albumId: '1' }] }));
+    const album = await api().media.album('trip');
+    expect(calledUrl()).toBe('/api/media/albums/trip');
+    expect(album?.coverUrl).toBe('u');
+    expect(album?.items[0]!.albumId).toBe('1');
+  });
+
+  it('returns null on 404 (unknown/unpublished)', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().media.album('gone')).toBeNull();
+  });
+});
+
+/* ============================ catalog ============================ */
+
+describe('catalog.products', () => {
+  it('unwraps { products } and builds collection/status/limit/offset', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ products: [{ id: '1', collectionId: null }] }));
+    const rows = await api().catalog.products({ collection: 'shoes', status: 'all', limit: 4, offset: 8 });
+    expect(calledUrl()).toBe('/api/catalog/products?collection=shoes&status=all&limit=4&offset=8');
+    expect(rows[0]!.collectionId).toBeNull();
+  });
+
+  it('has no query string with no options and returns [] when empty', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    const rows = await api().catalog.products();
+    expect(calledUrl()).toBe('/api/catalog/products');
+    expect(rows).toEqual([]);
+  });
+});
+
+describe('catalog.product', () => {
+  it('GETs the product and returns it with variants (camelCase money)', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: '1', slug: 't', variants: [{ id: 'v1', priceCents: 1999 }] }));
+    const p = await api().catalog.product('t');
+    expect(calledUrl()).toBe('/api/catalog/products/t');
+    expect(p?.variants[0]!.priceCents).toBe(1999);
+  });
+
+  it('returns null on 404 (unknown/draft)', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().catalog.product('draft')).toBeNull();
+  });
+});
+
+describe('catalog.collections', () => {
+  it('unwraps { collections }', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ collections: [{ id: '1', slug: 'shoes' }] }));
+    const cols = await api().catalog.collections();
+    expect(calledUrl()).toBe('/api/catalog/collections');
+    expect(cols[0]!.slug).toBe('shoes');
+  });
+
+  it('returns [] when the envelope is empty', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    expect(await api().catalog.collections()).toEqual([]);
+  });
+});
+
+describe('catalog.collectionProducts', () => {
+  it('unwraps { products } from the collection route', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ collection: { id: 'c1' }, products: [{ id: 'p1' }] }));
+    const rows = await api().catalog.collectionProducts('shoes');
+    expect(calledUrl()).toBe('/api/catalog/collections/shoes/products');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('throws AppClientError on 404 (unknown collection)', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    await expect(api().catalog.collectionProducts('nope')).rejects.toBeInstanceOf(AppClientError);
+  });
+});
+
+/* =========================== inventory =========================== */
+
+describe('inventory.stock', () => {
+  it('GETs the variant route and returns the derived view', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ variantId: 'v1', quantity: 10, reserved: 3, available: 7, policy: 'deny' }));
+    const stock = await api().inventory.stock('v1');
+    expect(calledUrl()).toBe('/api/inventory/v1');
+    expect(stock.available).toBe(7);
+    expect(stock.policy).toBe('deny');
+  });
+
+  it('throws AppClientError on a 500', async () => {
+    fetchMock.mockResolvedValue(jsonErr(500));
+    await expect(api().inventory.stock('v1')).rejects.toBeInstanceOf(AppClientError);
+  });
+});
+
+/* ============================= cart ============================= */
+
+describe('cart.create', () => {
+  it('POSTs /cart with an empty body and returns { token }', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ token: 'tok-1' }, 201));
+    const res = await api().cart.create();
+    expect(calledUrl()).toBe('/api/cart');
+    const init = calledInit();
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({});
+    expect(res).toEqual({ token: 'tok-1' });
+  });
+});
+
+describe('cart.get', () => {
+  it('GETs the cart view for a token', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ token: 'tok', currency: 'USD', items: [], subtotalCents: 0 }));
+    const cart = await api().cart.get('tok');
+    expect(calledUrl()).toBe('/api/cart/tok');
+    expect(cart?.subtotalCents).toBe(0);
+  });
+
+  it('returns null on 404', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().cart.get('gone')).toBeNull();
+  });
+});
+
+describe('cart.addItem', () => {
+  it('POSTs {variantId, quantity} and returns the updated cart', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ token: 'tok', currency: 'USD', items: [{ id: 'i1', lineTotalCents: 1999 }], subtotalCents: 1999 }));
+    const res = await api().cart.addItem('tok', { variantId: 'v1', quantity: 1 });
+    expect(calledUrl()).toBe('/api/cart/tok/items');
+    const init = calledInit();
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ variantId: 'v1', quantity: 1 });
+    expect(res.subtotalCents).toBe(1999);
+  });
+});
+
+describe('cart.updateItem', () => {
+  it('PATCHes the item with {quantity} and returns the updated cart', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ token: 'tok', currency: 'USD', items: [], subtotalCents: 0 }));
+    await api().cart.updateItem('tok', 'i1', { quantity: 3 });
+    expect(calledUrl()).toBe('/api/cart/tok/items/i1');
+    const init = calledInit();
+    expect(init.method).toBe('PATCH');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual({ quantity: 3 });
+  });
+});
+
+describe('cart.removeItem', () => {
+  it('DELETEs the item with no body and returns the updated cart', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ token: 'tok', currency: 'USD', items: [], subtotalCents: 0 }));
+    await api().cart.removeItem('tok', 'i1');
+    expect(calledUrl()).toBe('/api/cart/tok/items/i1');
+    const init = calledInit();
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+  });
+
+  it('encodes the token and item id', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ token: 't', currency: 'USD', items: [], subtotalCents: 0 }));
+    await api().cart.removeItem('a b', 'x/y');
+    expect(calledUrl()).toBe('/api/cart/a%20b/items/x%2Fy');
+  });
+});
+
+/* ============================ orders ============================ */
+
+describe('orders.get', () => {
+  it('GETs /orders/:id and returns the order (with totalCents)', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'o1', number: 'XN-1', totalCents: 1999, subtotalCents: 1999, items: [] }));
+    const order = await api().orders.get('o1');
+    expect(calledUrl()).toBe('/api/orders/o1');
+    expect(order?.totalCents).toBe(1999);
+  });
+
+  it('returns null on 404', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().orders.get('gone')).toBeNull();
+  });
+});
+
+describe('orders.byNumber', () => {
+  it('GETs the by-number route with the email query', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'o1', number: 'XN-7QK4ZP', email: 'a@b.co', items: [] }));
+    const order = await api().orders.byNumber('XN-7QK4ZP', 'a@b.co');
+    expect(calledUrl()).toBe('/api/orders/by-number/XN-7QK4ZP?email=a%40b.co');
+    expect(order?.number).toBe('XN-7QK4ZP');
+  });
+
+  it('returns null on 404 (unknown number or email mismatch)', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().orders.byNumber('XN-NOPE', 'a@b.co')).toBeNull();
+  });
+});
+
+/* =========================== checkout =========================== */
+
+describe('checkout.start', () => {
+  it('POSTs /checkout/:cartToken with the body and returns {orderId, mode, payUrl}', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ orderId: 'o1', mode: 'mock', payUrl: '/checkout/pay?order=o1' }));
+    const input = { email: 'a@b.co', successPath: '/ok', cancelPath: '/no' };
+    const res = await api().checkout.start('tok-1', input);
+    expect(calledUrl()).toBe('/api/checkout/tok-1');
+    const init = calledInit();
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(input);
+    expect(res).toEqual({ orderId: 'o1', mode: 'mock', payUrl: '/checkout/pay?order=o1' });
+  });
+
+  it('surfaces a server 400 (bad/empty cart) as AppClientError', async () => {
+    fetchMock.mockResolvedValue(jsonErr(400, 'VALIDATION_ERROR', 'Cart is empty.'));
+    await expect(api().checkout.start('tok', { email: 'a@b.co' })).rejects.toMatchObject({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+    });
+  });
+});
+
+describe('checkout.mockComplete', () => {
+  it('POSTs /checkout/mock/complete with {orderId} and returns the paid order', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'o1', status: 'paid', totalCents: 1999, items: [] }));
+    const order = await api().checkout.mockComplete('o1');
+    expect(calledUrl()).toBe('/api/checkout/mock/complete');
+    const init = calledInit();
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ orderId: 'o1' });
+    expect(order.status).toBe('paid');
+  });
+
+  it('surfaces a 403 (stripe mode) as AppClientError', async () => {
+    fetchMock.mockResolvedValue(jsonErr(403, 'FORBIDDEN', 'Mock completion is disabled when COMMERCE_MODE=stripe.'));
+    await expect(api().checkout.mockComplete('o1')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
+  });
+});
+
+describe('checkout.order', () => {
+  it('GETs /checkout/order/:id and returns the order', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'o1', number: 'XN-1', totalCents: 1999, items: [] }));
+    const order = await api().checkout.order('o1');
+    expect(calledUrl()).toBe('/api/checkout/order/o1');
+    expect(order?.id).toBe('o1');
+  });
+
+  it('returns null on 404', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().checkout.order('gone')).toBeNull();
+  });
+});
+
 describe('AppClientError', () => {
   it('carries status, code, and message', () => {
     const e = new AppClientError(429, 'RATE_LIMITED', 'Slow down');
