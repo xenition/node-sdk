@@ -42,7 +42,7 @@ function statusForCode(code) {
  * collection", which is a 404.
  */
 const SDK_VALIDATION_RE = /^[A-Z][A-Za-z]*Client\.[A-Za-z]+: /;
-const SDK_NOT_FOUND_RE = /unknown (form|collection|event|resource) /;
+const SDK_NOT_FOUND_RE = /unknown (form|collection|event|resource|cart|order) /;
 function errorBody(code, message) {
     return { error: { code, message } };
 }

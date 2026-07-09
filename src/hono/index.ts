@@ -8,6 +8,9 @@ import { mediaRouter } from './media-router';
 import { bookingRouter } from './booking-router';
 import { catalogRouter } from './catalog-router';
 import { inventoryRouter } from './inventory-router';
+import { cartRouter } from './cart-router';
+import { ordersRouter } from './orders-router';
+import { checkoutRouter } from './checkout-router';
 import { reviewsRouter } from './reviews-router';
 import { applyCors } from './router-utils';
 import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } from './types';
@@ -50,6 +53,9 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
     'booking',
     'catalog',
     'inventory',
+    'cart',
+    'orders',
+    'checkout',
   ];
   const app = new Hono();
   // CORS lives on the parent so preflights are answered even for
@@ -68,6 +74,9 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   if (selected.includes('booking')) app.route('/', bookingRouter(childOptions));
   if (selected.includes('catalog')) app.route('/', catalogRouter(childOptions));
   if (selected.includes('inventory')) app.route('/', inventoryRouter(childOptions));
+  if (selected.includes('cart')) app.route('/', cartRouter(childOptions));
+  if (selected.includes('orders')) app.route('/', ordersRouter(childOptions));
+  if (selected.includes('checkout')) app.route('/', checkoutRouter(childOptions));
   return app;
 }
 
@@ -80,6 +89,9 @@ export { mediaRouter } from './media-router';
 export { bookingRouter } from './booking-router';
 export { catalogRouter } from './catalog-router';
 export { inventoryRouter } from './inventory-router';
+export { cartRouter } from './cart-router';
+export { ordersRouter } from './orders-router';
+export { checkoutRouter, verifyStripeSignature } from './checkout-router';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';

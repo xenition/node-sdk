@@ -46,6 +46,10 @@ export { CatalogClient, catalogModule, CATALOG_MIGRATIONS, CATALOG_TABLES, } fro
 export type { ProductStatus, CatalogCollection, CreateCollectionInput as CreateCatalogCollectionInput, CatalogProduct, CatalogVariant, ProductWithVariants, CreateProductInput, CreateVariantInput, UpdateProductInput, UpdateVariantInput, ListProductsOptions, GetProductOptions, } from './modules/catalog';
 export { InventoryClient, inventoryModule, INVENTORY_MIGRATIONS, INVENTORY_TABLES, } from './modules/inventory';
 export type { StockPolicy, StockRow, StockView, SetStockOptions, } from './modules/inventory';
+export { CartClient, cartModule, CART_MIGRATIONS, CART_TABLES } from './modules/cart';
+export type { CartStatus, CartRecord, CartItem, CartItemView, CartView, } from './modules/cart';
+export { OrdersClient, ordersModule, ORDERS_MIGRATIONS, ORDERS_TABLES } from './modules/orders';
+export type { OrderStatus, OrderRecord, OrderItem, OrderWithItems, CreateOrderInput, MarkPaidInput, ListOrdersOptions, } from './modules/orders';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 export { XENITION_BASE_URL } from './constants';

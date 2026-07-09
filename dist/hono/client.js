@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.XenitionApiConfigError = void 0;
+exports.readEnvVar = readEnvVar;
 exports.createClientFromEnv = createClientFromEnv;
 exports.makeClientResolver = makeClientResolver;
 const xenition_client_1 = require("../xenition-client");

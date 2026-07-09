@@ -9,7 +9,9 @@ import { MediaClient } from './media';
 import { BookingClient } from './booking';
 import { CatalogClient } from './catalog';
 import { InventoryClient } from './inventory';
-export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory';
+import { CartClient } from './cart';
+import { OrdersClient } from './orders';
+export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory' | 'cart' | 'orders';
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -58,6 +60,8 @@ export declare class ModulesClient {
     get booking(): BookingClient;
     get catalog(): CatalogClient;
     get inventory(): InventoryClient;
+    get cart(): CartClient;
+    get orders(): OrdersClient;
     private definition;
     private access;
 }

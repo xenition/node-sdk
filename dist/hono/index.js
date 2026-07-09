@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
+exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
 exports.createXenitionApi = createXenitionApi;
 const hono_1 = require("hono");
 const cms_router_1 = require("./cms-router");
@@ -12,6 +12,9 @@ const media_router_1 = require("./media-router");
 const booking_router_1 = require("./booking-router");
 const catalog_router_1 = require("./catalog-router");
 const inventory_router_1 = require("./inventory-router");
+const cart_router_1 = require("./cart-router");
+const orders_router_1 = require("./orders-router");
+const checkout_router_1 = require("./checkout-router");
 const reviews_router_1 = require("./reviews-router");
 const router_utils_1 = require("./router-utils");
 /**
@@ -52,6 +55,9 @@ function createXenitionApi(options = {}) {
         'booking',
         'catalog',
         'inventory',
+        'cart',
+        'orders',
+        'checkout',
     ];
     const app = new hono_1.Hono();
     // CORS lives on the parent so preflights are answered even for
@@ -78,6 +84,12 @@ function createXenitionApi(options = {}) {
         app.route('/', (0, catalog_router_1.catalogRouter)(childOptions));
     if (selected.includes('inventory'))
         app.route('/', (0, inventory_router_1.inventoryRouter)(childOptions));
+    if (selected.includes('cart'))
+        app.route('/', (0, cart_router_1.cartRouter)(childOptions));
+    if (selected.includes('orders'))
+        app.route('/', (0, orders_router_1.ordersRouter)(childOptions));
+    if (selected.includes('checkout'))
+        app.route('/', (0, checkout_router_1.checkoutRouter)(childOptions));
     return app;
 }
 var cms_router_2 = require("./cms-router");
@@ -98,6 +110,13 @@ var catalog_router_2 = require("./catalog-router");
 Object.defineProperty(exports, "catalogRouter", { enumerable: true, get: function () { return catalog_router_2.catalogRouter; } });
 var inventory_router_2 = require("./inventory-router");
 Object.defineProperty(exports, "inventoryRouter", { enumerable: true, get: function () { return inventory_router_2.inventoryRouter; } });
+var cart_router_2 = require("./cart-router");
+Object.defineProperty(exports, "cartRouter", { enumerable: true, get: function () { return cart_router_2.cartRouter; } });
+var orders_router_2 = require("./orders-router");
+Object.defineProperty(exports, "ordersRouter", { enumerable: true, get: function () { return orders_router_2.ordersRouter; } });
+var checkout_router_2 = require("./checkout-router");
+Object.defineProperty(exports, "checkoutRouter", { enumerable: true, get: function () { return checkout_router_2.checkoutRouter; } });
+Object.defineProperty(exports, "verifyStripeSignature", { enumerable: true, get: function () { return checkout_router_2.verifyStripeSignature; } });
 var normalize_1 = require("./normalize");
 Object.defineProperty(exports, "camelizeKey", { enumerable: true, get: function () { return normalize_1.camelizeKey; } });
 Object.defineProperty(exports, "normalizeRow", { enumerable: true, get: function () { return normalize_1.normalizeRow; } });

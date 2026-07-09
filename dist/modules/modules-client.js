@@ -12,6 +12,8 @@ const media_1 = require("./media");
 const booking_1 = require("./booking");
 const catalog_1 = require("./catalog");
 const inventory_1 = require("./inventory");
+const cart_1 = require("./cart");
+const orders_1 = require("./orders");
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -45,6 +47,8 @@ class ModulesClient {
             booking: booking_1.bookingModule,
             catalog: catalog_1.catalogModule,
             inventory: inventory_1.inventoryModule,
+            cart: cart_1.cartModule,
+            orders: orders_1.ordersModule,
         };
         const query = new query_client_1.QueryClient(http);
         this.ctx = {
@@ -112,6 +116,12 @@ class ModulesClient {
     }
     get inventory() {
         return this.access('inventory');
+    }
+    get cart() {
+        return this.access('cart');
+    }
+    get orders() {
+        return this.access('orders');
     }
     // ───────── internals ─────────
     definition(name) {

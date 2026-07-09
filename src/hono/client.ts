@@ -25,7 +25,7 @@ export interface XenitionEnvVars {
  * / secrets) with a `process.env` fallback (Node, tests). Checked in that
  * order so Workers secrets always win.
  */
-function readEnvVar(c: Context, name: string): string | undefined {
+export function readEnvVar(c: Context, name: string): string | undefined {
   const fromCtx = (c.env as Record<string, unknown> | undefined)?.[name];
   if (typeof fromCtx === 'string' && fromCtx !== '') return fromCtx;
   const fromProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } })

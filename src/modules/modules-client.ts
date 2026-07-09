@@ -12,6 +12,8 @@ import { MediaClient, mediaModule } from './media';
 import { BookingClient, bookingModule } from './booking';
 import { CatalogClient, catalogModule } from './catalog';
 import { InventoryClient, inventoryModule } from './inventory';
+import { CartClient, cartModule } from './cart';
+import { OrdersClient, ordersModule } from './orders';
 
 export type ModuleName =
   | 'cms'
@@ -22,7 +24,9 @@ export type ModuleName =
   | 'media'
   | 'booking'
   | 'catalog'
-  | 'inventory';
+  | 'inventory'
+  | 'cart'
+  | 'orders';
 
 /**
  * `client.modules` — the module framework entry point.
@@ -56,6 +60,8 @@ export class ModulesClient {
     booking: bookingModule,
     catalog: catalogModule,
     inventory: inventoryModule,
+    cart: cartModule,
+    orders: ordersModule,
   };
 
   constructor(
@@ -141,6 +147,14 @@ export class ModulesClient {
 
   get inventory(): InventoryClient {
     return this.access<InventoryClient>('inventory');
+  }
+
+  get cart(): CartClient {
+    return this.access<CartClient>('cart');
+  }
+
+  get orders(): OrdersClient {
+    return this.access<OrdersClient>('orders');
   }
 
   // ───────── internals ─────────

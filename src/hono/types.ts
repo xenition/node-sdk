@@ -10,7 +10,11 @@ export type XenitionApiModule =
   | 'media'
   | 'booking'
   | 'catalog'
-  | 'inventory';
+  | 'inventory'
+  | 'cart'
+  | 'orders'
+  // Not a data module — mounts the checkout/payments router (mock + Stripe).
+  | 'checkout';
 
 /**
  * Options shared by every router (and `createXenitionApi`, which adds

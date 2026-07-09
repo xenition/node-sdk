@@ -14,6 +14,12 @@ export interface XenitionEnvVars {
     XENITION_API_KEY?: string;
     XENITION_API_URL?: string;
 }
+/**
+ * Read one env var from the Hono context env (Cloudflare Workers bindings
+ * / secrets) with a `process.env` fallback (Node, tests). Checked in that
+ * order so Workers secrets always win.
+ */
+export declare function readEnvVar(c: Context, name: string): string | undefined;
 /** Build a service-key client from injected env vars. */
 export declare function createClientFromEnv(vars: XenitionEnvVars): XenitionClient;
 /**

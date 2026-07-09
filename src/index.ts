@@ -310,6 +310,28 @@ export type {
   SetStockOptions,
 } from './modules/inventory';
 
+// cart module
+export { CartClient, cartModule, CART_MIGRATIONS, CART_TABLES } from './modules/cart';
+export type {
+  CartStatus,
+  CartRecord,
+  CartItem,
+  CartItemView,
+  CartView,
+} from './modules/cart';
+
+// orders module
+export { OrdersClient, ordersModule, ORDERS_MIGRATIONS, ORDERS_TABLES } from './modules/orders';
+export type {
+  OrderStatus,
+  OrderRecord,
+  OrderItem,
+  OrderWithItems,
+  CreateOrderInput,
+  MarkPaidInput,
+  ListOrdersOptions,
+} from './modules/orders';
+
 // Errors
 export {
   XenitionError,
