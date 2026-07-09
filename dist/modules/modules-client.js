@@ -9,6 +9,7 @@ const reviews_1 = require("./reviews");
 const listings_1 = require("./listings");
 const events_1 = require("./events");
 const media_1 = require("./media");
+const booking_1 = require("./booking");
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -39,6 +40,7 @@ class ModulesClient {
             listings: listings_1.listingsModule,
             events: events_1.eventsModule,
             media: media_1.mediaModule,
+            booking: booking_1.bookingModule,
         };
         const query = new query_client_1.QueryClient(http);
         this.ctx = {
@@ -97,6 +99,9 @@ class ModulesClient {
     }
     get media() {
         return this.access('media');
+    }
+    get booking() {
+        return this.access('booking');
     }
     // ───────── internals ─────────
     definition(name) {

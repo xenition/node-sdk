@@ -40,6 +40,8 @@ export { EventsClient, eventsModule, EVENTS_MIGRATIONS, EVENTS_TABLES, } from '.
 export type { EventRecord, EventStatus, EventWhen, EventWithCounts, EventCounts, CreateEventInput, ListEventsOptions, Rsvp, RsvpStatus, RsvpInput, ListRsvpsOptions, } from './modules/events';
 export { MediaClient, mediaModule, MEDIA_MIGRATIONS, MEDIA_TABLES, } from './modules/media';
 export type { MediaKind, MediaAlbum, CreateAlbumInput, UpdateAlbumInput, MediaItem, AddItemInput as AddMediaItemInput, UpdateItemInput as UpdateMediaItemInput, MediaAlbumWithItems, ListAlbumsOptions, ListItemsOptions, } from './modules/media';
+export { BookingClient, bookingModule, BOOKING_MIGRATIONS, BOOKING_TABLES, } from './modules/booking';
+export type { BookingResource, ResourceStatus, AvailabilityRule, CreateResourceInput, UpdateResourceInput, ListResourcesOptions, Blackout, AddBlackoutInput, Booking, BookingStatus, BookInput, SearchSlotsOptions, Slot, ListBookingsOptions, } from './modules/booking';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 export { XENITION_BASE_URL } from './constants';

@@ -249,6 +249,30 @@ export type {
   ListItemsOptions,
 } from './modules/media';
 
+// booking module
+export {
+  BookingClient,
+  bookingModule,
+  BOOKING_MIGRATIONS,
+  BOOKING_TABLES,
+} from './modules/booking';
+export type {
+  BookingResource,
+  ResourceStatus,
+  AvailabilityRule,
+  CreateResourceInput,
+  UpdateResourceInput,
+  ListResourcesOptions,
+  Blackout,
+  AddBlackoutInput,
+  Booking,
+  BookingStatus,
+  BookInput,
+  SearchSlotsOptions,
+  Slot,
+  ListBookingsOptions,
+} from './modules/booking';
+
 // Errors
 export {
   XenitionError,

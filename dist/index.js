@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.MEDIA_TABLES = exports.MEDIA_MIGRATIONS = exports.mediaModule = exports.MediaClient = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
+exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.BOOKING_TABLES = exports.BOOKING_MIGRATIONS = exports.bookingModule = exports.BookingClient = exports.MEDIA_TABLES = exports.MEDIA_MIGRATIONS = exports.mediaModule = exports.MediaClient = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
+exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = void 0;
 var xenition_client_1 = require("./xenition-client");
 Object.defineProperty(exports, "XenitionClient", { enumerable: true, get: function () { return xenition_client_1.XenitionClient; } });
 // Auth module
@@ -85,6 +86,12 @@ Object.defineProperty(exports, "MediaClient", { enumerable: true, get: function 
 Object.defineProperty(exports, "mediaModule", { enumerable: true, get: function () { return media_1.mediaModule; } });
 Object.defineProperty(exports, "MEDIA_MIGRATIONS", { enumerable: true, get: function () { return media_1.MEDIA_MIGRATIONS; } });
 Object.defineProperty(exports, "MEDIA_TABLES", { enumerable: true, get: function () { return media_1.MEDIA_TABLES; } });
+// booking module
+var booking_1 = require("./modules/booking");
+Object.defineProperty(exports, "BookingClient", { enumerable: true, get: function () { return booking_1.BookingClient; } });
+Object.defineProperty(exports, "bookingModule", { enumerable: true, get: function () { return booking_1.bookingModule; } });
+Object.defineProperty(exports, "BOOKING_MIGRATIONS", { enumerable: true, get: function () { return booking_1.BOOKING_MIGRATIONS; } });
+Object.defineProperty(exports, "BOOKING_TABLES", { enumerable: true, get: function () { return booking_1.BOOKING_TABLES; } });
 // Errors
 var errors_1 = require("./core/errors");
 Object.defineProperty(exports, "XenitionError", { enumerable: true, get: function () { return errors_1.XenitionError; } });
