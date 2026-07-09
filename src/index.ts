@@ -228,6 +228,27 @@ export type {
   ListRsvpsOptions,
 } from './modules/events';
 
+// media module
+export {
+  MediaClient,
+  mediaModule,
+  MEDIA_MIGRATIONS,
+  MEDIA_TABLES,
+} from './modules/media';
+export type {
+  MediaKind,
+  MediaAlbum,
+  CreateAlbumInput,
+  UpdateAlbumInput,
+  MediaItem,
+  // Aliased to avoid colliding with the cms module's item input types.
+  AddItemInput as AddMediaItemInput,
+  UpdateItemInput as UpdateMediaItemInput,
+  MediaAlbumWithItems,
+  ListAlbumsOptions,
+  ListItemsOptions,
+} from './modules/media';
+
 // Errors
 export {
   XenitionError,

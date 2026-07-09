@@ -1,0 +1,1 @@
+{"version":3,"file":"media-router.d.ts","sourceRoot":"","sources":["../../src/hono/media-router.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,IAAI,EAAE,MAAM,MAAM,CAAC;AAY5B,OAAO,KAAK,EAAE,qBAAqB,EAAE,MAAM,SAAS,CAAC;AAErD;;;;;;;;;;;;;;;;;GAiBG;AACH,wBAAgB,WAAW,CAAC,OAAO,GAAE,qBAA0B,GAAG,IAAI,CA2CrE"}

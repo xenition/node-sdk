@@ -38,6 +38,8 @@ export { ListingsClient, listingsModule, LISTINGS_MIGRATIONS, LISTINGS_TABLE, } 
 export type { Listing, ListingStatus, CreateListingInput, ListListingsOptions, GetBySlugOptions, SearchListingsOptions, } from './modules/listings';
 export { EventsClient, eventsModule, EVENTS_MIGRATIONS, EVENTS_TABLES, } from './modules/events';
 export type { EventRecord, EventStatus, EventWhen, EventWithCounts, EventCounts, CreateEventInput, ListEventsOptions, Rsvp, RsvpStatus, RsvpInput, ListRsvpsOptions, } from './modules/events';
+export { MediaClient, mediaModule, MEDIA_MIGRATIONS, MEDIA_TABLES, } from './modules/media';
+export type { MediaKind, MediaAlbum, CreateAlbumInput, UpdateAlbumInput, MediaItem, AddItemInput as AddMediaItemInput, UpdateItemInput as UpdateMediaItemInput, MediaAlbumWithItems, ListAlbumsOptions, ListItemsOptions, } from './modules/media';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 export { XENITION_BASE_URL } from './constants';
