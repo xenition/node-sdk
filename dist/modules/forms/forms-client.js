@@ -132,7 +132,12 @@ class FormsClient {
             status: 'new',
             created_at: (0, util_1.nowIso)(),
         };
-        await this.ctx.query.from(exports.FORMS_TABLES.SUBMISSIONS).insert({ ...submission }).execute();
+        // created_at is OWNED by the column default (now()): the engine runtime
+        // binds parameters natively and rejects ISO *strings* for timestamptz,
+        // so the wire insert omits it. The returned object carries the client
+        // clock's nowIso() as a close approximation of what the DB stamped.
+        const { created_at: _omitted, ...row } = submission;
+        await this.ctx.query.from(exports.FORMS_TABLES.SUBMISSIONS).insert(row).execute();
         return submission;
     }
     /** Back-office listing (service key). Newest first. */

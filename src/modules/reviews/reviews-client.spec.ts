@@ -44,7 +44,10 @@ describe('submit', () => {
     const payload = payloadOf(post, 0);
     expect(payload.type).toBe('INSERT');
     expect(payload.table).toBe(REVIEWS_TABLE);
-    expect(payload.data).toEqual({ ...review });
+    // The wire insert omits created_at — the DB default owns it (the
+    // engine runtime rejects ISO strings bound to timestamptz).
+    const { created_at: _omitted, ...expectedRow } = review;
+    expect(payload.data).toEqual(expectedRow);
   });
 
   it('always forces status pending — callers cannot self-approve', async () => {

@@ -80,7 +80,12 @@ export class ReviewsClient {
       status: 'pending',
       created_at: nowIso(),
     };
-    await this.ctx.query.from(REVIEWS_TABLE).insert({ ...review }).execute();
+    // created_at is OWNED by the column default (now()): the engine runtime
+    // binds parameters natively and rejects ISO *strings* for timestamptz,
+    // so the wire insert omits it. The returned object carries the client
+    // clock's nowIso() as a close approximation of what the DB stamped.
+    const { created_at: _omitted, ...row } = review;
+    await this.ctx.query.from(REVIEWS_TABLE).insert(row).execute();
     return review;
   }
 

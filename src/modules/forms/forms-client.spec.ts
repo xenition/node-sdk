@@ -143,7 +143,10 @@ describe('submit: happy path', () => {
     const insert = payloadOf(post, 1);
     expect(insert.type).toBe('INSERT');
     expect(insert.table).toBe(FORMS_TABLES.SUBMISSIONS);
-    expect(insert.data).toEqual({ ...submission });
+    // The wire insert omits created_at — the DB default owns it (the
+    // engine runtime rejects ISO strings bound to timestamptz).
+    const { created_at: _omitted, ...expectedRow } = submission;
+    expect(insert.data).toEqual(expectedRow);
   });
 
   it('accepts a submission that omits optional fields', async () => {
