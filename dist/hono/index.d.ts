@@ -30,6 +30,7 @@ export declare function createXenitionApi(options?: XenitionApiOptions): Hono;
 export { cmsRouter } from './cms-router';
 export { formsRouter } from './forms-router';
 export { reviewsRouter } from './reviews-router';
+export { listingsRouter } from './listings-router';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';

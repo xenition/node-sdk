@@ -4,6 +4,7 @@ exports.QueryParamError = void 0;
 exports.applyCors = applyCors;
 exports.parseNonNegativeInt = parseNonNegativeInt;
 exports.parsePublished = parsePublished;
+exports.parseBooleanFlag = parseBooleanFlag;
 exports.parseDirection = parseDirection;
 const cors_1 = require("hono/cors");
 /**
@@ -55,6 +56,19 @@ function parsePublished(value) {
     if (value === 'all')
         return undefined;
     throw new QueryParamError(`"published" must be one of 1, 0, true, false, all — got "${value}"`);
+}
+/**
+ * Optional boolean query flag: `1`/`true` → true, `0`/`false` → false,
+ * absent → undefined (no filter). Anything else is a 400.
+ */
+function parseBooleanFlag(name, value) {
+    if (value === undefined || value === '')
+        return undefined;
+    if (value === '1' || value === 'true')
+        return true;
+    if (value === '0' || value === 'false')
+        return false;
+    throw new QueryParamError(`"${name}" must be one of 1, 0, true, false — got "${value}"`);
 }
 /** Sort direction: case-insensitive ASC/DESC, or undefined when absent. */
 function parseDirection(value) {

@@ -3,7 +3,8 @@ import { MigrationsClient } from '../migrations/migrations-client';
 import { CmsClient } from './cms';
 import { FormsClient } from './forms';
 import { ReviewsClient } from './reviews';
-export type ModuleName = 'cms' | 'forms' | 'reviews';
+import { ListingsClient } from './listings';
+export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings';
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -46,6 +47,7 @@ export declare class ModulesClient {
     get cms(): CmsClient;
     get forms(): FormsClient;
     get reviews(): ReviewsClient;
+    get listings(): ListingsClient;
     private definition;
     private access;
 }

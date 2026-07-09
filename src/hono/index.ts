@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cmsRouter } from './cms-router';
 import { formsRouter } from './forms-router';
 import { honoErrorHandler, jsonNotFound } from './errors';
+import { listingsRouter } from './listings-router';
 import { reviewsRouter } from './reviews-router';
 import { applyCors } from './router-utils';
 import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } from './types';
@@ -34,7 +35,7 @@ import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } fro
  */
 export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   const { modules, ...routerOptions } = options;
-  const selected: XenitionApiModule[] = modules ?? ['cms', 'forms', 'reviews'];
+  const selected: XenitionApiModule[] = modules ?? ['cms', 'forms', 'reviews', 'listings'];
   const app = new Hono();
   // CORS lives on the parent so preflights are answered even for
   // unmatched paths; children skip it to avoid double middleware.
@@ -46,12 +47,14 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   if (selected.includes('cms')) app.route('/cms', cmsRouter(childOptions));
   if (selected.includes('forms')) app.route('/forms', formsRouter(childOptions));
   if (selected.includes('reviews')) app.route('/reviews', reviewsRouter(childOptions));
+  if (selected.includes('listings')) app.route('/listings', listingsRouter(childOptions));
   return app;
 }
 
 export { cmsRouter } from './cms-router';
 export { formsRouter } from './forms-router';
 export { reviewsRouter } from './reviews-router';
+export { listingsRouter } from './listings-router';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';

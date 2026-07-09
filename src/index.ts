@@ -191,6 +191,22 @@ export type {
   ListReviewsOptions,
 } from './modules/reviews';
 
+// listings module
+export {
+  ListingsClient,
+  listingsModule,
+  LISTINGS_MIGRATIONS,
+  LISTINGS_TABLE,
+} from './modules/listings';
+export type {
+  Listing,
+  ListingStatus,
+  CreateListingInput,
+  ListListingsOptions,
+  GetBySlugOptions,
+  SearchListingsOptions,
+} from './modules/listings';
+
 // Errors
 export {
   XenitionError,

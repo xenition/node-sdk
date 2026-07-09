@@ -34,6 +34,8 @@ export { FormsClient, formsModule, FORMS_MIGRATIONS, FORMS_TABLES } from './modu
 export type { FormField, FormFieldType, FormRecord, FormSubmission, SubmissionStatus, ListSubmissionsOptions, } from './modules/forms';
 export { ReviewsClient, reviewsModule, REVIEWS_MIGRATIONS, REVIEWS_TABLE, } from './modules/reviews';
 export type { Review, ReviewStatus, ReviewTarget, SubmitReviewInput, ReviewAggregate, ListReviewsOptions, } from './modules/reviews';
+export { ListingsClient, listingsModule, LISTINGS_MIGRATIONS, LISTINGS_TABLE, } from './modules/listings';
+export type { Listing, ListingStatus, CreateListingInput, ListListingsOptions, GetBySlugOptions, SearchListingsOptions, } from './modules/listings';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 export { XENITION_BASE_URL } from './constants';

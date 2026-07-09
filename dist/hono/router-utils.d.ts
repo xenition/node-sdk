@@ -19,6 +19,11 @@ export declare function parseNonNegativeInt(name: string, value: string | undefi
  *   - 'all'                   → undefined (no filter)
  */
 export declare function parsePublished(value: string | undefined): boolean | undefined;
+/**
+ * Optional boolean query flag: `1`/`true` → true, `0`/`false` → false,
+ * absent → undefined (no filter). Anything else is a 400.
+ */
+export declare function parseBooleanFlag(name: string, value: string | undefined): boolean | undefined;
 /** Sort direction: case-insensitive ASC/DESC, or undefined when absent. */
 export declare function parseDirection(value: string | undefined): 'ASC' | 'DESC' | undefined;
 //# sourceMappingURL=router-utils.d.ts.map

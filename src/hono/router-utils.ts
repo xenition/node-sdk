@@ -53,6 +53,17 @@ export function parsePublished(value: string | undefined): boolean | undefined {
   throw new QueryParamError(`"published" must be one of 1, 0, true, false, all — got "${value}"`);
 }
 
+/**
+ * Optional boolean query flag: `1`/`true` → true, `0`/`false` → false,
+ * absent → undefined (no filter). Anything else is a 400.
+ */
+export function parseBooleanFlag(name: string, value: string | undefined): boolean | undefined {
+  if (value === undefined || value === '') return undefined;
+  if (value === '1' || value === 'true') return true;
+  if (value === '0' || value === 'false') return false;
+  throw new QueryParamError(`"${name}" must be one of 1, 0, true, false — got "${value}"`);
+}
+
 /** Sort direction: case-insensitive ASC/DESC, or undefined when absent. */
 export function parseDirection(value: string | undefined): 'ASC' | 'DESC' | undefined {
   if (value === undefined || value === '') return undefined;

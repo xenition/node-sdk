@@ -6,6 +6,7 @@ const query_client_1 = require("../query/query-client");
 const cms_1 = require("./cms");
 const forms_1 = require("./forms");
 const reviews_1 = require("./reviews");
+const listings_1 = require("./listings");
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -33,6 +34,7 @@ class ModulesClient {
             cms: cms_1.cmsModule,
             forms: forms_1.formsModule,
             reviews: reviews_1.reviewsModule,
+            listings: listings_1.listingsModule,
         };
         const query = new query_client_1.QueryClient(http);
         this.ctx = {
@@ -82,6 +84,9 @@ class ModulesClient {
     }
     get reviews() {
         return this.access('reviews');
+    }
+    get listings() {
+        return this.access('listings');
     }
     // ───────── internals ─────────
     definition(name) {
