@@ -7,7 +7,9 @@ import { ListingsClient } from './listings';
 import { EventsClient } from './events';
 import { MediaClient } from './media';
 import { BookingClient } from './booking';
-export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking';
+import { CatalogClient } from './catalog';
+import { InventoryClient } from './inventory';
+export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory';
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -54,6 +56,8 @@ export declare class ModulesClient {
     get events(): EventsClient;
     get media(): MediaClient;
     get booking(): BookingClient;
+    get catalog(): CatalogClient;
+    get inventory(): InventoryClient;
     private definition;
     private access;
 }

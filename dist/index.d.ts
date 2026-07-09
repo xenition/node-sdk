@@ -42,6 +42,10 @@ export { MediaClient, mediaModule, MEDIA_MIGRATIONS, MEDIA_TABLES, } from './mod
 export type { MediaKind, MediaAlbum, CreateAlbumInput, UpdateAlbumInput, MediaItem, AddItemInput as AddMediaItemInput, UpdateItemInput as UpdateMediaItemInput, MediaAlbumWithItems, ListAlbumsOptions, ListItemsOptions, } from './modules/media';
 export { BookingClient, bookingModule, BOOKING_MIGRATIONS, BOOKING_TABLES, } from './modules/booking';
 export type { BookingResource, ResourceStatus, AvailabilityRule, CreateResourceInput, UpdateResourceInput, ListResourcesOptions, Blackout, AddBlackoutInput, Booking, BookingStatus, BookInput, SearchSlotsOptions, Slot, ListBookingsOptions, } from './modules/booking';
+export { CatalogClient, catalogModule, CATALOG_MIGRATIONS, CATALOG_TABLES, } from './modules/catalog';
+export type { ProductStatus, CatalogCollection, CreateCollectionInput as CreateCatalogCollectionInput, CatalogProduct, CatalogVariant, ProductWithVariants, CreateProductInput, CreateVariantInput, UpdateProductInput, UpdateVariantInput, ListProductsOptions, GetProductOptions, } from './modules/catalog';
+export { InventoryClient, inventoryModule, INVENTORY_MIGRATIONS, INVENTORY_TABLES, } from './modules/inventory';
+export type { StockPolicy, StockRow, StockView, SetStockOptions, } from './modules/inventory';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 export { XENITION_BASE_URL } from './constants';

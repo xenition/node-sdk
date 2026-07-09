@@ -273,6 +273,43 @@ export type {
   ListBookingsOptions,
 } from './modules/booking';
 
+// catalog module
+export {
+  CatalogClient,
+  catalogModule,
+  CATALOG_MIGRATIONS,
+  CATALOG_TABLES,
+} from './modules/catalog';
+export type {
+  ProductStatus,
+  CatalogCollection,
+  // Aliased to avoid colliding with the vector module's collection input type.
+  CreateCollectionInput as CreateCatalogCollectionInput,
+  CatalogProduct,
+  CatalogVariant,
+  ProductWithVariants,
+  CreateProductInput,
+  CreateVariantInput,
+  UpdateProductInput,
+  UpdateVariantInput,
+  ListProductsOptions,
+  GetProductOptions,
+} from './modules/catalog';
+
+// inventory module
+export {
+  InventoryClient,
+  inventoryModule,
+  INVENTORY_MIGRATIONS,
+  INVENTORY_TABLES,
+} from './modules/inventory';
+export type {
+  StockPolicy,
+  StockRow,
+  StockView,
+  SetStockOptions,
+} from './modules/inventory';
+
 // Errors
 export {
   XenitionError,

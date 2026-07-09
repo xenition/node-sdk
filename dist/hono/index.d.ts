@@ -34,6 +34,8 @@ export { listingsRouter } from './listings-router';
 export { eventsRouter } from './events-router';
 export { mediaRouter } from './media-router';
 export { bookingRouter } from './booking-router';
+export { catalogRouter } from './catalog-router';
+export { inventoryRouter } from './inventory-router';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';

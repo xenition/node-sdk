@@ -6,6 +6,8 @@ import { eventsRouter } from './events-router';
 import { listingsRouter } from './listings-router';
 import { mediaRouter } from './media-router';
 import { bookingRouter } from './booking-router';
+import { catalogRouter } from './catalog-router';
+import { inventoryRouter } from './inventory-router';
 import { reviewsRouter } from './reviews-router';
 import { applyCors } from './router-utils';
 import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } from './types';
@@ -38,7 +40,17 @@ import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } fro
  */
 export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   const { modules, ...routerOptions } = options;
-  const selected: XenitionApiModule[] = modules ?? ['cms', 'forms', 'reviews', 'listings', 'events', 'media', 'booking'];
+  const selected: XenitionApiModule[] = modules ?? [
+    'cms',
+    'forms',
+    'reviews',
+    'listings',
+    'events',
+    'media',
+    'booking',
+    'catalog',
+    'inventory',
+  ];
   const app = new Hono();
   // CORS lives on the parent so preflights are answered even for
   // unmatched paths; children skip it to avoid double middleware.
@@ -54,6 +66,8 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   if (selected.includes('events')) app.route('/', eventsRouter(childOptions));
   if (selected.includes('media')) app.route('/', mediaRouter(childOptions));
   if (selected.includes('booking')) app.route('/', bookingRouter(childOptions));
+  if (selected.includes('catalog')) app.route('/', catalogRouter(childOptions));
+  if (selected.includes('inventory')) app.route('/', inventoryRouter(childOptions));
   return app;
 }
 
@@ -64,6 +78,8 @@ export { listingsRouter } from './listings-router';
 export { eventsRouter } from './events-router';
 export { mediaRouter } from './media-router';
 export { bookingRouter } from './booking-router';
+export { catalogRouter } from './catalog-router';
+export { inventoryRouter } from './inventory-router';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';

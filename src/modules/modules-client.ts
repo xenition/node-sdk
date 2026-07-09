@@ -10,8 +10,19 @@ import { ListingsClient, listingsModule } from './listings';
 import { EventsClient, eventsModule } from './events';
 import { MediaClient, mediaModule } from './media';
 import { BookingClient, bookingModule } from './booking';
+import { CatalogClient, catalogModule } from './catalog';
+import { InventoryClient, inventoryModule } from './inventory';
 
-export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking';
+export type ModuleName =
+  | 'cms'
+  | 'forms'
+  | 'reviews'
+  | 'listings'
+  | 'events'
+  | 'media'
+  | 'booking'
+  | 'catalog'
+  | 'inventory';
 
 /**
  * `client.modules` — the module framework entry point.
@@ -43,6 +54,8 @@ export class ModulesClient {
     events: eventsModule,
     media: mediaModule,
     booking: bookingModule,
+    catalog: catalogModule,
+    inventory: inventoryModule,
   };
 
   constructor(
@@ -120,6 +133,14 @@ export class ModulesClient {
 
   get booking(): BookingClient {
     return this.access<BookingClient>('booking');
+  }
+
+  get catalog(): CatalogClient {
+    return this.access<CatalogClient>('catalog');
+  }
+
+  get inventory(): InventoryClient {
+    return this.access<InventoryClient>('inventory');
   }
 
   // ───────── internals ─────────

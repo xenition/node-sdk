@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.BOOKING_TABLES = exports.BOOKING_MIGRATIONS = exports.bookingModule = exports.BookingClient = exports.MEDIA_TABLES = exports.MEDIA_MIGRATIONS = exports.mediaModule = exports.MediaClient = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
-exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = void 0;
+exports.CATALOG_MIGRATIONS = exports.catalogModule = exports.CatalogClient = exports.BOOKING_TABLES = exports.BOOKING_MIGRATIONS = exports.bookingModule = exports.BookingClient = exports.MEDIA_TABLES = exports.MEDIA_MIGRATIONS = exports.mediaModule = exports.MediaClient = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
+exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.INVENTORY_TABLES = exports.INVENTORY_MIGRATIONS = exports.inventoryModule = exports.InventoryClient = exports.CATALOG_TABLES = void 0;
 var xenition_client_1 = require("./xenition-client");
 Object.defineProperty(exports, "XenitionClient", { enumerable: true, get: function () { return xenition_client_1.XenitionClient; } });
 // Auth module
@@ -92,6 +92,18 @@ Object.defineProperty(exports, "BookingClient", { enumerable: true, get: functio
 Object.defineProperty(exports, "bookingModule", { enumerable: true, get: function () { return booking_1.bookingModule; } });
 Object.defineProperty(exports, "BOOKING_MIGRATIONS", { enumerable: true, get: function () { return booking_1.BOOKING_MIGRATIONS; } });
 Object.defineProperty(exports, "BOOKING_TABLES", { enumerable: true, get: function () { return booking_1.BOOKING_TABLES; } });
+// catalog module
+var catalog_1 = require("./modules/catalog");
+Object.defineProperty(exports, "CatalogClient", { enumerable: true, get: function () { return catalog_1.CatalogClient; } });
+Object.defineProperty(exports, "catalogModule", { enumerable: true, get: function () { return catalog_1.catalogModule; } });
+Object.defineProperty(exports, "CATALOG_MIGRATIONS", { enumerable: true, get: function () { return catalog_1.CATALOG_MIGRATIONS; } });
+Object.defineProperty(exports, "CATALOG_TABLES", { enumerable: true, get: function () { return catalog_1.CATALOG_TABLES; } });
+// inventory module
+var inventory_1 = require("./modules/inventory");
+Object.defineProperty(exports, "InventoryClient", { enumerable: true, get: function () { return inventory_1.InventoryClient; } });
+Object.defineProperty(exports, "inventoryModule", { enumerable: true, get: function () { return inventory_1.inventoryModule; } });
+Object.defineProperty(exports, "INVENTORY_MIGRATIONS", { enumerable: true, get: function () { return inventory_1.INVENTORY_MIGRATIONS; } });
+Object.defineProperty(exports, "INVENTORY_TABLES", { enumerable: true, get: function () { return inventory_1.INVENTORY_TABLES; } });
 // Errors
 var errors_1 = require("./core/errors");
 Object.defineProperty(exports, "XenitionError", { enumerable: true, get: function () { return errors_1.XenitionError; } });
