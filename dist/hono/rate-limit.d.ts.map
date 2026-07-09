@@ -1,0 +1,1 @@
+{"version":3,"file":"rate-limit.d.ts","sourceRoot":"","sources":["../../src/hono/rate-limit.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,OAAO,EAAE,iBAAiB,EAAE,MAAM,MAAM,CAAC;AAqBvD,4EAA4E;AAC5E,wBAAgB,QAAQ,CAAC,CAAC,EAAE,OAAO,GAAG,MAAM,CAM3C;AAED;;;GAGG;AACH,wBAAgB,WAAW,CAAC,cAAc,EAAE,MAAM,GAAG,iBAAiB,CAiCrE"}

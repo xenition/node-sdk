@@ -112,6 +112,60 @@ modules**: they need server-side invariants (stock, double-booking,
 idempotent charging) that a client-side layer cannot honestly provide.
 They arrive as server-backed modules in a later phase.
 
+## Backend routers (@xenition/sdk/hono)
+
+Prebuilt, mountable [Hono](https://hono.dev) routers that turn a generated
+app's backend into composition instead of hand-written code. They run
+inside the app's own Cloudflare Worker with the **service key** the deploy
+pipeline injects (`XENITION_API_KEY` + `XENITION_API_URL`), so the
+React/Expo frontend talks to *its own* backend and never holds a platform
+key — and since the platform bans anon-key writes, these routers are the
+sanctioned write path for forms and reviews.
+
+```ts
+import { Hono } from 'hono';
+import { createXenitionApi } from '@xenition/sdk/hono';
+
+const app = new Hono();
+app.route('/api', createXenitionApi()); // /api/cms, /api/forms, /api/reviews
+export default app;
+```
+
+**Routes**
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| GET | `/cms/pages/:slug` | Published page (404 for drafts/missing) |
+| GET | `/cms/collections/:key/items` | Items; `?published=1&orderBy=&direction=&limit=&offset=` (published-only by default, `published=all` opts out) |
+| GET | `/cms/collections/:key/items/:slug` | Published item |
+| GET | `/forms/:key` | The form's field schema (for rendering) |
+| POST | `/forms/:key/submissions` | Body = the `data` object → SDK-validated insert; `201 {id}` or `400` with the aggregated validation message |
+| GET | `/reviews/:targetType/:targetId` | `{reviews, aggregate: {count, average}}` (approved only) in one payload |
+| POST | `/reviews/:targetType/:targetId` | `{authorName, rating, title?, body?}` → `201 {id, status: 'pending'}` (always lands pending) |
+
+**Options** — `createXenitionApi({ modules?, cors?, client?, rateLimit? })`:
+`modules` picks which routers to mount (default all three; individual
+`cmsRouter()` / `formsRouter()` / `reviewsRouter()` are also exported for
+selective mounting), `cors` is `true` (permissive, default), an origin
+allowlist array, or `false`, `client` overrides the env-built
+`XenitionClient`, and `rateLimit` is submissions-per-minute-per-IP for the
+write routes (default 10, `false` disables — best-effort: the token bucket
+is per Workers isolate, so it dampens abuse rather than enforcing a hard
+quota).
+
+**One stable response shape.** The two platform runtimes disagree on row
+casing (the gateway camelCases, the engine returns snake_case verbatim);
+every row leaving these routers is normalized to camelCase
+(`body_html` → `bodyHtml`). jsonb payloads (`data`, `seo`, `meta`) keep
+their inner keys untouched — that casing is your app's contract.
+
+Errors map to proper HTTP statuses (400 validation, 404 missing, 429 rate
+limited, 502/504 upstream) and never leak keys or upstream URLs. `hono`
+is an **optional peer dependency** — the SDK core never imports it, and
+the `./hono` subpath is Worker/Node-only (excluded from the browser
+build). Routers only ever call `modules.use()` — never `enable()`/DDL at
+request time; migrations belong in the deploy step.
+
 ## Status
 
 Phase 1: `client.auth.*` (register, login, logout, me, OAuth, password
