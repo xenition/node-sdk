@@ -5,6 +5,6 @@
     "outDir": "./dist/browser",
     "rootDir": "./src"
   },
-  "include": ["src/browser/**/*", "src/constants.ts"],
+  "include": ["src/browser/**/*", "src/client/**/*", "src/constants.ts"],
   "exclude": ["node_modules", "dist"]
 }

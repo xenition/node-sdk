@@ -1,0 +1,1 @@
+{"version":3,"file":"events-router.d.ts","sourceRoot":"","sources":["../../src/hono/events-router.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,IAAI,EAAE,MAAM,MAAM,CAAC;AAM5B,OAAO,KAAK,EAAE,qBAAqB,EAAE,MAAM,SAAS,CAAC;AAGrD;;;;;;;;;;;;;GAaG;AACH,wBAAgB,YAAY,CAAC,OAAO,GAAE,qBAA0B,GAAG,IAAI,CAuDtE"}

@@ -42,6 +42,130 @@ client.setHeader('Authorization', `Bearer ${session.token}`);
 const me = await client.auth.me();
 ```
 
+## Content modules (v0)
+
+The SDK ships a small **module framework**: content-domain features (CMS
+pages, forms, reviews) implemented *client-side* on top of the existing
+`/app-platform/query` and `/app-platform/raw` endpoints. Each module is
+just a migration set plus a typed client — no new server surface.
+
+```ts
+// service key (backend / deploy step) — runs the module's migrations
+// through the ledger, idempotent, then unlocks the accessor:
+await client.modules.enable('cms');
+
+const about = await client.modules.cms.createPage({
+  title: 'About Us',            // slug auto-generated: 'about-us'
+  body_html: '<h1>Hi</h1>',
+  published: true,
+});
+const page = await client.modules.cms.getPageBySlug('about-us');
+
+// anon key (browser) — tables were migrated by the backend already;
+// mark the module usable without running DDL:
+client.modules.use('forms');
+await client.modules.forms.submit('contact', {
+  name: 'Ada',
+  email: 'ada@example.com',     // validated against the stored field schema
+});
+```
+
+**Modules**
+
+| Module    | Tables                                | Client surface |
+|-----------|---------------------------------------|----------------|
+| `cms`     | `cms__pages`, `cms__collections`, `cms__items` | pages CRUD + `getPageBySlug`; `ensureCollection`/`getCollection`; items CRUD + `listItems(collection, {published, orderBy})` + `getItemBySlug`. Slugs auto-kebab from titles, deduped `-2`, `-3`, … |
+| `forms`   | `forms__forms`, `forms__submissions`  | `ensureForm(key, fields)` (declarative field schema); `submit(key, data)` — validates required/type/email/maxLength/select client-side, works with the **anon key** (schema read + one insert); `listSubmissions`/`setStatus` are service-key back-office calls |
+| `reviews` | `reviews__reviews`                    | `submit` (rating rounded + clamped 1–5, always status `pending`); `listApproved(target)`; `aggregate(target)` → `{count, average}` computed in the DB; `moderate(id, status)` service-key |
+
+**Conventions**
+
+- Every module's tables are prefixed `<module>__` — they live in your
+  app's own database next to your tables; query them directly whenever
+  the typed client is too narrow.
+- Schema is managed by `client.migrations`, a **content-addressed
+  migration ledger**: `apply([{id, sql}])` records each applied id with
+  the sha-256 of its SQL in `_sdk_migrations`. Re-apply is a no-op;
+  editing an applied migration's SQL throws (write a new migration
+  instead — never silently re-run). Migrations use raw SQL, so they are
+  **service-key only**. You can use the ledger for your own app tables
+  too:
+
+  ```ts
+  await client.migrations.apply([
+    { id: 'app/0001_create_widgets', sql: 'CREATE TABLE IF NOT EXISTS widgets (...)' },
+  ]);
+  ```
+
+- Custom modules: `defineModule({name, migrations, factory})` gives your
+  own domain the same shape (migrations + typed client over
+  `ctx.query`/`ctx.raw`).
+
+**v0 scope — read this**
+
+Validation runs in the SDK, so it protects well-behaved apps from bad
+data — it does not protect the database from clients that bypass the SDK.
+Server-side hardening (per-table policies, module-aware endpoints) comes
+later per the platform master plan. For the same reason, **money-path
+domains (cart, booking, payments) are deliberately NOT v0 client-side
+modules**: they need server-side invariants (stock, double-booking,
+idempotent charging) that a client-side layer cannot honestly provide.
+They arrive as server-backed modules in a later phase.
+
+## Backend routers (@xenition/sdk/hono)
+
+Prebuilt, mountable [Hono](https://hono.dev) routers that turn a generated
+app's backend into composition instead of hand-written code. They run
+inside the app's own Cloudflare Worker with the **service key** the deploy
+pipeline injects (`XENITION_API_KEY` + `XENITION_API_URL`), so the
+React/Expo frontend talks to *its own* backend and never holds a platform
+key — and since the platform bans anon-key writes, these routers are the
+sanctioned write path for forms and reviews.
+
+```ts
+import { Hono } from 'hono';
+import { createXenitionApi } from '@xenition/sdk/hono';
+
+const app = new Hono();
+app.route('/api', createXenitionApi()); // /api/cms, /api/forms, /api/reviews
+export default app;
+```
+
+**Routes**
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| GET | `/cms/pages/:slug` | Published page (404 for drafts/missing) |
+| GET | `/cms/collections/:key/items` | Items; `?published=1&orderBy=&direction=&limit=&offset=` (published-only by default, `published=all` opts out) |
+| GET | `/cms/collections/:key/items/:slug` | Published item |
+| GET | `/forms/:key` | The form's field schema (for rendering) |
+| POST | `/forms/:key/submissions` | Body = the `data` object → SDK-validated insert; `201 {id}` or `400` with the aggregated validation message |
+| GET | `/reviews/:targetType/:targetId` | `{reviews, aggregate: {count, average}}` (approved only) in one payload |
+| POST | `/reviews/:targetType/:targetId` | `{authorName, rating, title?, body?}` → `201 {id, status: 'pending'}` (always lands pending) |
+
+**Options** — `createXenitionApi({ modules?, cors?, client?, rateLimit? })`:
+`modules` picks which routers to mount (default all three; individual
+`cmsRouter()` / `formsRouter()` / `reviewsRouter()` are also exported for
+selective mounting), `cors` is `true` (permissive, default), an origin
+allowlist array, or `false`, `client` overrides the env-built
+`XenitionClient`, and `rateLimit` is submissions-per-minute-per-IP for the
+write routes (default 10, `false` disables — best-effort: the token bucket
+is per Workers isolate, so it dampens abuse rather than enforcing a hard
+quota).
+
+**One stable response shape.** The two platform runtimes disagree on row
+casing (the gateway camelCases, the engine returns snake_case verbatim);
+every row leaving these routers is normalized to camelCase
+(`body_html` → `bodyHtml`). jsonb payloads (`data`, `seo`, `meta`) keep
+their inner keys untouched — that casing is your app's contract.
+
+Errors map to proper HTTP statuses (400 validation, 404 missing, 429 rate
+limited, 502/504 upstream) and never leak keys or upstream URLs. `hono`
+is an **optional peer dependency** — the SDK core never imports it, and
+the `./hono` subpath is Worker/Node-only (excluded from the browser
+build). Routers only ever call `modules.use()` — never `enable()`/DDL at
+request time; migrations belong in the deploy step.
+
 ## Status
 
 Phase 1: `client.auth.*` (register, login, logout, me, OAuth, password

@@ -1,0 +1,1 @@
+{"version":3,"file":"booking-router.d.ts","sourceRoot":"","sources":["../../src/hono/booking-router.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,IAAI,EAAE,MAAM,MAAM,CAAC;AAM5B,OAAO,KAAK,EAAE,qBAAqB,EAAE,MAAM,SAAS,CAAC;AAGrD;;;;;;;;;;;;;;;;GAgBG;AACH,wBAAgB,aAAa,CAAC,OAAO,GAAE,qBAA0B,GAAG,IAAI,CAwEvE"}

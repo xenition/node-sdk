@@ -37,6 +37,14 @@ class HttpClient {
     setHeader(key, value) {
         this.axios.defaults.headers.common[key] = value;
     }
+    /**
+     * The effective API base URL this client was constructed with (the
+     * per-deploy override when given, otherwise XENITION_BASE_URL). Used by
+     * the realtime module to derive the socket origin.
+     */
+    get baseUrl() {
+        return this.axios.defaults.baseURL || constants_1.XENITION_BASE_URL;
+    }
     get(url, config) {
         return this.request({ ...config, method: 'GET', url });
     }
@@ -108,7 +116,13 @@ class HttpClient {
         if (body && typeof body === 'object' && 'success' in body) {
             const env = body;
             if (env.success === false) {
-                const code = env.error?.code ?? 'UNKNOWN';
+                // No HTTP status here (2xx body with success:false), so unknown
+                // server codes fall back to 'UNKNOWN'. The raw code survives in
+                // `details` (the whole error object) either way.
+                const rawCode = env.error?.code;
+                const code = (0, errors_1.isXenitionErrorCode)(rawCode)
+                    ? rawCode
+                    : 'UNKNOWN';
                 const message = env.error?.message ?? 'Request failed';
                 throw new errors_1.XenitionError(code, message, { details: env.error });
             }
@@ -135,7 +149,11 @@ class HttpClient {
         return new errors_1.XenitionError('UNKNOWN', 'Unknown error', { details: err });
     }
     classifyStatus(status, serverCode) {
-        if (serverCode && this.isValidCode(serverCode)) {
+        // Only accept codes that are actually in the XenitionErrorCode union —
+        // unknown server codes fall through to status-based classification.
+        // The raw server code is not lost: normalizeError stores the full
+        // response envelope (including `error.code`) in the error's `details`.
+        if ((0, errors_1.isXenitionErrorCode)(serverCode)) {
             return serverCode;
         }
         if (status === null)
@@ -155,11 +173,6 @@ class HttpClient {
         if (status >= 500)
             return 'SERVER_ERROR';
         return 'UNKNOWN';
-    }
-    isValidCode(code) {
-        // Any string matching the XenitionErrorCode pattern; we accept anything
-        // and let type narrowing surface unexpected codes during development.
-        return typeof code === 'string' && code.length > 0;
     }
     shouldRetry(err) {
         return (err.code === 'NETWORK_ERROR' ||

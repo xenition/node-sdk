@@ -28,6 +28,12 @@ export declare class HttpClient {
     private readonly retries;
     constructor(apiKey: string, options?: HttpClientOptions);
     setHeader(key: string, value: string): void;
+    /**
+     * The effective API base URL this client was constructed with (the
+     * per-deploy override when given, otherwise XENITION_BASE_URL). Used by
+     * the realtime module to derive the socket origin.
+     */
+    get baseUrl(): string;
     get<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
     post<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T>;
     patch<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T>;
@@ -50,7 +56,6 @@ export declare class HttpClient {
     private unwrapEnvelope;
     private normalizeError;
     private classifyStatus;
-    private isValidCode;
     private shouldRetry;
     private sleep;
 }

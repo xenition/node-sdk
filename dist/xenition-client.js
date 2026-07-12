@@ -14,6 +14,8 @@ const search_client_1 = require("./search/search-client");
 const payment_client_1 = require("./payment/payment-client");
 const video_client_1 = require("./video/video-client");
 const realtime_client_1 = require("./realtime/realtime-client");
+const migrations_client_1 = require("./migrations/migrations-client");
+const modules_client_1 = require("./modules/modules-client");
 /**
  * Entry point for the Xenition SDK.
  *
@@ -59,6 +61,8 @@ class XenitionClient {
         this.payment = new payment_client_1.PaymentClient(this.http);
         this.videoConferencing = new video_client_1.VideoConferencingClient(this.http);
         this.realtime = new realtime_client_1.RealtimeClient(this.http, apiKey);
+        this.migrations = new migrations_client_1.MigrationsClient(this.http);
+        this.modules = new modules_client_1.ModulesClient(this.http, this.migrations);
     }
     /**
      * Direct parameterized SQL against the per-app DB. Service-key only —
