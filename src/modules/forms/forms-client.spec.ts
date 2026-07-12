@@ -244,6 +244,50 @@ describe('submit: validation matrix', () => {
   });
 });
 
+describe('date fields', () => {
+  const bookingForm = {
+    id: 'f2',
+    key: 'booking',
+    name: 'Booking',
+    fields: [
+      { name: 'name', type: 'text', required: true },
+      { name: 'when', type: 'date', required: true },
+    ] as FormField[],
+    created_at: 't0',
+    updated_at: 't0',
+  };
+
+  it('ensureForm accepts a date field in the schema', async () => {
+    const { post, forms } = makeForms();
+    post.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: [] });
+    await expect(
+      forms.ensureForm('booking', bookingForm.fields, 'Booking'),
+    ).resolves.toBeDefined();
+  });
+
+  it('accepts a valid ISO date (YYYY-MM-DD)', async () => {
+    const { post, forms } = makeForms();
+    primeForm(post, bookingForm);
+    await expect(forms.submit('booking', { name: 'Ada', when: '2026-07-18' })).resolves.toBeDefined();
+  });
+
+  it('rejects a malformed date', async () => {
+    const { post, forms } = makeForms();
+    primeForm(post, bookingForm);
+    await expect(forms.submit('booking', { name: 'Ada', when: '07/18/2026' })).rejects.toThrow(
+      /field "when" must be a date \(YYYY-MM-DD\)/,
+    );
+  });
+
+  it('rejects options on a date field at schema time', async () => {
+    const { post, forms } = makeForms();
+    post.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: [] });
+    await expect(
+      forms.ensureForm('booking', [{ name: 'when', type: 'date', options: ['x'] }], 'Booking'),
+    ).rejects.toThrow(/"options" only applies to select/);
+  });
+});
+
 describe('back-office: listSubmissions / setStatus', () => {
   it('lists newest-first with a status filter and pagination', async () => {
     const { post, forms } = makeForms();

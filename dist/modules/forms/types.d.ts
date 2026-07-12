@@ -2,7 +2,7 @@
  * forms module types. `FormField[]` is the declarative field schema stored
  * in `forms__forms.fields` and enforced client-side on every `submit()`.
  */
-export type FormFieldType = 'text' | 'email' | 'number' | 'boolean' | 'select';
+export type FormFieldType = 'text' | 'email' | 'number' | 'boolean' | 'select' | 'date';
 export interface FormField {
     /** Key in the submission's `data` object. */
     name: string;

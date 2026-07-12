@@ -35,10 +35,12 @@ exports.FORMS_MIGRATIONS = [
         sql: `CREATE INDEX IF NOT EXISTS forms__submissions_form_key_idx ON ${exports.FORMS_TABLES.SUBMISSIONS} (form_key, created_at)`,
     },
 ];
-const FIELD_TYPES = ['text', 'email', 'number', 'boolean', 'select'];
+const FIELD_TYPES = ['text', 'email', 'number', 'boolean', 'select', 'date'];
 const SUBMISSION_STATUSES = ['new', 'read', 'archived'];
 // Deliberately simple: catches typos, not RFC 5322 pathology.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** ISO calendar date `YYYY-MM-DD` — the value an HTML `<input type="date">` emits. */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * forms module client — form definitions + validated submissions over
  * `forms__*` tables.
@@ -255,6 +257,11 @@ class FormsClient {
                 case 'select':
                     if (typeof value !== 'string' || !(field.options ?? []).includes(value)) {
                         errors.push(`field "${field.name}" must be one of: ${(field.options ?? []).join(', ')}`);
+                    }
+                    break;
+                case 'date':
+                    if (typeof value !== 'string' || !DATE_RE.test(value) || Number.isNaN(Date.parse(value))) {
+                        errors.push(`field "${field.name}" must be a date (YYYY-MM-DD)`);
                     }
                     break;
             }
