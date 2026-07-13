@@ -1,4 +1,4 @@
-import { buildOpenApi, docsRouter } from './docs';
+import { buildOpenApi, openApiRouter } from './docs';
 import type { XenitionApiModule } from './types';
 
 type Spec = { paths: Record<string, unknown>; info: { title: string }; tags: { name: string }[] };
@@ -46,9 +46,9 @@ describe('buildOpenApi — module selection', () => {
   });
 });
 
-describe('docsRouter', () => {
+describe('openApiRouter', () => {
   it('serves the spec at /openapi.json', async () => {
-    const app = docsRouter({ modules: ['forms'], info: { title: 'T' } });
+    const app = openApiRouter({ modules: ['forms'], info: { title: 'T' } });
     const res = await app.request('/openapi.json');
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
@@ -57,17 +57,13 @@ describe('docsRouter', () => {
     expect(Object.keys(spec.paths)).toContain('/api/forms/{key}');
   });
 
-  it('serves Swagger UI at /docs pointing at the sibling spec', async () => {
-    const res = await docsRouter().request('/docs');
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/html');
-    const html = await res.text();
-    expect(html).toContain('swagger-ui');
-    expect(html).toContain('./openapi.json');
+  it('serves NO docs UI — OpenAPI only, by decision', async () => {
+    const res = await openApiRouter().request('/docs');
+    expect(res.status).toBe(404);
   });
 
   it('honors the shared CORS contract', async () => {
-    const res = await docsRouter({ cors: true }).request('/openapi.json', {
+    const res = await openApiRouter({ cors: true }).request('/openapi.json', {
       headers: { Origin: 'https://app.example.com' },
     });
     expect(res.headers.get('access-control-allow-origin')).toBe('*');

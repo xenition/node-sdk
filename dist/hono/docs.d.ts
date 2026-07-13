@@ -2,19 +2,19 @@ import { Hono } from 'hono';
 import type { XenitionApiModule } from './types';
 /**
  * API docs for generated app backends — an OpenAPI 3.0 document assembled
- * from the SAME module list `createXenitionApi` mounts, plus a Swagger UI
- * shell that renders it. Mount `docsRouter()` at the worker root:
+ * from the SAME module list `createXenitionApi` mounts. OpenAPI only, by
+ * decision: no bundled Swagger/redoc UI — consumers point their own tooling
+ * at the spec. Mount `openApiRouter()` at the worker root:
  *
  *   app.route('/api', createXenitionApi({ modules: ['cms', 'forms'] }));
- *   app.route('/', docsRouter({ modules: ['cms', 'forms'], info: { title: 'My App API' } }));
+ *   app.route('/', openApiRouter({ modules: ['cms', 'forms'], info: { title: 'My App API' } }));
  *
- * and the worker serves machine-readable docs at /openapi.json and a
- * browsable UI at /docs — zero bespoke code in the template. The route
- * descriptions below are maintained ALONGSIDE the routers in this
- * directory; when a router's surface changes, update its entry here in the
- * same commit.
+ * and the worker serves the machine-readable spec at /openapi.json — zero
+ * bespoke code in the template. The route descriptions below are maintained
+ * ALONGSIDE the routers in this directory; when a router's surface changes,
+ * update its entry here in the same commit.
  */
-/** Options for `buildOpenApi` / `docsRouter`. */
+/** Options for `buildOpenApi` / `openApiRouter`. */
 export interface DocsOptions {
     /** Which modules to document. Must match the `createXenitionApi` list. Defaults to all. */
     modules?: XenitionApiModule[];
@@ -34,15 +34,16 @@ type JsonObject = Record<string, unknown>;
  * `app.route('/api', createXenitionApi(...))` mount).
  */
 export declare function buildOpenApi(options?: DocsOptions): JsonObject;
-/** CORS is the only router option that matters for two GET-only doc routes. */
-export interface DocsRouterOptions extends DocsOptions {
+/** CORS is the only router option that matters for a GET-only spec route. */
+export interface OpenApiRouterOptions extends DocsOptions {
     /** Same contract as every other router: `true` (default) | allowlist | `false`. */
     cors?: boolean | string[];
 }
 /**
- * A mountable docs router: GET /openapi.json (the spec) + GET /docs
- * (Swagger UI). Mount at the worker root so the docs live next to /health.
+ * A mountable spec router: GET /openapi.json — the OpenAPI document for the
+ * mounted modules. Mount at the worker root so it lives next to /health.
+ * OpenAPI only (no bundled docs UI) by decision.
  */
-export declare function docsRouter(options?: DocsRouterOptions): Hono;
+export declare function openApiRouter(options?: OpenApiRouterOptions): Hono;
 export {};
 //# sourceMappingURL=docs.d.ts.map

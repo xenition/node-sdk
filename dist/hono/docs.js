@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildOpenApi = buildOpenApi;
-exports.docsRouter = docsRouter;
+exports.openApiRouter = openApiRouter;
 const hono_1 = require("hono");
 const router_utils_1 = require("./router-utils");
 /* ── small builders so each route entry stays one screen tall ─────────── */
@@ -452,43 +452,16 @@ function buildOpenApi(options = {}) {
         },
     };
 }
-/** The Swagger UI shell served at /docs — renders /openapi.json from this origin. */
-const DOCS_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>API docs</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-  <style>body { margin: 0; } .topbar { display: none; }</style>
-</head>
-<body>
-  <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
-  <script>
-    window.ui = SwaggerUIBundle({
-      url: './openapi.json',
-      dom_id: '#swagger-ui',
-      deepLinking: true,
-      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-      layout: 'BaseLayout',
-      tryItOutEnabled: true,
-    });
-  </script>
-</body>
-</html>
-`;
 /**
- * A mountable docs router: GET /openapi.json (the spec) + GET /docs
- * (Swagger UI). Mount at the worker root so the docs live next to /health.
+ * A mountable spec router: GET /openapi.json — the OpenAPI document for the
+ * mounted modules. Mount at the worker root so it lives next to /health.
+ * OpenAPI only (no bundled docs UI) by decision.
  */
-function docsRouter(options = {}) {
+function openApiRouter(options = {}) {
     const app = new hono_1.Hono();
     (0, router_utils_1.applyCors)(app, options.cors);
     const spec = buildOpenApi(options);
     app.get('/openapi.json', (c) => c.json(spec));
-    app.get('/docs', (c) => c.html(DOCS_HTML));
     return app;
 }
 //# sourceMappingURL=docs.js.map

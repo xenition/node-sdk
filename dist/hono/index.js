@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.docsRouter = exports.buildOpenApi = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
+exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.openApiRouter = exports.buildOpenApi = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
 exports.createXenitionApi = createXenitionApi;
 const hono_1 = require("hono");
 const cms_router_1 = require("./cms-router");
@@ -119,7 +119,7 @@ Object.defineProperty(exports, "checkoutRouter", { enumerable: true, get: functi
 Object.defineProperty(exports, "verifyStripeSignature", { enumerable: true, get: function () { return checkout_router_2.verifyStripeSignature; } });
 var docs_1 = require("./docs");
 Object.defineProperty(exports, "buildOpenApi", { enumerable: true, get: function () { return docs_1.buildOpenApi; } });
-Object.defineProperty(exports, "docsRouter", { enumerable: true, get: function () { return docs_1.docsRouter; } });
+Object.defineProperty(exports, "openApiRouter", { enumerable: true, get: function () { return docs_1.openApiRouter; } });
 var normalize_1 = require("./normalize");
 Object.defineProperty(exports, "camelizeKey", { enumerable: true, get: function () { return normalize_1.camelizeKey; } });
 Object.defineProperty(exports, "normalizeRow", { enumerable: true, get: function () { return normalize_1.normalizeRow; } });

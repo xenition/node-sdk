@@ -4,20 +4,20 @@ import type { XenitionApiModule } from './types';
 
 /**
  * API docs for generated app backends — an OpenAPI 3.0 document assembled
- * from the SAME module list `createXenitionApi` mounts, plus a Swagger UI
- * shell that renders it. Mount `docsRouter()` at the worker root:
+ * from the SAME module list `createXenitionApi` mounts. OpenAPI only, by
+ * decision: no bundled Swagger/redoc UI — consumers point their own tooling
+ * at the spec. Mount `openApiRouter()` at the worker root:
  *
  *   app.route('/api', createXenitionApi({ modules: ['cms', 'forms'] }));
- *   app.route('/', docsRouter({ modules: ['cms', 'forms'], info: { title: 'My App API' } }));
+ *   app.route('/', openApiRouter({ modules: ['cms', 'forms'], info: { title: 'My App API' } }));
  *
- * and the worker serves machine-readable docs at /openapi.json and a
- * browsable UI at /docs — zero bespoke code in the template. The route
- * descriptions below are maintained ALONGSIDE the routers in this
- * directory; when a router's surface changes, update its entry here in the
- * same commit.
+ * and the worker serves the machine-readable spec at /openapi.json — zero
+ * bespoke code in the template. The route descriptions below are maintained
+ * ALONGSIDE the routers in this directory; when a router's surface changes,
+ * update its entry here in the same commit.
  */
 
-/** Options for `buildOpenApi` / `docsRouter`. */
+/** Options for `buildOpenApi` / `openApiRouter`. */
 export interface DocsOptions {
   /** Which modules to document. Must match the `createXenitionApi` list. Defaults to all. */
   modules?: XenitionApiModule[];
@@ -507,49 +507,21 @@ export function buildOpenApi(options: DocsOptions = {}): JsonObject {
   };
 }
 
-/** The Swagger UI shell served at /docs — renders /openapi.json from this origin. */
-const DOCS_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>API docs</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-  <style>body { margin: 0; } .topbar { display: none; }</style>
-</head>
-<body>
-  <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
-  <script>
-    window.ui = SwaggerUIBundle({
-      url: './openapi.json',
-      dom_id: '#swagger-ui',
-      deepLinking: true,
-      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-      layout: 'BaseLayout',
-      tryItOutEnabled: true,
-    });
-  </script>
-</body>
-</html>
-`;
-
-/** CORS is the only router option that matters for two GET-only doc routes. */
-export interface DocsRouterOptions extends DocsOptions {
+/** CORS is the only router option that matters for a GET-only spec route. */
+export interface OpenApiRouterOptions extends DocsOptions {
   /** Same contract as every other router: `true` (default) | allowlist | `false`. */
   cors?: boolean | string[];
 }
 
 /**
- * A mountable docs router: GET /openapi.json (the spec) + GET /docs
- * (Swagger UI). Mount at the worker root so the docs live next to /health.
+ * A mountable spec router: GET /openapi.json — the OpenAPI document for the
+ * mounted modules. Mount at the worker root so it lives next to /health.
+ * OpenAPI only (no bundled docs UI) by decision.
  */
-export function docsRouter(options: DocsRouterOptions = {}): Hono {
+export function openApiRouter(options: OpenApiRouterOptions = {}): Hono {
   const app = new Hono();
   applyCors(app, options.cors);
   const spec = buildOpenApi(options);
   app.get('/openapi.json', (c) => c.json(spec));
-  app.get('/docs', (c) => c.html(DOCS_HTML));
   return app;
 }
