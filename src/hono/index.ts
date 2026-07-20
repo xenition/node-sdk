@@ -13,6 +13,7 @@ import { ordersRouter } from './orders-router';
 import { checkoutRouter } from './checkout-router';
 import { reviewsRouter } from './reviews-router';
 import { applyCors } from './router-utils';
+import { openApiRouter } from './docs';
 import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } from './types';
 
 /**
@@ -77,6 +78,10 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   if (selected.includes('cart')) app.route('/', cartRouter(childOptions));
   if (selected.includes('orders')) app.route('/', ordersRouter(childOptions));
   if (selected.includes('checkout')) app.route('/', checkoutRouter(childOptions));
+  // Every generated app exposes its own machine-readable API spec at `<mount>/openapi.json`
+  // (built from the SAME module list), so the platform's template/app preview can always show the
+  // API without each app hand-writing a route. OpenAPI only, no docs UI — by decision (see docs.ts).
+  app.route('/', openApiRouter({ ...childOptions, modules: selected }));
   return app;
 }
 
