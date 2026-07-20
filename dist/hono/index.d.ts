@@ -39,6 +39,8 @@ export { inventoryRouter } from './inventory-router';
 export { cartRouter } from './cart-router';
 export { ordersRouter } from './orders-router';
 export { checkoutRouter, verifyStripeSignature } from './checkout-router';
+export { buildOpenApi, openApiRouter } from './docs';
+export type { DocsOptions, OpenApiRouterOptions } from './docs';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';
