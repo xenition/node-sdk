@@ -3,6 +3,7 @@ import type {
   AppClient,
   BookForm,
   BookResult,
+  Booking,
   BookingResource,
   BookingResourcesOptions,
   BookingSlot,
@@ -36,6 +37,7 @@ import type {
   ReviewSubmitInput,
   ReviewSubmitResult,
   ReviewsResult,
+  Rsvp,
   RsvpInput,
   RsvpResult,
   SlotsRange,
@@ -58,7 +60,8 @@ import type {
  *   const posts = await api.cms.items('posts', { orderBy: 'created_at', direction: 'DESC' });
  *
  * Error contract:
- *   - single-get (cms.page/cms.item, listings.get, events.get) → 404 is null
+ *   - single-get (cms.page/cms.item, listings.get, events.get, events.getRsvp,
+ *     booking.getBooking) → 404 is null
  *   - every other non-2xx throws `AppClientError(status, code?, message)`
  *     (POST validation 400s surface the server's message).
  */
@@ -170,6 +173,9 @@ export function createAppClient(baseUrl: string): AppClient {
       rsvp(slug, input: RsvpInput) {
         return postJson<RsvpResult>(`/events/${encodeURIComponent(slug)}/rsvps`, input);
       },
+      getRsvp(id) {
+        return getOrNull<Rsvp>(`/events/rsvps/${encodeURIComponent(id)}`);
+      },
     },
 
     forms: {
@@ -216,6 +222,9 @@ export function createAppClient(baseUrl: string): AppClient {
           `/booking/resources/${encodeURIComponent(slug)}/bookings`,
           input,
         );
+      },
+      getBooking(id) {
+        return getOrNull<Booking>(`/booking/bookings/${encodeURIComponent(id)}`);
       },
     },
 

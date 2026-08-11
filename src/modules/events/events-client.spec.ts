@@ -437,6 +437,42 @@ describe('rsvp', () => {
   });
 });
 
+// ───────────────────────── getRsvp ─────────────────────────
+
+describe('getRsvp', () => {
+  it('returns the rsvp for a known id', async () => {
+    const { post, events } = makeEvents();
+    const row = {
+      id: 'r1',
+      event_id: 'e1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      party_size: 2,
+      status: 'confirmed',
+      created_at: '2030-01-01T00:00:00.000Z',
+    };
+    post.mockResolvedValueOnce({ data: [row] });
+    await expect(events.getRsvp('r1')).resolves.toEqual(row);
+    expect(payloadOf(post, 0)).toEqual(
+      expect.objectContaining({
+        table: EVENTS_TABLES.RSVPS,
+        where: [{ column: 'id', operator: '=', value: 'r1', type: 'AND' }],
+      }),
+    );
+  });
+
+  it('returns null for an unknown id', async () => {
+    const { post, events } = makeEvents();
+    post.mockResolvedValueOnce({ data: [] });
+    await expect(events.getRsvp('ghost')).resolves.toBeNull();
+  });
+
+  it('rejects an empty id', async () => {
+    const { events } = makeEvents();
+    await expect(events.getRsvp('')).rejects.toThrow(/"id"/);
+  });
+});
+
 // ───────────────────────── listRsvps / cancelRsvp ─────────────────────────
 
 describe('listRsvps', () => {

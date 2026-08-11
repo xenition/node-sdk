@@ -15,7 +15,8 @@ import type { AppClient } from './types';
  *   const posts = await api.cms.items('posts', { orderBy: 'created_at', direction: 'DESC' });
  *
  * Error contract:
- *   - single-get (cms.page/cms.item, listings.get, events.get) → 404 is null
+ *   - single-get (cms.page/cms.item, listings.get, events.get, events.getRsvp,
+ *     booking.getBooking) → 404 is null
  *   - every other non-2xx throws `AppClientError(status, code?, message)`
  *     (POST validation 400s surface the server's message).
  */

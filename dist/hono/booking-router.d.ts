@@ -11,6 +11,10 @@ import type { XenitionRouterOptions } from './types';
  *        → the resource (camelCased); 404 when unknown.
  *   GET  /booking/resources/:slug/slots?from=&to=
  *        → { slots: [{startsAt, endsAt, spotsLeft}] } (public availability)
+ *   GET  /booking/bookings/:id
+ *        → the booking (camelCased); 404 when unknown. v0 access model: the
+ *          booking's `id` is an unguessable UUID, so it doubles as the
+ *          confirmation-page access token (same model as GET /orders/:id).
  *   POST /booking/resources/:slug/bookings  body {startsAt, customerName,
  *        customerEmail, partySize?, notes?}
  *        → 201 {id, startsAt, status:'confirmed'} or 409 SLOT_UNAVAILABLE.

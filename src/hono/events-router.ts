@@ -16,6 +16,13 @@ import type { EventWhen } from '../modules/events';
  *   GET  /events/:slug
  *        → the event (camelCased) merged with {confirmedCount,
  *          waitlistCount, spotsLeft}; 404 when unknown.
+ *   GET  /events/rsvps/:id
+ *        → the RSVP (camelCased); 404 when unknown. v0 access model: the
+ *          rsvp's `id` is an unguessable UUID, so it doubles as the
+ *          confirmation-page access token (same model as GET /orders/:id).
+ *          A literal `rsvps` second segment can never be matched by the
+ *          single-segment `/events/:slug` route, so registration order here
+ *          doesn't matter — but it's placed with the other GETs regardless.
  *   POST /events/:slug/rsvps  body {name, email, partySize?}
  *        → 201 {id, status: 'confirmed'|'waitlist'}
  *
@@ -53,6 +60,13 @@ export function eventsRouter(options: XenitionRouterOptions = {}): Hono {
     const event = await events.getBySlug(c.req.param('slug'));
     if (!event) return jsonNotFound(c);
     return c.json(normalizeRow(event));
+  });
+
+  app.get('/events/rsvps/:id', async (c) => {
+    const events = resolve(c).modules.events;
+    const rsvp = await events.getRsvp(c.req.param('id'));
+    if (!rsvp) return jsonNotFound(c);
+    return c.json(normalizeRow(rsvp));
   });
 
   // Attached to the POST route only — the GETs stay unmetered.

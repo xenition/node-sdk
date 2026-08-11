@@ -198,6 +198,19 @@ describe('events.rsvp', () => {
         expect(res).toEqual({ id: 'r1', status: 'confirmed' });
     });
 });
+describe('events.getRsvp', () => {
+    it('GETs the rsvp route and returns it (the id is the access token)', async () => {
+        fetchMock.mockResolvedValue(jsonOk({ id: 'r1', eventId: 'e1', name: 'Ada', partySize: 2 }));
+        const rsvp = await api().events.getRsvp('r1');
+        expect(calledUrl()).toBe('/api/events/rsvps/r1');
+        expect(rsvp?.eventId).toBe('e1');
+        expect(rsvp?.partySize).toBe(2);
+    });
+    it('returns null on 404', async () => {
+        fetchMock.mockResolvedValue(jsonErr(404));
+        expect(await api().events.getRsvp('gone')).toBeNull();
+    });
+});
 describe('forms.schema', () => {
     it('GETs the form and returns the schema', async () => {
         const form = { id: '1', key: 'contact', name: 'Contact', fields: [{ name: 'email', type: 'email' }], createdAt: 'a', updatedAt: 'b' };
@@ -305,6 +318,19 @@ describe('booking.book', () => {
     });
 });
 /* ============================= media ============================= */
+describe('booking.getBooking', () => {
+    it('GETs the booking route and returns it (the id is the access token)', async () => {
+        fetchMock.mockResolvedValue(jsonOk({ id: 'bk1', resourceId: 'r1', customerName: 'Ada', partySize: 1 }));
+        const bkg = await api().booking.getBooking('bk1');
+        expect(calledUrl()).toBe('/api/booking/bookings/bk1');
+        expect(bkg?.resourceId).toBe('r1');
+        expect(bkg?.customerName).toBe('Ada');
+    });
+    it('returns null on 404', async () => {
+        fetchMock.mockResolvedValue(jsonErr(404));
+        expect(await api().booking.getBooking('gone')).toBeNull();
+    });
+});
 describe('media.albums', () => {
     it('unwraps { albums } and builds every query param', async () => {
         fetchMock.mockResolvedValue(jsonOk({ albums: [{ id: '1', coverUrl: null }] }));

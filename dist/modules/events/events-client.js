@@ -195,6 +195,15 @@ class EventsClient {
         await this.ctx.query.from(exports.EVENTS_TABLES.RSVPS).insert(row).execute();
         return rsvp;
     }
+    /** One RSVP by id (unguessable UUID = access token). Null when unknown. */
+    async getRsvp(id) {
+        const context = 'EventsClient.getRsvp';
+        (0, util_1.requireNonEmptyString)(context, 'id', id);
+        return this.ctx.query
+            .from(exports.EVENTS_TABLES.RSVPS)
+            .where('id', id)
+            .first();
+    }
     /** RSVPs for an event, newest first; optionally filtered by status. Service key. */
     async listRsvps(eventId, options = {}) {
         const context = 'EventsClient.listRsvps';

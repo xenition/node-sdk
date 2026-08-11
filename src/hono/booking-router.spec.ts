@@ -7,6 +7,7 @@ const makeClient = () => {
     getResource: jest.fn(),
     searchSlots: jest.fn(),
     book: jest.fn(),
+    getBooking: jest.fn(),
   };
   const use = jest.fn();
   const client = { modules: { use, booking } } as unknown as XenitionClient;
@@ -116,6 +117,39 @@ describe('GET /booking/resources/:slug/slots', () => {
     );
     expect(res.status).toBe(400);
     expect((await res.json() as any).error.message).toContain('"to" must be after');
+  });
+});
+
+describe('GET /booking/bookings/:id', () => {
+  it('returns the booking camelCased (the id is the access token)', async () => {
+    const { client, booking } = makeClient();
+    booking.getBooking.mockResolvedValue({
+      id: 'bk1',
+      resource_id: 'r1',
+      customer_name: 'Ada',
+      customer_email: 'ada@example.com',
+      starts_at: AT,
+      ends_at: '2027-03-15T13:30:00.000Z',
+      party_size: 1,
+      status: 'confirmed',
+      notes: '',
+      data: {},
+      created_at: '2027-03-01T00:00:00.000Z',
+    });
+    const res = await bookingRouter({ client }).request('/booking/bookings/bk1');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({ id: 'bk1', resourceId: 'r1', customerName: 'Ada', partySize: 1 }),
+    );
+    expect(booking.getBooking).toHaveBeenCalledWith('bk1');
+  });
+
+  it('404s an unknown booking', async () => {
+    const { client, booking } = makeClient();
+    booking.getBooking.mockResolvedValue(null);
+    const res = await bookingRouter({ client }).request('/booking/bookings/ghost');
+    expect(res.status).toBe(404);
+    expect((await res.json() as any).error.code).toBe('NOT_FOUND');
   });
 });
 
