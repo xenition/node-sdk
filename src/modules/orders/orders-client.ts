@@ -183,6 +183,11 @@ export class OrdersClient {
       }
       qb = qb.where('status', options.status);
     }
+    if (options.email !== undefined) {
+      const email = String(options.email).trim();
+      if (!email) fail(context, '"email" must be a non-empty string');
+      qb = qb.where('email', email);
+    }
     qb = qb.orderBy('created_at', 'DESC');
     if (options.limit !== undefined) {
       if (typeof options.limit !== 'number' || !Number.isInteger(options.limit) || options.limit < 0) {
