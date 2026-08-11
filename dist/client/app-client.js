@@ -18,7 +18,8 @@ const errors_1 = require("./errors");
  *   const posts = await api.cms.items('posts', { orderBy: 'created_at', direction: 'DESC' });
  *
  * Error contract:
- *   - single-get (cms.page/cms.item, listings.get, events.get) → 404 is null
+ *   - single-get (cms.page/cms.item, listings.get, events.get, events.getRsvp,
+ *     booking.getBooking) → 404 is null
  *   - every other non-2xx throws `AppClientError(status, code?, message)`
  *     (POST validation 400s surface the server's message).
  */
@@ -123,6 +124,9 @@ function createAppClient(baseUrl) {
             rsvp(slug, input) {
                 return postJson(`/events/${encodeURIComponent(slug)}/rsvps`, input);
             },
+            getRsvp(id) {
+                return getOrNull(`/events/rsvps/${encodeURIComponent(id)}`);
+            },
         },
         forms: {
             schema(key) {
@@ -157,6 +161,9 @@ function createAppClient(baseUrl) {
             book(slug, input) {
                 return postJson(`/booking/resources/${encodeURIComponent(slug)}/bookings`, input);
             },
+            getBooking(id) {
+                return getOrNull(`/booking/bookings/${encodeURIComponent(id)}`);
+            },
         },
         media: {
             async albums(options = {}) {
@@ -172,6 +179,9 @@ function createAppClient(baseUrl) {
             },
             album(slug) {
                 return getOrNull(`/media/albums/${encodeURIComponent(slug)}`);
+            },
+            privateAlbum(slug, code) {
+                return getOrNull(`/media/albums/${encodeURIComponent(slug)}/private?code=${encodeURIComponent(code)}`);
             },
         },
         catalog: {

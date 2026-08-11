@@ -8,6 +8,7 @@ const makeClient = () => {
     getAlbum: jest.fn(),
     getAlbumWithItems: jest.fn(),
     listItems: jest.fn(),
+    getAlbumByCode: jest.fn(),
   };
   const use = jest.fn();
   const client = { modules: { use, media } } as unknown as XenitionClient;
@@ -22,6 +23,22 @@ const snakeAlbum = {
   cover_url: 'https://cdn/cover.jpg',
   data: { theme_color: '#fff' },
   published: true,
+  // Non-null on purpose: if the router ever stopped stripping this, the
+  // exact-shape `toEqual` assertions below would catch the leak.
+  access_code: 'should-never-leak',
+  sort: 0,
+  created_at: 't0',
+};
+
+const snakePrivateAlbum = {
+  id: 'a2',
+  slug: 'smith-wedding',
+  title: 'Smith Wedding',
+  description: '',
+  cover_url: null,
+  data: {},
+  published: false,
+  access_code: 'sunset-24',
   sort: 0,
   created_at: 't0',
 };
@@ -114,6 +131,8 @@ describe('GET /media/albums/:slug (album + items)', () => {
     expect(body.coverUrl).toBe('https://cdn/cover.jpg');
     expect(body.createdAt).toBe('t0');
     expect(body).not.toHaveProperty('cover_url');
+    expect(body).not.toHaveProperty('access_code');
+    expect(body).not.toHaveProperty('accessCode');
     expect(body.items).toEqual([
       {
         id: 'i1',
@@ -176,6 +195,57 @@ describe('GET /media/albums/:slug/items', () => {
     const res = await mediaRouter({ client }).request('/media/albums/beach/items');
     expect(res.status).toBe(404);
     expect(media.listItems).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /media/albums/:slug/private (code-gated client gallery)', () => {
+  it('200s on a matching code, merged with items, with access_code stripped', async () => {
+    const { client, media } = makeClient();
+    media.getAlbumByCode.mockResolvedValue({ ...snakePrivateAlbum, items: [snakeItem] });
+    const res = await mediaRouter({ client }).request(
+      '/media/albums/smith-wedding/private?code=sunset-24',
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.slug).toBe('smith-wedding');
+    expect(body.published).toBe(false); // ignored as a gate on this route
+    expect(body.items[0].albumId).toBe('a1');
+    expect(body).not.toHaveProperty('access_code');
+    expect(body).not.toHaveProperty('accessCode');
+    expect(JSON.stringify(body)).not.toContain('sunset-24');
+    expect(media.getAlbumByCode).toHaveBeenCalledWith('smith-wedding', 'sunset-24');
+  });
+
+  it('404s a wrong code', async () => {
+    const { client, media } = makeClient();
+    media.getAlbumByCode.mockResolvedValue(null);
+    const res = await mediaRouter({ client }).request(
+      '/media/albums/smith-wedding/private?code=wrong',
+    );
+    expect(res.status).toBe(404);
+    expect((await res.json() as any).error.code).toBe('NOT_FOUND');
+  });
+
+  it('404s a missing code without calling the module', async () => {
+    const { client, media } = makeClient();
+    const res = await mediaRouter({ client }).request('/media/albums/smith-wedding/private');
+    expect(res.status).toBe(404);
+    expect(media.getAlbumByCode).not.toHaveBeenCalled();
+  });
+
+  it('404s an unknown slug the same way as a wrong code', async () => {
+    const { client, media } = makeClient();
+    media.getAlbumByCode.mockResolvedValue(null);
+    const res = await mediaRouter({ client }).request('/media/albums/ghost/private?code=sunset-24');
+    expect(res.status).toBe(404);
+  });
+
+  it('is not shadowed by GET /media/albums/:slug', async () => {
+    const { client, media } = makeClient();
+    media.getAlbumByCode.mockResolvedValue({ ...snakePrivateAlbum, items: [] });
+    await mediaRouter({ client }).request('/media/albums/smith-wedding/private?code=sunset-24');
+    expect(media.getAlbumWithItems).not.toHaveBeenCalled();
+    expect(media.getAlbumByCode).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -16,8 +16,15 @@ export declare const MEDIA_MIGRATIONS: Migration[];
  * album slugs are auto-generated from the title when absent and deduped
  * with a `-2`, `-3`, … suffix (mirrors the cms module). `created_at` owns a
  * `DEFAULT now()` on both tables and is omitted from inserts (like events).
- * Nullable columns (`cover_url`, `width`, `height`) are omitted when unset
- * so the column takes its NULL. Deletes are hard deletes.
+ * Nullable columns (`cover_url`, `access_code`, `width`, `height`) are
+ * omitted when unset so the column takes its NULL. Deletes are hard deletes.
+ *
+ * Private ("client gallery") albums: `access_code` is NULL on a normal
+ * album and non-null on a code-gated one. It gates a SEPARATE read path
+ * (`getAlbumByCode`) that ignores `published` entirely — the code is the
+ * gate, not the published flag (mirrors the `orders.getByNumber` /
+ * `booking.getBooking` unguessable-token pattern). `access_code` must never
+ * leave the module in a normal/public response — see media-router.ts.
  */
 export declare class MediaClient {
     private readonly ctx;
@@ -34,6 +41,20 @@ export declare class MediaClient {
      * its items ordered by `sort`); null when the album is unknown.
      */
     getAlbumWithItems(slug: string): Promise<MediaAlbumWithItems | null>;
+    /**
+     * Fetch a code-gated ("private client gallery") album by slug + access
+     * code — a SEPARATE read path from `getAlbumWithItems` that ignores
+     * `published` entirely (the code is the gate, not the published flag).
+     * Mirrors the `orders.getByNumber` / `booking.getBooking`
+     * unguessable-token pattern.
+     *
+     * Returns null — never throws on a bad match — for: an empty/absent
+     * code, an unknown slug, an album whose `access_code` is NULL (not
+     * code-gated), or a mismatched code. That collapses every failure mode
+     * into one outcome so a caller (the router) can 404 uniformly without
+     * revealing which case fired.
+     */
+    getAlbumByCode(slug: string, code: string): Promise<MediaAlbumWithItems | null>;
     /** Append a media item to an album. `url` is required; `kind` defaults to 'image'. */
     addItem(albumId: string, input: AddItemInput): Promise<MediaItem>;
     /** Items in an album, ordered by `sort` (ASC) by default. */

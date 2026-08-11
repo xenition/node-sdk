@@ -343,6 +343,15 @@ class BookingClient {
         }
         return booking;
     }
+    /** One booking by id (the unguessable UUID doubles as the confirmation-page access token). Null when unknown. */
+    async getBooking(id) {
+        const context = 'BookingClient.getBooking';
+        (0, util_1.requireNonEmptyString)(context, 'id', id);
+        return this.ctx.query
+            .from(exports.BOOKING_TABLES.BOOKINGS)
+            .where('id', id)
+            .first();
+    }
     /** Cancel a booking by id (flips status to 'cancelled', freeing the slot). */
     async cancel(bookingId) {
         const context = 'BookingClient.cancel';

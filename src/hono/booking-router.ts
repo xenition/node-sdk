@@ -18,6 +18,10 @@ import type { ResourceStatus } from '../modules/booking';
  *        → the resource (camelCased); 404 when unknown.
  *   GET  /booking/resources/:slug/slots?from=&to=
  *        → { slots: [{startsAt, endsAt, spotsLeft}] } (public availability)
+ *   GET  /booking/bookings/:id
+ *        → the booking (camelCased); 404 when unknown. v0 access model: the
+ *          booking's `id` is an unguessable UUID, so it doubles as the
+ *          confirmation-page access token (same model as GET /orders/:id).
  *   POST /booking/resources/:slug/bookings  body {startsAt, customerName,
  *        customerEmail, partySize?, notes?}
  *        → 201 {id, startsAt, status:'confirmed'} or 409 SLOT_UNAVAILABLE.
@@ -55,6 +59,15 @@ export function bookingRouter(options: XenitionRouterOptions = {}): Hono {
     }
     const slots = await booking.searchSlots(c.req.param('slug'), { from, to });
     return c.json({ slots });
+  });
+
+  // A distinct literal first segment ("bookings" vs "resources") from every
+  // other route in this router, so it can never be shadowed by /booking/resources/:slug.
+  app.get('/booking/bookings/:id', async (c) => {
+    const booking = resolve(c).modules.booking;
+    const bkg = await booking.getBooking(c.req.param('id'));
+    if (!bkg) return jsonNotFound(c);
+    return c.json(normalizeRow(bkg));
   });
 
   // Attached to the POST route only — the GETs stay unmetered.

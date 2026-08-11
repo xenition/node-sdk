@@ -63,6 +63,8 @@ export declare class BookingClient {
      * capacity=1 race is lost at the DB unique guard.
      */
     book(slug: string, input: BookInput): Promise<Booking>;
+    /** One booking by id (the unguessable UUID doubles as the confirmation-page access token). Null when unknown. */
+    getBooking(id: string): Promise<Booking | null>;
     /** Cancel a booking by id (flips status to 'cancelled', freeing the slot). */
     cancel(bookingId: string): Promise<void>;
     /**

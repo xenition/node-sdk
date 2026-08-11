@@ -679,6 +679,46 @@ describe('book', () => {
   });
 });
 
+// ───────────────────────── getBooking ─────────────────────────
+
+describe('getBooking', () => {
+  it('returns the booking for a known id', async () => {
+    const { post, booking } = makeBooking();
+    const row = {
+      id: 'bk1',
+      resource_id: 'r1',
+      customer_name: 'Ada',
+      customer_email: 'ada@example.com',
+      starts_at: AT,
+      ends_at: '2027-03-15T13:30:00.000Z',
+      party_size: 1,
+      status: 'confirmed',
+      notes: '',
+      data: {},
+      created_at: '2027-03-01T00:00:00.000Z',
+    };
+    post.mockResolvedValueOnce({ data: [row] });
+    await expect(booking.getBooking('bk1')).resolves.toEqual(row);
+    expect(payloadOf(post, 0)).toEqual(
+      expect.objectContaining({
+        table: BOOKING_TABLES.BOOKINGS,
+        where: [{ column: 'id', operator: '=', value: 'bk1', type: 'AND' }],
+      }),
+    );
+  });
+
+  it('returns null for an unknown id', async () => {
+    const { post, booking } = makeBooking();
+    post.mockResolvedValueOnce({ data: [] });
+    await expect(booking.getBooking('ghost')).resolves.toBeNull();
+  });
+
+  it('rejects an empty id', async () => {
+    const { booking } = makeBooking();
+    await expect(booking.getBooking('')).rejects.toThrow(/"id"/);
+  });
+});
+
 // ───────────────────────── cancel / listBookings ─────────────────────────
 
 describe('cancel', () => {

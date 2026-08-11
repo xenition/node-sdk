@@ -127,6 +127,20 @@ export interface RsvpResult {
     id: string;
     status: 'confirmed' | 'waitlist';
 }
+/**
+ * A full RSVP record — the confirmation-page surface (GET /events/rsvps/:id).
+ * v0 access model: the `id` is an unguessable UUID, so it doubles as the
+ * access token, same as `Order`.
+ */
+export interface Rsvp {
+    id: string;
+    eventId: string;
+    name: string;
+    email: string;
+    partySize: number;
+    status: 'confirmed' | 'waitlist' | 'cancelled';
+    createdAt: string;
+}
 export type FormFieldType = 'text' | 'email' | 'number' | 'boolean' | 'select';
 export interface FormField {
     name: string;
@@ -255,6 +269,26 @@ export interface BookResult {
     id: string;
     startsAt: string;
     status: BookingStatus;
+}
+/**
+ * A full booking record — the confirmation-page surface (GET
+ * /booking/bookings/:id). v0 access model: the `id` is an unguessable UUID,
+ * so it doubles as the access token, same as `Order`.
+ */
+export interface Booking {
+    id: string;
+    resourceId: string;
+    customerName: string;
+    customerEmail: string;
+    /** ISO-8601; the slot start. */
+    startsAt: string;
+    /** ISO-8601; `startsAt` + the resource's `slotMinutes`. */
+    endsAt: string;
+    partySize: number;
+    status: BookingStatus;
+    notes: string;
+    data: Record<string, unknown>;
+    createdAt: string;
 }
 export type MediaKind = 'image' | 'video';
 export interface MediaAlbum {
@@ -483,6 +517,8 @@ export interface EventsClient {
     /** A single event with seat counts, or null when the slug is unknown. */
     get(slug: string): Promise<EventDetail | null>;
     rsvp(slug: string, input: RsvpInput): Promise<RsvpResult>;
+    /** An RSVP by its (unguessable) id, or null when unknown. */
+    getRsvp(id: string): Promise<Rsvp | null>;
 }
 export interface FormsClient {
     /** The form's field schema. Throws AppClientError(404) for an unknown key. */
@@ -505,12 +541,20 @@ export interface BookingClient {
      * bad input surfaces the server's 400 message.
      */
     book(slug: string, input: BookForm): Promise<BookResult>;
+    /** A booking by its (unguessable) id, or null when unknown. */
+    getBooking(id: string): Promise<Booking | null>;
 }
 export interface MediaClient {
     /** Published albums (options mirror the list route). */
     albums(options?: MediaAlbumsOptions): Promise<MediaAlbum[]>;
     /** An album merged with its items, or null when unknown/unpublished. */
     album(slug: string): Promise<MediaAlbumWithItems | null>;
+    /**
+     * A code-gated "private" album (a client gallery, not listed by
+     * `albums()`) merged with its items, or null when unknown/wrong code.
+     * `published` doesn't apply here — the code is the gate.
+     */
+    privateAlbum(slug: string, code: string): Promise<MediaAlbumWithItems | null>;
 }
 export interface CatalogClient {
     /** Published products (no variants); options mirror the list route. */

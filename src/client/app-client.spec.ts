@@ -237,6 +237,21 @@ describe('events.rsvp', () => {
   });
 });
 
+describe('events.getRsvp', () => {
+  it('GETs the rsvp route and returns it (the id is the access token)', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'r1', eventId: 'e1', name: 'Ada', partySize: 2 }));
+    const rsvp = await api().events.getRsvp('r1');
+    expect(calledUrl()).toBe('/api/events/rsvps/r1');
+    expect(rsvp?.eventId).toBe('e1');
+    expect(rsvp?.partySize).toBe(2);
+  });
+
+  it('returns null on 404', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().events.getRsvp('gone')).toBeNull();
+  });
+});
+
 describe('forms.schema', () => {
   it('GETs the form and returns the schema', async () => {
     const form = { id: '1', key: 'contact', name: 'Contact', fields: [{ name: 'email', type: 'email' }], createdAt: 'a', updatedAt: 'b' };
@@ -362,6 +377,21 @@ describe('booking.book', () => {
 
 /* ============================= media ============================= */
 
+describe('booking.getBooking', () => {
+  it('GETs the booking route and returns it (the id is the access token)', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'bk1', resourceId: 'r1', customerName: 'Ada', partySize: 1 }));
+    const bkg = await api().booking.getBooking('bk1');
+    expect(calledUrl()).toBe('/api/booking/bookings/bk1');
+    expect(bkg?.resourceId).toBe('r1');
+    expect(bkg?.customerName).toBe('Ada');
+  });
+
+  it('returns null on 404', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().booking.getBooking('gone')).toBeNull();
+  });
+});
+
 describe('media.albums', () => {
   it('unwraps { albums } and builds every query param', async () => {
     fetchMock.mockResolvedValue(jsonOk({ albums: [{ id: '1', coverUrl: null }] }));
@@ -389,6 +419,23 @@ describe('media.album', () => {
   it('returns null on 404 (unknown/unpublished)', async () => {
     fetchMock.mockResolvedValue(jsonErr(404));
     expect(await api().media.album('gone')).toBeNull();
+  });
+});
+
+describe('media.privateAlbum', () => {
+  it('GETs the private route with the code query param and returns it merged with items', async () => {
+    fetchMock.mockResolvedValue(
+      jsonOk({ id: '2', slug: 'smith-wedding', published: false, items: [{ id: 'i1', albumId: '2' }] }),
+    );
+    const album = await api().media.privateAlbum('smith-wedding', 'sunset 24');
+    expect(calledUrl()).toBe('/api/media/albums/smith-wedding/private?code=sunset%2024');
+    expect(album?.slug).toBe('smith-wedding');
+    expect(album?.items[0]!.albumId).toBe('2');
+  });
+
+  it('returns null on 404 (unknown slug or wrong code)', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().media.privateAlbum('smith-wedding', 'wrong')).toBeNull();
   });
 });
 

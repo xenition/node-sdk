@@ -25,10 +25,19 @@ import type { XenitionRouterOptions } from './types';
  *          gallery-render case. 404 when unknown or unpublished.
  *   GET /media/albums/:slug/items
  *        → { items: [...camelCased] }; 404 when the album is unknown/unpublished.
+ *   GET /media/albums/:slug/private?code=
+ *        → the album (camelCased) + items — a code-gated "client gallery"
+ *          that is NOT listed by GET /media/albums and ignores `published`
+ *          entirely. 404 on an unknown slug, a missing/wrong code, or an
+ *          album with no code set (never reveals which case fired — same
+ *          model as `GET /orders/by-number/:number?email=`).
  *
  * Because the router holds the SERVICE key, single-resource routes 404
  * unpublished albums and the list route defaults to published-only
- * (`?published=all` opts out).
+ * (`?published=all` opts out). `access_code` is a write-only field from the
+ * router's perspective — every response below strips it before it reaches
+ * `normalizeRow`, so it can never appear (as `access_code` or `accessCode`)
+ * in a public/normal response body.
  */
 export function mediaRouter(options: XenitionRouterOptions = {}): Hono {
   const resolve = makeClientResolver('media', options.client);
@@ -53,14 +62,17 @@ export function mediaRouter(options: XenitionRouterOptions = {}): Hono {
       throw err;
     }
     const albums = await media.listAlbums(listOptions);
-    return c.json({ albums: normalizeRows(albums) });
+    // access_code is a write-only gate column — never let it reach a
+    // public/normal response (see the file doc comment above).
+    const sanitized = albums.map(({ access_code: _accessCode, ...rest }) => rest);
+    return c.json({ albums: normalizeRows(sanitized) });
   });
 
   app.get('/media/albums/:slug', async (c) => {
     const media = resolve(c).modules.media;
     const album = await media.getAlbumWithItems(c.req.param('slug'));
     if (!album || !album.published) return jsonNotFound(c);
-    const { items, ...rest } = album;
+    const { items, access_code: _accessCode, ...rest } = album;
     return c.json({ ...normalizeRow(rest), items: normalizeRows(items) });
   });
 
@@ -70,6 +82,21 @@ export function mediaRouter(options: XenitionRouterOptions = {}): Hono {
     if (!album || !album.published) return jsonNotFound(c);
     const items = await media.listItems(album.id);
     return c.json({ items: normalizeRows(items) });
+  });
+
+  // A literal `/private` suffix on a 3-segment path (media, albums, :slug)
+  // is a 4-segment route — it can never be shadowed by /media/albums/:slug
+  // or /media/albums/:slug/items (same reasoning as GET /booking/bookings/:id).
+  app.get('/media/albums/:slug/private', async (c) => {
+    const media = resolve(c).modules.media;
+    const code = c.req.query('code');
+    // No code at all is the same 404 as a wrong one — never let an absent
+    // query param short-circuit into a different response shape.
+    if (!code) return jsonNotFound(c);
+    const album = await media.getAlbumByCode(c.req.param('slug'), code);
+    if (!album) return jsonNotFound(c);
+    const { items, access_code: _accessCode, ...rest } = album;
+    return c.json({ ...normalizeRow(rest), items: normalizeRows(items) });
   });
 
   return app;

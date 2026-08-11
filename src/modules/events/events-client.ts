@@ -226,6 +226,16 @@ export class EventsClient {
     return rsvp;
   }
 
+  /** One RSVP by id (unguessable UUID = access token). Null when unknown. */
+  async getRsvp(id: string): Promise<Rsvp | null> {
+    const context = 'EventsClient.getRsvp';
+    requireNonEmptyString(context, 'id', id);
+    return this.ctx.query
+      .from(EVENTS_TABLES.RSVPS)
+      .where('id', id)
+      .first<Rsvp>();
+  }
+
   /** RSVPs for an event, newest first; optionally filtered by status. Service key. */
   async listRsvps(eventId: string, options: ListRsvpsOptions = {}): Promise<Rsvp[]> {
     const context = 'EventsClient.listRsvps';

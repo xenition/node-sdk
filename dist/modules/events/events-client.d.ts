@@ -44,6 +44,8 @@ export declare class EventsClient {
      * server-side transactional check is the real fix (platform plan).
      */
     rsvp(slugOrId: string, input: RsvpInput): Promise<Rsvp>;
+    /** One RSVP by id (unguessable UUID = access token). Null when unknown. */
+    getRsvp(id: string): Promise<Rsvp | null>;
     /** RSVPs for an event, newest first; optionally filtered by status. Service key. */
     listRsvps(eventId: string, options?: ListRsvpsOptions): Promise<Rsvp[]>;
     /** Cancel an RSVP by id (flips status to 'cancelled'). */

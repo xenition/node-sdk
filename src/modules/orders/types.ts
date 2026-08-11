@@ -79,5 +79,12 @@ export interface MarkPaidInput {
 export interface ListOrdersOptions {
   /** Filter to a single status; omit for all statuses. */
   status?: OrderStatus;
+  /**
+   * Filter to a single buyer email — the primitive behind per-account order
+   * history. SECURITY: the caller must derive this email from an authenticated
+   * session server-side (never from client input), or it becomes a
+   * guess-any-email history leak.
+   */
+  email?: string;
   limit?: number;
 }

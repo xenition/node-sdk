@@ -6,6 +6,7 @@ const makeClient = () => {
     list: jest.fn(),
     getBySlug: jest.fn(),
     rsvp: jest.fn(),
+    getRsvp: jest.fn(),
   };
   const use = jest.fn();
   const client = { modules: { use, events } } as unknown as XenitionClient;
@@ -120,6 +121,35 @@ describe('GET /events/:slug', () => {
     const { client, events } = makeClient();
     events.getBySlug.mockResolvedValue(null);
     const res = await eventsRouter({ client }).request('/events/ghost');
+    expect(res.status).toBe(404);
+    expect((await res.json() as any).error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('GET /events/rsvps/:id', () => {
+  it('returns the rsvp camelCased (the id is the access token)', async () => {
+    const { client, events } = makeClient();
+    events.getRsvp.mockResolvedValue({
+      id: 'r1',
+      event_id: 'e1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      party_size: 2,
+      status: 'confirmed',
+      created_at: '2030-01-01T00:00:00.000Z',
+    });
+    const res = await eventsRouter({ client }).request('/events/rsvps/r1');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({ id: 'r1', eventId: 'e1', name: 'Ada', partySize: 2 }),
+    );
+    expect(events.getRsvp).toHaveBeenCalledWith('r1');
+  });
+
+  it('404s an unknown rsvp', async () => {
+    const { client, events } = makeClient();
+    events.getRsvp.mockResolvedValue(null);
+    const res = await eventsRouter({ client }).request('/events/rsvps/ghost');
     expect(res.status).toBe(404);
     expect((await res.json() as any).error.code).toBe('NOT_FOUND');
   });

@@ -227,6 +227,14 @@ const MODULE_PATHS: Record<XenitionApiModule, Record<string, JsonObject>> = {
         responses: { '201': okJson("{ id, status: 'confirmed' | 'waitlist' }"), '400': BAD_REQUEST, '429': RATE_LIMITED },
       },
     },
+    '/events/rsvps/{id}': {
+      get: {
+        tags: ['events'],
+        summary: 'RSVP by unguessable id (the confirmation-page access token)',
+        parameters: [pathParam('id')],
+        responses: { '200': okJson('The RSVP, camelCased'), '404': NOT_FOUND },
+      },
+    },
   },
 
   media: {
@@ -301,6 +309,14 @@ const MODULE_PATHS: Record<XenitionApiModule, Record<string, JsonObject>> = {
           '409': errorResponse('SLOT_UNAVAILABLE — the slot was taken, closed, or at capacity'),
           '429': RATE_LIMITED,
         },
+      },
+    },
+    '/booking/bookings/{id}': {
+      get: {
+        tags: ['booking'],
+        summary: 'Booking by unguessable id (the confirmation-page access token)',
+        parameters: [pathParam('id')],
+        responses: { '200': okJson('The booking, camelCased'), '404': NOT_FOUND },
       },
     },
   },

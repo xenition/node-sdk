@@ -165,6 +165,24 @@ describe('get / getByNumber / list', () => {
     const { orders } = makeOrders();
     await expect(orders.list({ status: 'weird' as never })).rejects.toThrow(/"status" must be one of/);
   });
+
+  it('list filters by buyer email (per-account history primitive)', async () => {
+    const { post, orders } = makeOrders();
+    post.mockResolvedValueOnce({ data: [] });
+    await orders.list({ email: '  ada@example.com  ' });
+    expect(payloadOf(post, 0)).toEqual(
+      expect.objectContaining({
+        table: ORDERS_TABLES.ORDERS,
+        where: [{ column: 'email', operator: '=', value: 'ada@example.com', type: 'AND' }],
+        orderBy: [{ column: 'created_at', direction: 'DESC' }],
+      }),
+    );
+  });
+
+  it('list rejects a blank email', async () => {
+    const { orders } = makeOrders();
+    await expect(orders.list({ email: '   ' })).rejects.toThrow(/"email" must be a non-empty string/);
+  });
 });
 
 describe('markPaid', () => {
