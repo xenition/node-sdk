@@ -20,6 +20,12 @@ export interface MediaAlbum {
     /** Free-form jsonb payload: theme, credits, layout hints, … */
     data: Record<string, unknown>;
     published: boolean;
+    /**
+     * Access code for a code-gated "private" album (a client gallery opened
+     * via `getAlbumByCode`, not the published listing); null on a normal
+     * album. Never leaves the module in a public/normal response.
+     */
+    access_code: string | null;
     sort: number;
     created_at: string;
 }
@@ -33,6 +39,8 @@ export interface CreateAlbumInput {
     data?: Record<string, unknown>;
     published?: boolean;
     sort?: number;
+    /** Set to make this a code-gated private album (see `getAlbumByCode`). */
+    accessCode?: string;
 }
 export interface UpdateAlbumInput {
     title?: string;

@@ -422,6 +422,23 @@ describe('media.album', () => {
   });
 });
 
+describe('media.privateAlbum', () => {
+  it('GETs the private route with the code query param and returns it merged with items', async () => {
+    fetchMock.mockResolvedValue(
+      jsonOk({ id: '2', slug: 'smith-wedding', published: false, items: [{ id: 'i1', albumId: '2' }] }),
+    );
+    const album = await api().media.privateAlbum('smith-wedding', 'sunset 24');
+    expect(calledUrl()).toBe('/api/media/albums/smith-wedding/private?code=sunset%2024');
+    expect(album?.slug).toBe('smith-wedding');
+    expect(album?.items[0]!.albumId).toBe('2');
+  });
+
+  it('returns null on 404 (unknown slug or wrong code)', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404));
+    expect(await api().media.privateAlbum('smith-wedding', 'wrong')).toBeNull();
+  });
+});
+
 /* ============================ catalog ============================ */
 
 describe('catalog.products', () => {

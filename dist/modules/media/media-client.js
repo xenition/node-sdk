@@ -42,6 +42,10 @@ exports.MEDIA_MIGRATIONS = [
         id: 'media/0003_index_media__items_album_sort',
         sql: `CREATE INDEX IF NOT EXISTS media__items_album_sort_idx ON ${exports.MEDIA_TABLES.ITEMS} (album_id, sort)`,
     },
+    {
+        id: 'media/0004_add_media__albums_access_code',
+        sql: `ALTER TABLE ${exports.MEDIA_TABLES.ALBUMS} ADD COLUMN IF NOT EXISTS access_code text`,
+    },
 ];
 const ALBUM_ORDER_COLUMNS = ['sort', 'title', 'slug', 'created_at'];
 const ITEM_ORDER_COLUMNS = ['sort', 'kind', 'created_at'];
@@ -56,8 +60,15 @@ const MEDIA_KINDS = ['image', 'video'];
  * album slugs are auto-generated from the title when absent and deduped
  * with a `-2`, `-3`, … suffix (mirrors the cms module). `created_at` owns a
  * `DEFAULT now()` on both tables and is omitted from inserts (like events).
- * Nullable columns (`cover_url`, `width`, `height`) are omitted when unset
- * so the column takes its NULL. Deletes are hard deletes.
+ * Nullable columns (`cover_url`, `access_code`, `width`, `height`) are
+ * omitted when unset so the column takes its NULL. Deletes are hard deletes.
+ *
+ * Private ("client gallery") albums: `access_code` is NULL on a normal
+ * album and non-null on a code-gated one. It gates a SEPARATE read path
+ * (`getAlbumByCode`) that ignores `published` entirely — the code is the
+ * gate, not the published flag (mirrors the `orders.getByNumber` /
+ * `booking.getBooking` unguessable-token pattern). `access_code` must never
+ * leave the module in a normal/public response — see media-router.ts.
  */
 class MediaClient {
     constructor(ctx) {
@@ -77,6 +88,9 @@ class MediaClient {
         const data = (0, util_1.optionalPlainObject)(context, 'data', input.data, {});
         const published = (0, util_1.optionalBoolean)(context, 'published', input.published, true);
         const sort = (0, util_1.optionalNumber)(context, 'sort', input.sort, 0);
+        const accessCode = input.accessCode === undefined
+            ? null
+            : (0, util_1.requireNonEmptyString)(context, 'accessCode', input.accessCode);
         const slug = input.slug !== undefined
             ? (0, util_1.requireNonEmptyString)(context, 'slug', input.slug)
             : await this.uniqueSlug((0, util_1.slugify)(title));
@@ -88,15 +102,19 @@ class MediaClient {
             cover_url: coverUrl,
             data,
             published,
+            access_code: accessCode,
             sort,
             created_at: (0, util_1.nowIso)(),
         };
         // created_at is OWNED by the column default (now()) — omit it from the
-        // wire insert. cover_url is omitted when null so the column takes NULL.
-        const { created_at: _omitted, cover_url, ...rest } = album;
+        // wire insert. cover_url/access_code are omitted when null so the
+        // column takes NULL.
+        const { created_at: _omitted, cover_url, access_code, ...rest } = album;
         const row = { ...rest };
         if (cover_url !== null)
             row.cover_url = cover_url;
+        if (access_code !== null)
+            row.access_code = access_code;
         await this.ctx.query.from(exports.MEDIA_TABLES.ALBUMS).insert(row).execute();
         return album;
     }
@@ -162,6 +180,30 @@ class MediaClient {
         (0, util_1.requireNonEmptyString)(context, 'slug', slug);
         const album = await this.getAlbum(slug);
         if (!album)
+            return null;
+        const items = await this.listItems(album.id);
+        return { ...album, items };
+    }
+    /**
+     * Fetch a code-gated ("private client gallery") album by slug + access
+     * code — a SEPARATE read path from `getAlbumWithItems` that ignores
+     * `published` entirely (the code is the gate, not the published flag).
+     * Mirrors the `orders.getByNumber` / `booking.getBooking`
+     * unguessable-token pattern.
+     *
+     * Returns null — never throws on a bad match — for: an empty/absent
+     * code, an unknown slug, an album whose `access_code` is NULL (not
+     * code-gated), or a mismatched code. That collapses every failure mode
+     * into one outcome so a caller (the router) can 404 uniformly without
+     * revealing which case fired.
+     */
+    async getAlbumByCode(slug, code) {
+        const context = 'MediaClient.getAlbumByCode';
+        (0, util_1.requireNonEmptyString)(context, 'slug', slug);
+        if (!code)
+            return null;
+        const album = await this.getAlbum(slug);
+        if (!album || !album.access_code || album.access_code !== code)
             return null;
         const items = await this.listItems(album.id);
         return { ...album, items };

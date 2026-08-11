@@ -426,6 +426,82 @@ describe('getAlbumWithItems: 2-query composition', () => {
   });
 });
 
+describe('createAlbum: accessCode', () => {
+  it('omits access_code from the insert when unset (column takes NULL)', async () => {
+    const { post, media } = makeMedia();
+    primeSlugLookup(post, []);
+    const album = await media.createAlbum({ title: 'No Code' });
+    expect(album.access_code).toBeNull();
+    const data = payloadOf(post, 1).data as Record<string, unknown>;
+    expect(data).not.toHaveProperty('access_code');
+  });
+
+  it('includes access_code in the insert when provided', async () => {
+    const { post, media } = makeMedia();
+    primeSlugLookup(post, []);
+    const album = await media.createAlbum({ title: 'Client Gallery', accessCode: 'sunset-24' });
+    expect(album.access_code).toBe('sunset-24');
+    const data = payloadOf(post, 1).data as Record<string, unknown>;
+    expect(data.access_code).toBe('sunset-24');
+  });
+
+  it('rejects an empty accessCode', async () => {
+    const { media } = makeMedia();
+    await expect(media.createAlbum({ title: 'x', accessCode: '' })).rejects.toThrow(
+      /"accessCode" must be a non-empty string/,
+    );
+  });
+});
+
+describe('getAlbumByCode: code-gated private album', () => {
+  it('returns the album merged with its ordered items on a matching code', async () => {
+    const { post, media } = makeMedia();
+    const album = { id: 'a1', slug: 'smith-wedding', title: 'Smith Wedding', access_code: 'sunset-24' };
+    const items = [{ id: 'i1', album_id: 'a1', url: 'https://cdn/1.jpg', sort: 0 }];
+    post
+      .mockResolvedValueOnce({ data: [album] }) // getAlbum
+      .mockResolvedValueOnce({ data: items }); // listItems
+    const result = await media.getAlbumByCode('smith-wedding', 'sunset-24');
+    expect(result).toEqual({ ...album, items });
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it('resolves null on a wrong code (and skips the items query)', async () => {
+    const { post, media } = makeMedia();
+    post.mockResolvedValueOnce({
+      data: [{ id: 'a1', slug: 'smith-wedding', access_code: 'sunset-24' }],
+    });
+    await expect(media.getAlbumByCode('smith-wedding', 'nope')).resolves.toBeNull();
+    expect(post).toHaveBeenCalledTimes(1); // stopped after the album lookup
+  });
+
+  it('resolves null for an empty/absent code without touching the network', async () => {
+    const { post, media } = makeMedia();
+    await expect(media.getAlbumByCode('smith-wedding', '')).resolves.toBeNull();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('resolves null for an album whose access_code is null (not code-gated)', async () => {
+    const { post, media } = makeMedia();
+    post.mockResolvedValueOnce({
+      data: [{ id: 'a1', slug: 'beach', access_code: null }],
+    });
+    await expect(media.getAlbumByCode('beach', 'anything')).resolves.toBeNull();
+  });
+
+  it('resolves null for an unknown slug', async () => {
+    const { post, media } = makeMedia();
+    post.mockResolvedValueOnce({ data: [] });
+    await expect(media.getAlbumByCode('ghost', 'sunset-24')).resolves.toBeNull();
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires a non-empty slug', async () => {
+    const { media } = makeMedia();
+    await expect(media.getAlbumByCode('', 'sunset-24')).rejects.toThrow(/"slug"/);
+  });
+});
+
 describe('media module lifecycle (via ModulesClient)', () => {
   const makeModules = () => {
     const post = jest.fn(

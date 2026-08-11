@@ -243,6 +243,11 @@ export function createAppClient(baseUrl: string): AppClient {
       album(slug) {
         return getOrNull<MediaAlbumWithItems>(`/media/albums/${encodeURIComponent(slug)}`);
       },
+      privateAlbum(slug, code) {
+        return getOrNull<MediaAlbumWithItems>(
+          `/media/albums/${encodeURIComponent(slug)}/private?code=${encodeURIComponent(code)}`,
+        );
+      },
     },
 
     catalog: {

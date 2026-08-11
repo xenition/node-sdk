@@ -13,10 +13,19 @@ import type { XenitionRouterOptions } from './types';
  *          gallery-render case. 404 when unknown or unpublished.
  *   GET /media/albums/:slug/items
  *        → { items: [...camelCased] }; 404 when the album is unknown/unpublished.
+ *   GET /media/albums/:slug/private?code=
+ *        → the album (camelCased) + items — a code-gated "client gallery"
+ *          that is NOT listed by GET /media/albums and ignores `published`
+ *          entirely. 404 on an unknown slug, a missing/wrong code, or an
+ *          album with no code set (never reveals which case fired — same
+ *          model as `GET /orders/by-number/:number?email=`).
  *
  * Because the router holds the SERVICE key, single-resource routes 404
  * unpublished albums and the list route defaults to published-only
- * (`?published=all` opts out).
+ * (`?published=all` opts out). `access_code` is a write-only field from the
+ * router's perspective — every response below strips it before it reaches
+ * `normalizeRow`, so it can never appear (as `access_code` or `accessCode`)
+ * in a public/normal response body.
  */
 export declare function mediaRouter(options?: XenitionRouterOptions): Hono;
 //# sourceMappingURL=media-router.d.ts.map

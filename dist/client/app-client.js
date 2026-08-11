@@ -180,6 +180,9 @@ function createAppClient(baseUrl) {
             album(slug) {
                 return getOrNull(`/media/albums/${encodeURIComponent(slug)}`);
             },
+            privateAlbum(slug, code) {
+                return getOrNull(`/media/albums/${encodeURIComponent(slug)}/private?code=${encodeURIComponent(code)}`);
+            },
         },
         catalog: {
             async products(options = {}) {

@@ -637,6 +637,12 @@ export interface MediaClient {
   albums(options?: MediaAlbumsOptions): Promise<MediaAlbum[]>;
   /** An album merged with its items, or null when unknown/unpublished. */
   album(slug: string): Promise<MediaAlbumWithItems | null>;
+  /**
+   * A code-gated "private" album (a client gallery, not listed by
+   * `albums()`) merged with its items, or null when unknown/wrong code.
+   * `published` doesn't apply here — the code is the gate.
+   */
+  privateAlbum(slug: string, code: string): Promise<MediaAlbumWithItems | null>;
 }
 
 export interface CatalogClient {
