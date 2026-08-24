@@ -19,6 +19,16 @@ export type {
   Team,
   TeamInvitationInput,
   ResetPasswordInput,
+  ChangePasswordInput,
+  DeleteAccountInput,
+  DeleteAccountResult,
+  IdTokenSignInInput,
+  OtpChannel,
+  OtpPurpose,
+  SendOtpInput,
+  SendOtpResult,
+  UserDataExport,
+  VerifyOtpInput,
 } from './auth/types';
 
 // Query module

@@ -1,7 +1,7 @@
 export { XenitionClient } from './xenition-client';
 export type { XenitionClientOptions } from './xenition-client';
 export { AuthClient } from './auth/auth-client';
-export type { User, Session, AuthToken, AuthResponse, RegisterInput, LoginInput, UpdateProfileInput, ListUsersOptions, SearchUsersOptions, PagedResult, OAuthProvider, OAuthUrlResult, Team, TeamInvitationInput, ResetPasswordInput, } from './auth/types';
+export type { User, Session, AuthToken, AuthResponse, RegisterInput, LoginInput, UpdateProfileInput, ListUsersOptions, SearchUsersOptions, PagedResult, OAuthProvider, OAuthUrlResult, Team, TeamInvitationInput, ResetPasswordInput, ChangePasswordInput, DeleteAccountInput, DeleteAccountResult, IdTokenSignInInput, OtpChannel, OtpPurpose, SendOtpInput, SendOtpResult, UserDataExport, VerifyOtpInput, } from './auth/types';
 export { QueryBuilder, QueryClient } from './query';
 export type { QueryPayload, QueryResult, QueryType, WhereCondition, WhereOperator, JoinClause, JoinType, OrderByClause, OrderDirection, } from './query';
 export { StorageClient } from './storage';

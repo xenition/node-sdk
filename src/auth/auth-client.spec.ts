@@ -99,3 +99,113 @@ describe('AuthClient.verifyToken', () => {
     });
   });
 });
+
+/**
+ * The mobile surface calls endpoints a deployment may not have shipped yet.
+ * These tests pin two things: the wire shape the gateway will be built
+ * against (see docs/PLATFORM-ENDPOINTS.md), and that a missing endpoint
+ * produces a message naming it rather than a bare NOT_FOUND that reads like
+ * "no such user".
+ */
+describe('AuthClient mobile surface', () => {
+  const SESSION = {
+    user: USER,
+    session: { id: 's1', userId: 'user-1', expiresAt: 'e', createdAt: 'c' },
+    token: 'new-access',
+    refreshToken: 'new-refresh',
+    expiresAt: 1767225600,
+  };
+
+  it('refresh posts the token and returns a whole new session', async () => {
+    const { post, auth } = makeHttp();
+    post.mockResolvedValueOnce(SESSION);
+    await expect(auth.refresh('r1')).resolves.toMatchObject({ refreshToken: 'new-refresh' });
+    expect(post).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.REFRESH, { refreshToken: 'r1' });
+  });
+
+  it('signInWithIdToken posts to the provider path with the nonce', async () => {
+    // The nonce is what stops a token captured elsewhere being replayed.
+    const { post, auth } = makeHttp();
+    post.mockResolvedValueOnce(SESSION);
+    await auth.signInWithIdToken({ provider: 'apple', idToken: 'idt', nonce: 'n1', name: 'Ada' });
+    expect(post).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_ID_TOKEN('apple'), {
+      idToken: 'idt',
+      nonce: 'n1',
+      name: 'Ada',
+    });
+  });
+
+  it('otp requires an identifier and a code', async () => {
+    const { auth } = makeHttp();
+    await expect(auth.sendOtp({})).rejects.toThrow(/"email" or "phone" is required/);
+    await expect(auth.verifyOtp({ code: '', email: 'a@b.c' })).rejects.toThrow(/"code" is required/);
+    await expect(auth.verifyOtp({ code: '123456' })).rejects.toThrow(
+      /"email" or "phone" is required/,
+    );
+  });
+
+  it('changePassword carries the end-user token', async () => {
+    const { post, auth } = makeHttp();
+    post.mockResolvedValueOnce({ changed: true });
+    await auth.changePassword({ currentPassword: 'old', newPassword: 'new' }, 'tok');
+    expect(authHeader(post.mock.calls[0][2])).toBe('Bearer tok');
+  });
+
+  it('deleteAccount sends a DELETE carrying the token and reports the purge date', async () => {
+    const del = jest.fn().mockResolvedValue({ deleted: true, purgeAt: '2026-09-23T00:00:00.000Z' });
+    const http = { del, get: jest.fn(), post: jest.fn(), patch: jest.fn() } as unknown as HttpClient;
+    const auth = new AuthClient(http);
+
+    const result = await auth.deleteAccount('tok', { reason: 'done' });
+
+    expect(result).toMatchObject({ deleted: true, purgeAt: '2026-09-23T00:00:00.000Z' });
+    expect(del).toHaveBeenCalledWith(
+      API_ENDPOINTS.AUTH.ACCOUNT,
+      expect.objectContaining({ data: { reason: 'done' } }),
+    );
+    expect(authHeader(del.mock.calls[0][1])).toBe('Bearer tok');
+  });
+
+  it('exportData reads the account export as the user', async () => {
+    const { get, auth } = makeHttp();
+    get.mockResolvedValueOnce({ user: USER, generatedAt: 'now' });
+    await auth.exportData('tok');
+    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.ACCOUNT_EXPORT, {
+      headers: { Authorization: 'Bearer tok' },
+    });
+  });
+
+  it('names the missing endpoint when a deployment has not shipped it', async () => {
+    // A bare NOT_FOUND from /auth/refresh reads like "no such user" and sends
+    // people debugging their token instead of their deployment.
+    const { post, auth } = makeHttp();
+    post.mockRejectedValueOnce(new XenitionError('NOT_FOUND', 'Not Found'));
+    await expect(auth.refresh('r1')).rejects.toThrow(
+      /does not implement \/app-platform\/auth\/refresh/,
+    );
+  });
+
+  it('leaves other errors untouched', async () => {
+    const { post, auth } = makeHttp();
+    post.mockRejectedValueOnce(new XenitionError('AUTH_INVALID_TOKEN', 'nope'));
+    await expect(auth.refresh('r1')).rejects.toMatchObject({ code: 'AUTH_INVALID_TOKEN' });
+  });
+
+  it('rejects blank required fields before hitting the network', async () => {
+    const { post, auth } = makeHttp();
+    await expect(auth.refresh('')).rejects.toThrow(/"refreshToken" is required/);
+    await expect(
+      auth.signInWithIdToken({ provider: 'google', idToken: '' }),
+    ).rejects.toThrow(/"idToken" is required/);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('revokeAllSessions deletes the collection', async () => {
+    const del = jest.fn().mockResolvedValue({ revoked: 3 });
+    const auth = new AuthClient({ del } as unknown as HttpClient);
+    await expect(auth.revokeAllSessions('tok')).resolves.toEqual({ revoked: 3 });
+    expect(del).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.SESSIONS, {
+      headers: { Authorization: 'Bearer tok' },
+    });
+  });
+});

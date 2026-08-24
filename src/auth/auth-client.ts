@@ -3,7 +3,11 @@ import { XenitionError } from '../core/errors';
 import { API_ENDPOINTS } from '../constants';
 import {
   AuthResponse,
+  ChangePasswordInput,
   ConfigureSocialProviderInput,
+  DeleteAccountInput,
+  DeleteAccountResult,
+  IdTokenSignInInput,
   LoginInput,
   OAuthProvider,
   OAuthUrlResult,
@@ -11,12 +15,17 @@ import {
   RegisterInput,
   ResetPasswordInput,
   SearchUsersOptions,
+  SendOtpInput,
+  SendOtpResult,
+  Session,
   ListUsersOptions,
   SocialProviderStatus,
   Team,
   TeamInvitationInput,
   UpdateProfileInput,
   User,
+  UserDataExport,
+  VerifyOtpInput,
 } from './types';
 
 /**
@@ -42,6 +51,42 @@ import {
  */
 const asUser = (accessToken?: string) =>
   accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined;
+
+function requireField(context: string, field: string, value: unknown): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new XenitionError('VALIDATION_ERROR', `${context}: "${field}" is required.`);
+  }
+  return value;
+}
+
+/**
+ * Translate a 404 from one of the mobile endpoints into a message naming
+ * the endpoint that is missing.
+ *
+ * A bare NOT_FOUND from `/auth/refresh` reads like "no such user", which
+ * sends people debugging their token instead of their deployment. These
+ * endpoints are newer than most deployments, so the distinction is not
+ * hypothetical.
+ */
+async function requiringEndpoint<T>(
+  context: string,
+  endpoint: string,
+  call: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await call();
+  } catch (err) {
+    if (err instanceof XenitionError && err.code === 'NOT_FOUND') {
+      throw new XenitionError(
+        'NOT_FOUND',
+        `${context}: this deployment does not implement ${endpoint}. See ` +
+          'docs/PLATFORM-ENDPOINTS.md for what the gateway needs to expose.',
+        { details: { endpoint } },
+      );
+    }
+    throw err;
+  }
+}
 
 export class AuthClient {
   constructor(private readonly http: HttpClient) {}
@@ -97,6 +142,175 @@ export class AuthClient {
       );
     }
     return this.me(accessToken);
+  }
+
+  // ────────── Mobile surface ──────────────────────────────────────────────
+  //
+  // These call the endpoints catalogued in docs/PLATFORM-ENDPOINTS.md. Where
+  // a deployment has not shipped one, the 404 is rewritten to say so.
+
+  /**
+   * Exchange a refresh token for a fresh session.
+   *
+   * Access tokens are short-lived by design, so without this a mobile user
+   * lands back on the login screen the moment theirs expires — the app has
+   * no other way to recover. Call it when a request fails with
+   * `AUTH_EXPIRED_TOKEN`, then retry that request once.
+   *
+   * Store what comes BACK: platforms that rotate refresh tokens invalidate
+   * the one you sent, so reusing it fails the second time.
+   */
+  async refresh(refreshToken: string): Promise<AuthResponse> {
+    const context = 'AuthClient.refresh';
+    requireField(context, 'refreshToken', refreshToken);
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.REFRESH, () =>
+      this.http.post<AuthResponse>(API_ENDPOINTS.AUTH.REFRESH, { refreshToken }),
+    );
+  }
+
+  /**
+   * Sign in with an id token the device obtained natively.
+   *
+   * This is what mobile actually does. `getOAuthUrl()` / `handleOAuthCallback()`
+   * are the browser redirect dance; on iOS and Android the platform SDK
+   * completes sign-in locally and hands the app an `idToken`, which the
+   * server verifies against the provider's published keys.
+   *
+   * Pass the `nonce` the app generated for this attempt. Apple echoes it
+   * inside the token and the server compares the two — that is what stops a
+   * token captured from another session being replayed here.
+   */
+  async signInWithIdToken(input: IdTokenSignInInput): Promise<AuthResponse> {
+    const context = 'AuthClient.signInWithIdToken';
+    requireField(context, 'provider', input?.provider);
+    requireField(context, 'idToken', input?.idToken);
+    const url = API_ENDPOINTS.AUTH.OAUTH_ID_TOKEN(input.provider);
+    return requiringEndpoint(context, url, () =>
+      this.http.post<AuthResponse>(url, {
+        idToken: input.idToken,
+        nonce: input.nonce,
+        name: input.name,
+      }),
+    );
+  }
+
+  /**
+   * Send a one-time code by email or SMS.
+   *
+   * `verifyEmail(token)` assumes a browser can be handed a link; on mobile
+   * the user is looking at a keypad. Throttling is the server's job — a
+   * client-side guard protects nobody.
+   */
+  async sendOtp(input: SendOtpInput): Promise<SendOtpResult> {
+    const context = 'AuthClient.sendOtp';
+    if (!input?.email && !input?.phone) {
+      throw new XenitionError('VALIDATION_ERROR', `${context}: "email" or "phone" is required.`);
+    }
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.OTP_SEND, () =>
+      this.http.post<SendOtpResult>(API_ENDPOINTS.AUTH.OTP_SEND, input),
+    );
+  }
+
+  /** Redeem a one-time code. `purpose: 'signin'` returns a full session. */
+  async verifyOtp(input: VerifyOtpInput): Promise<AuthResponse> {
+    const context = 'AuthClient.verifyOtp';
+    requireField(context, 'code', input?.code);
+    if (!input?.email && !input?.phone) {
+      throw new XenitionError('VALIDATION_ERROR', `${context}: "email" or "phone" is required.`);
+    }
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.OTP_VERIFY, () =>
+      this.http.post<AuthResponse>(API_ENDPOINTS.AUTH.OTP_VERIFY, input),
+    );
+  }
+
+  /**
+   * Change a signed-in user's password.
+   *
+   * Distinct from `resetPassword()`, which is the forgot-my-password path
+   * and proves identity with an emailed token. This proves it with the
+   * current password, so someone holding an unlocked phone cannot silently
+   * lock the owner out of their own account.
+   */
+  async changePassword(
+    input: ChangePasswordInput,
+    accessToken?: string,
+  ): Promise<{ changed: true }> {
+    const context = 'AuthClient.changePassword';
+    requireField(context, 'currentPassword', input?.currentPassword);
+    requireField(context, 'newPassword', input?.newPassword);
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.CHANGE_PASSWORD, () =>
+      this.http.post<{ changed: true }>(
+        API_ENDPOINTS.AUTH.CHANGE_PASSWORD,
+        input,
+        asUser(accessToken),
+      ),
+    );
+  }
+
+  /**
+   * Delete the caller's account.
+   *
+   * Not a nice-to-have: Apple has required in-app account deletion since
+   * June 2022, and an app without it is rejected at review regardless of
+   * everything else. Play and GDPR expect the same.
+   *
+   * `purgeAt` comes back when the platform soft-deletes with a grace
+   * period, so the app can say "removed on the 3rd" rather than implying
+   * the data is already gone.
+   */
+  async deleteAccount(
+    accessToken?: string,
+    input: DeleteAccountInput = {},
+  ): Promise<DeleteAccountResult> {
+    const context = 'AuthClient.deleteAccount';
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.ACCOUNT, () =>
+      this.http.del<DeleteAccountResult>(API_ENDPOINTS.AUTH.ACCOUNT, {
+        ...asUser(accessToken),
+        data: input,
+      }),
+    );
+  }
+
+  /**
+   * Everything the platform holds about the caller.
+   *
+   * The other half of the same obligation as `deleteAccount()`: a user must
+   * be able to leave WITH their data, not merely to leave.
+   */
+  async exportData(accessToken?: string): Promise<UserDataExport> {
+    const context = 'AuthClient.exportData';
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.ACCOUNT_EXPORT, () =>
+      this.http.get<UserDataExport>(API_ENDPOINTS.AUTH.ACCOUNT_EXPORT, asUser(accessToken)),
+    );
+  }
+
+  /** The caller's active sessions — the "signed in on these devices" list. */
+  async listSessions(accessToken?: string): Promise<Session[]> {
+    const context = 'AuthClient.listSessions';
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.SESSIONS, () =>
+      this.http.get<Session[]>(API_ENDPOINTS.AUTH.SESSIONS, asUser(accessToken)),
+    );
+  }
+
+  /** Sign one other device out. */
+  async revokeSession(sessionId: string, accessToken?: string): Promise<{ revoked: true }> {
+    const context = 'AuthClient.revokeSession';
+    requireField(context, 'sessionId', sessionId);
+    const url = API_ENDPOINTS.AUTH.SESSION(sessionId);
+    return requiringEndpoint(context, url, () =>
+      this.http.del<{ revoked: true }>(url, asUser(accessToken)),
+    );
+  }
+
+  /**
+   * Sign every device out, this one included — the button someone reaches
+   * for after losing a phone.
+   */
+  async revokeAllSessions(accessToken?: string): Promise<{ revoked: number }> {
+    const context = 'AuthClient.revokeAllSessions';
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.SESSIONS, () =>
+      this.http.del<{ revoked: number }>(API_ENDPOINTS.AUTH.SESSIONS, asUser(accessToken)),
+    );
   }
 
   // ────────── Admin user operations (service key only) ─────────────────────
