@@ -13,7 +13,7 @@ import { XenitionApiConfigError } from './client';
  *     never a key, never an upstream URL.
  */
 
-type ErrorStatus = 400 | 404 | 409 | 429 | 500 | 502 | 504;
+type ErrorStatus = 400 | 404 | 409 | 429 | 500 | 501 | 502 | 504;
 
 const GENERIC_UPSTREAM = 'Upstream request failed.';
 const GENERIC_INTERNAL = 'Internal error.';
@@ -67,6 +67,11 @@ export function honoErrorHandler(err: Error | unknown, c: Context): Response {
     const message = status < 500 ? scrubMessage(err.message) : GENERIC_UPSTREAM;
     return c.json(errorBody(err.code, message), status);
   }
+  if (err instanceof NotConfiguredError) {
+    // Operator-facing and secret-free by construction: it names which env
+    // vars to set, never their values.
+    return c.json(errorBody('NOT_CONFIGURED', err.message), 501);
+  }
   if (err instanceof XenitionApiConfigError) {
     // Operator-facing and contains no secrets by construction.
     return c.json(errorBody('CONFIG_ERROR', err.message), 500);
@@ -84,6 +89,22 @@ export function honoErrorHandler(err: Error | unknown, c: Context): Response {
 /** JSON 404 for unmatched routes (hono's default is text/plain). */
 export function jsonNotFound(c: Context): Response {
   return c.json(errorBody('NOT_FOUND', 'Route not found.'), 404);
+}
+
+/**
+ * A capability this app never configured — e.g. Google purchase secrets in
+ * an iOS-only app.
+ *
+ * Distinct from `XenitionApiConfigError`: that one means a REQUIRED secret
+ * is missing and something is broken. This one means an optional platform
+ * was simply never set up, which is a legitimate state, so it answers 501
+ * Not Implemented rather than a 500 that reads like a fault.
+ */
+export class NotConfiguredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotConfiguredError';
+  }
 }
 
 /** 400 helper for router-level input validation (query params, body shape). */

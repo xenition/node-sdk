@@ -14,7 +14,9 @@ export type XenitionApiModule =
   | 'cart'
   | 'orders'
   // Not a data module — mounts the checkout/payments router (mock + Stripe).
-  | 'checkout';
+  | 'checkout'
+  // In-app purchases: verification, entitlements, store notifications.
+  | 'billing';
 
 /**
  * Options shared by every router (and `createXenitionApi`, which adds

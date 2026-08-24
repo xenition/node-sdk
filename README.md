@@ -143,6 +143,92 @@ export default app;
 | GET | `/reviews/:targetType/:targetId` | `{reviews, aggregate: {count, average}}` (approved only) in one payload |
 | POST | `/reviews/:targetType/:targetId` | `{authorName, rating, title?, body?}` → `201 {id, status: 'pending'}` (always lands pending) |
 
+
+## In-app purchases (mobile)
+
+The `billing` module turns a store purchase into an answer to one question:
+*may this user do this?* Apple and Google disagree about product ids,
+transaction identifiers, renewal semantics and notification formats — your
+app only ever reads an entitlement.
+
+```ts
+// deploy step (service key)
+await client.modules.enable('billing');
+await client.modules.billing.defineProduct({
+  productId: 'com.acme.premium.monthly', platform: 'apple',
+  entitlement: 'premium', kind: 'subscription', period: 'monthly',
+});
+
+// anywhere
+const { allowed, daysRemaining, isTrial } = await billing.check(userId, 'premium');
+```
+
+Mount the router and the app gets the whole flow over HTTP:
+
+| Method | Path | Behavior |
+|--------|------|----------|
+| GET | `/billing/products` | Catalog for the paywall (public — shown before sign-in) |
+| GET | `/billing/entitlements` | Every entitlement for the caller |
+| GET | `/billing/entitlements/:key` | `{ allowed, source, expiresAt, daysRemaining, isTrial }` |
+| POST | `/billing/verify` | `{platform:'apple', transactionId}` or `{platform:'google', productId, purchaseToken}` → verified against the store, recorded, entitlement returned |
+| POST | `/billing/restore` | Re-apply purchases after a reinstall |
+| POST | `/billing/trial` | Start the free trial (length is **server**-side) |
+| POST | `/billing/webhooks/apple` | App Store Server Notifications v2 |
+| POST | `/billing/webhooks/google` | Play Real-time Developer Notifications |
+
+Gate a feature in one line:
+
+```ts
+app.use('/coach/*', requireAuth(), requireEntitlement('premium'));
+```
+
+It answers **402 Payment Required**, not 403, and the body carries the same
+`EntitlementCheck` the client reads from `/billing/entitlements/:key` — so
+one code path in the app renders the paywall from either.
+
+**Secrets** — `APPLE_KEY_ID`, `APPLE_ISSUER_ID`, `APPLE_PRIVATE_KEY`,
+`APPLE_BUNDLE_ID`, `APPLE_ENVIRONMENT` (`production`/`sandbox`/`auto`,
+default `auto`); `GOOGLE_PACKAGE_NAME`, `GOOGLE_CLIENT_EMAIL`,
+`GOOGLE_PRIVATE_KEY`; `BILLING_TRIAL_DAYS`. A platform you never configure
+answers **501**, not 500 — an iOS-only app is right to hold no Google
+credentials.
+
+**Things that will bite you, handled here:**
+
+- **Play auto-refunds** any purchase not acknowledged within three days, and
+  verifying does not acknowledge. `/billing/verify` acknowledges, and reports
+  `acknowledged: false` rather than failing silently if Play is down.
+- **Play's `CANCELED` does not mean access ended** — auto-renew is off but the
+  user paid through the period. It resolves by expiry.
+- **Billing-retry grace keeps access.** The card failed and the store is
+  retrying; cutting the user off there is a top cause of involuntary churn.
+- **Sandbox never unlocks production.** The environment comes from the host
+  that answered, not from a field in the payload.
+- **A transaction chain belongs to whoever redeemed it first**, so replaying
+  someone else's receipt on another account is refused.
+- **Store notifications are triggers, not truth.** The body says *which*
+  purchase changed; the new state is always re-read from the store. A forged
+  notification cannot grant anything.
+
+## End-user auth
+
+Routers hold the **service key**, so without this every route is public and
+every row belongs to everyone.
+
+```ts
+import { requireAuth, currentUser, currentUserId } from '@xenition/sdk/hono';
+
+app.use('/me/*', requireAuth());          // 401 when absent/invalid
+app.get('/me/profile', (c) => c.json(currentUser(c)));
+```
+
+`xenitionAuth()` is the permissive variant: it populates the caller when a
+token is present and serves guests otherwise. Verification is cached per
+isolate for 60s. A token the platform rejects is a **401**; a platform
+outage stays a **502**, so apps do not fall into a re-login loop over a
+fault the user cannot fix.
+
+
 **Options** — `createXenitionApi({ modules?, cors?, client?, rateLimit? })`:
 `modules` picks which routers to mount (default all three; individual
 `cmsRouter()` / `formsRouter()` / `reviewsRouter()` are also exported for
@@ -176,6 +262,10 @@ Phases 2–12 add `client.query.*`, `client.storage.*`, `client.email.*`,
 `client.vector.*`, `client.payment.*`, `client.realtime.*`,
 `client.videoConferencing.*`. See the xenition repo's
 `APP-SDK-IMPLEMENTATION.md` for the roadmap.
+
+Mobile: end-user auth middleware (`requireAuth`), in-app purchases and
+entitlements (`client.modules.billing`, `AppleStore`, `GoogleStore`, the
+`/billing` router, `requireEntitlement`).
 
 ## Development
 

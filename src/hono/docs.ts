@@ -80,6 +80,8 @@ const errorResponse = (description: string): JsonObject => ({
 const NOT_FOUND = errorResponse('Missing, unpublished, or intentionally indistinguishable');
 const BAD_REQUEST = errorResponse('Invalid input (aggregated validation message)');
 const RATE_LIMITED = errorResponse('Too many writes from this IP (default 10/min, per isolate)');
+const UNAUTHORIZED = errorResponse('Missing, invalid, or expired end-user access token');
+const NOT_CONFIGURED = errorResponse('This app never configured that store platform');
 
 /* ── per-module route descriptions (paths relative to the API mount) ──── */
 
@@ -464,6 +466,108 @@ const MODULE_PATHS: Record<XenitionApiModule, Record<string, JsonObject>> = {
       },
     },
   },
+  billing: {
+    '/billing/products': {
+      get: {
+        tags: ['billing'],
+        summary: 'Sellable products, for building the paywall',
+        parameters: [
+          {
+            name: 'platform',
+            in: 'query',
+            schema: { type: 'string', enum: ['apple', 'google', 'stripe'] },
+          },
+        ],
+        responses: { '200': okJson('{ products: [...] }'), '400': BAD_REQUEST },
+      },
+    },
+    '/billing/entitlements': {
+      get: {
+        tags: ['billing'],
+        summary: 'Every entitlement for the authenticated caller',
+        security: [{ bearerAuth: [] }],
+        responses: { '200': okJson('{ entitlements: [EntitlementCheck] }'), '401': UNAUTHORIZED },
+      },
+    },
+    '/billing/entitlements/{key}': {
+      get: {
+        tags: ['billing'],
+        summary: 'May the caller use this feature?',
+        security: [{ bearerAuth: [] }],
+        parameters: [pathParam('key', 'Entitlement name, e.g. "premium"')],
+        responses: {
+          '200': okJson('EntitlementCheck: { allowed, source, expiresAt, daysRemaining, isTrial }'),
+          '401': UNAUTHORIZED,
+        },
+      },
+    },
+    '/billing/verify': {
+      post: {
+        tags: ['billing'],
+        summary: 'Verify a store purchase and grant its entitlement',
+        description:
+          'apple: { platform: "apple", transactionId }. ' +
+          'google: { platform: "google", productId, purchaseToken, kind? }. ' +
+          'The purchase is bound to the authenticated caller — never to a user id in the body.',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '201': okJson('{ ok, entitlement, product, acknowledged? }'),
+          '400': BAD_REQUEST,
+          '401': UNAUTHORIZED,
+          '429': RATE_LIMITED,
+          '501': NOT_CONFIGURED,
+        },
+      },
+    },
+    '/billing/restore': {
+      post: {
+        tags: ['billing'],
+        summary: 'Re-apply purchases after a reinstall or device change',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': okJson('{ entitlements: [EntitlementCheck] }'),
+          '400': BAD_REQUEST,
+          '401': UNAUTHORIZED,
+          '501': NOT_CONFIGURED,
+        },
+      },
+    },
+    '/billing/trial': {
+      post: {
+        tags: ['billing'],
+        summary: 'Start the free trial (length is server-side)',
+        description:
+          'Idempotent: a second call returns the current entitlement rather than an error. ' +
+          '501 when BILLING_TRIAL_DAYS / trialDays is not set.',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': okJson('The existing EntitlementCheck'),
+          '201': okJson('The new trial EntitlementCheck'),
+          '401': UNAUTHORIZED,
+          '501': NOT_CONFIGURED,
+        },
+      },
+    },
+    '/billing/webhooks/apple': {
+      post: {
+        tags: ['billing'],
+        summary: 'App Store Server Notification (v2) endpoint',
+        description:
+          'Unauthenticated by necessity — Apple cannot present a user token. Safe because the ' +
+          'notification only triggers a re-read of state from Apple; it is never trusted as ' +
+          'state itself. Idempotent on notificationUUID.',
+        responses: { '200': okJson('{ received, handled, type }'), '400': BAD_REQUEST },
+      },
+    },
+    '/billing/webhooks/google': {
+      post: {
+        tags: ['billing'],
+        summary: 'Play Real-time Developer Notification (Pub/Sub push) endpoint',
+        description: 'Same contract as the Apple webhook. Idempotent on the Pub/Sub messageId.',
+        responses: { '200': okJson('{ received, handled, type }'), '400': BAD_REQUEST },
+      },
+    },
+  },
 };
 
 const ALL_MODULES = Object.keys(MODULE_PATHS) as XenitionApiModule[];
@@ -508,6 +612,14 @@ export function buildOpenApi(options: DocsOptions = {}): JsonObject {
     ],
     paths,
     components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: "The end user's access token from auth.login().",
+        },
+      },
       schemas: {
         Error: {
           type: 'object',

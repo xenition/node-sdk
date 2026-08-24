@@ -11,6 +11,7 @@ import { inventoryRouter } from './inventory-router';
 import { cartRouter } from './cart-router';
 import { ordersRouter } from './orders-router';
 import { checkoutRouter } from './checkout-router';
+import { billingRouter } from './billing-router';
 import { reviewsRouter } from './reviews-router';
 import { applyCors } from './router-utils';
 import { openApiRouter } from './docs';
@@ -57,6 +58,7 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
     'cart',
     'orders',
     'checkout',
+    'billing',
   ];
   const app = new Hono();
   // CORS lives on the parent so preflights are answered even for
@@ -78,6 +80,7 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   if (selected.includes('cart')) app.route('/', cartRouter(childOptions));
   if (selected.includes('orders')) app.route('/', ordersRouter(childOptions));
   if (selected.includes('checkout')) app.route('/', checkoutRouter(childOptions));
+  if (selected.includes('billing')) app.route('/', billingRouter(childOptions));
   // Every generated app exposes its own machine-readable API spec at `<mount>/openapi.json`
   // (built from the SAME module list), so the platform's template/app preview can always show the
   // API without each app hand-writing a route. OpenAPI only, no docs UI — by decision (see docs.ts).
@@ -97,6 +100,8 @@ export { inventoryRouter } from './inventory-router';
 export { cartRouter } from './cart-router';
 export { ordersRouter } from './orders-router';
 export { checkoutRouter, verifyStripeSignature } from './checkout-router';
+export { billingRouter, requireEntitlement } from './billing-router';
+export type { BillingRouterOptions, RequireEntitlementOptions } from './billing-router';
 export { buildOpenApi, openApiRouter } from './docs';
 export type { DocsOptions, OpenApiRouterOptions } from './docs';
 export {
@@ -108,7 +113,7 @@ export {
   bearerToken,
 } from './auth';
 export type { AuthUser, XenitionAuthOptions } from './auth';
-export { badRequest, forbidden, unauthorized } from './errors';
+export { badRequest, forbidden, unauthorized, NotConfiguredError } from './errors';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';

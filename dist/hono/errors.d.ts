@@ -5,6 +5,18 @@ export declare function scrubMessage(message: string): string;
 export declare function honoErrorHandler(err: Error | unknown, c: Context): Response;
 /** JSON 404 for unmatched routes (hono's default is text/plain). */
 export declare function jsonNotFound(c: Context): Response;
+/**
+ * A capability this app never configured — e.g. Google purchase secrets in
+ * an iOS-only app.
+ *
+ * Distinct from `XenitionApiConfigError`: that one means a REQUIRED secret
+ * is missing and something is broken. This one means an optional platform
+ * was simply never set up, which is a legitimate state, so it answers 501
+ * Not Implemented rather than a 500 that reads like a fault.
+ */
+export declare class NotConfiguredError extends Error {
+    constructor(message: string);
+}
 /** 400 helper for router-level input validation (query params, body shape). */
 export declare function badRequest(c: Context, message: string): Response;
 /**

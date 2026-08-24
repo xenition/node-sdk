@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.NotConfiguredError = void 0;
 exports.scrubMessage = scrubMessage;
 exports.honoErrorHandler = honoErrorHandler;
 exports.jsonNotFound = jsonNotFound;
@@ -55,6 +56,11 @@ function honoErrorHandler(err, c) {
         const message = status < 500 ? scrubMessage(err.message) : GENERIC_UPSTREAM;
         return c.json(errorBody(err.code, message), status);
     }
+    if (err instanceof NotConfiguredError) {
+        // Operator-facing and secret-free by construction: it names which env
+        // vars to set, never their values.
+        return c.json(errorBody('NOT_CONFIGURED', err.message), 501);
+    }
     if (err instanceof client_1.XenitionApiConfigError) {
         // Operator-facing and contains no secrets by construction.
         return c.json(errorBody('CONFIG_ERROR', err.message), 500);
@@ -69,6 +75,22 @@ function honoErrorHandler(err, c) {
 function jsonNotFound(c) {
     return c.json(errorBody('NOT_FOUND', 'Route not found.'), 404);
 }
+/**
+ * A capability this app never configured — e.g. Google purchase secrets in
+ * an iOS-only app.
+ *
+ * Distinct from `XenitionApiConfigError`: that one means a REQUIRED secret
+ * is missing and something is broken. This one means an optional platform
+ * was simply never set up, which is a legitimate state, so it answers 501
+ * Not Implemented rather than a 500 that reads like a fault.
+ */
+class NotConfiguredError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'NotConfiguredError';
+    }
+}
+exports.NotConfiguredError = NotConfiguredError;
 /** 400 helper for router-level input validation (query params, body shape). */
 function badRequest(c, message) {
     return c.json(errorBody('VALIDATION_ERROR', message), 400);

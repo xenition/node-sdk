@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.unauthorized = exports.forbidden = exports.badRequest = exports.bearerToken = exports.requireUser = exports.currentUserId = exports.currentUser = exports.requireAuth = exports.xenitionAuth = exports.openApiRouter = exports.buildOpenApi = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
+exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.NotConfiguredError = exports.unauthorized = exports.forbidden = exports.badRequest = exports.bearerToken = exports.requireUser = exports.currentUserId = exports.currentUser = exports.requireAuth = exports.xenitionAuth = exports.openApiRouter = exports.buildOpenApi = exports.requireEntitlement = exports.billingRouter = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
 exports.createXenitionApi = createXenitionApi;
 const hono_1 = require("hono");
 const cms_router_1 = require("./cms-router");
@@ -15,6 +15,7 @@ const inventory_router_1 = require("./inventory-router");
 const cart_router_1 = require("./cart-router");
 const orders_router_1 = require("./orders-router");
 const checkout_router_1 = require("./checkout-router");
+const billing_router_1 = require("./billing-router");
 const reviews_router_1 = require("./reviews-router");
 const router_utils_1 = require("./router-utils");
 const docs_1 = require("./docs");
@@ -59,6 +60,7 @@ function createXenitionApi(options = {}) {
         'cart',
         'orders',
         'checkout',
+        'billing',
     ];
     const app = new hono_1.Hono();
     // CORS lives on the parent so preflights are answered even for
@@ -91,6 +93,8 @@ function createXenitionApi(options = {}) {
         app.route('/', (0, orders_router_1.ordersRouter)(childOptions));
     if (selected.includes('checkout'))
         app.route('/', (0, checkout_router_1.checkoutRouter)(childOptions));
+    if (selected.includes('billing'))
+        app.route('/', (0, billing_router_1.billingRouter)(childOptions));
     // Every generated app exposes its own machine-readable API spec at `<mount>/openapi.json`
     // (built from the SAME module list), so the platform's template/app preview can always show the
     // API without each app hand-writing a route. OpenAPI only, no docs UI — by decision (see docs.ts).
@@ -122,6 +126,9 @@ Object.defineProperty(exports, "ordersRouter", { enumerable: true, get: function
 var checkout_router_2 = require("./checkout-router");
 Object.defineProperty(exports, "checkoutRouter", { enumerable: true, get: function () { return checkout_router_2.checkoutRouter; } });
 Object.defineProperty(exports, "verifyStripeSignature", { enumerable: true, get: function () { return checkout_router_2.verifyStripeSignature; } });
+var billing_router_2 = require("./billing-router");
+Object.defineProperty(exports, "billingRouter", { enumerable: true, get: function () { return billing_router_2.billingRouter; } });
+Object.defineProperty(exports, "requireEntitlement", { enumerable: true, get: function () { return billing_router_2.requireEntitlement; } });
 var docs_2 = require("./docs");
 Object.defineProperty(exports, "buildOpenApi", { enumerable: true, get: function () { return docs_2.buildOpenApi; } });
 Object.defineProperty(exports, "openApiRouter", { enumerable: true, get: function () { return docs_2.openApiRouter; } });
@@ -136,6 +143,7 @@ var errors_2 = require("./errors");
 Object.defineProperty(exports, "badRequest", { enumerable: true, get: function () { return errors_2.badRequest; } });
 Object.defineProperty(exports, "forbidden", { enumerable: true, get: function () { return errors_2.forbidden; } });
 Object.defineProperty(exports, "unauthorized", { enumerable: true, get: function () { return errors_2.unauthorized; } });
+Object.defineProperty(exports, "NotConfiguredError", { enumerable: true, get: function () { return errors_2.NotConfiguredError; } });
 var normalize_1 = require("./normalize");
 Object.defineProperty(exports, "camelizeKey", { enumerable: true, get: function () { return normalize_1.camelizeKey; } });
 Object.defineProperty(exports, "normalizeRow", { enumerable: true, get: function () { return normalize_1.normalizeRow; } });
