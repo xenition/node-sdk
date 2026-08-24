@@ -369,6 +369,19 @@ export type {
   ListPurchasesOptions,
 } from './modules/billing';
 
+// jobs module (deferred + background work)
+export { JobsClient, jobsModule, JOBS_MIGRATIONS, JOBS_TABLE } from './modules/jobs';
+export type {
+  ClaimOptions,
+  EnqueueOptions,
+  FailOptions,
+  Job,
+  JobHandler,
+  JobStatus,
+  WorkSummary,
+  ListJobsOptions as ListJobsQueryOptions,
+} from './modules/jobs';
+
 // Errors
 export {
   XenitionError,

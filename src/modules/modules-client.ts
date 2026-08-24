@@ -15,6 +15,7 @@ import { InventoryClient, inventoryModule } from './inventory';
 import { CartClient, cartModule } from './cart';
 import { OrdersClient, ordersModule } from './orders';
 import { BillingClient, billingModule } from './billing';
+import { JobsClient, jobsModule } from './jobs';
 
 export type ModuleName =
   | 'cms'
@@ -28,7 +29,8 @@ export type ModuleName =
   | 'inventory'
   | 'cart'
   | 'orders'
-  | 'billing';
+  | 'billing'
+  | 'jobs';
 
 /**
  * `client.modules` — the module framework entry point.
@@ -65,6 +67,7 @@ export class ModulesClient {
     cart: cartModule,
     orders: ordersModule,
     billing: billingModule,
+    jobs: jobsModule,
   };
 
   constructor(
@@ -114,6 +117,11 @@ export class ModulesClient {
   /** Whether enable()/use() has been called for the module in this client. */
   isEnabled(name: ModuleName): boolean {
     return this.enabled.has(name);
+  }
+
+  /** Deferred and background work. See modules/jobs. */
+  get jobs(): JobsClient {
+    return this.access<JobsClient>('jobs');
   }
 
   /** In-app purchases + entitlements. See modules/billing. */

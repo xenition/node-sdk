@@ -138,11 +138,37 @@ function matchesOne(row: Record<string, unknown>, condition: WhereCondition): bo
   }
 }
 
+/**
+ * Raw-SQL stand-in. The builder IR can be interpreted generically; SQL
+ * cannot, so a suite whose client uses `raw()` supplies a handler that
+ * simulates ITS statements against the same in-memory rows.
+ */
+export type RawHandler = (
+  sql: string,
+  params: unknown[],
+  store: FakeStore,
+) => Record<string, unknown>[];
+
+export interface FakeContextOptions {
+  /** Simulate the raw statements this suite's client issues. */
+  raw?: RawHandler;
+}
+
 /** A ModuleContext backed by the fake store, plus the store to assert on. */
-export function makeFakeContext(): { store: FakeStore; ctx: ModuleContext } {
+export function makeFakeContext(options: FakeContextOptions = {}): {
+  store: FakeStore;
+  ctx: ModuleContext;
+} {
   const store = new FakeStore();
-  const post = jest.fn((_url: string, body: QueryPayload | { sql: string }) => {
-    if ('sql' in body) throw new Error('FakeStore: raw SQL is not supported');
+  const post = jest.fn((_url: string, body: QueryPayload | { sql: string; params?: unknown[] }) => {
+    if ('sql' in body) {
+      if (!options.raw) {
+        throw new Error(
+          `FakeStore: raw SQL is not supported unless makeFakeContext({ raw }) is given. SQL: ${body.sql.slice(0, 80)}`,
+        );
+      }
+      return Promise.resolve({ data: options.raw(body.sql, body.params ?? [], store) });
+    }
     return Promise.resolve(store.handle(body));
   });
   const query = new QueryClient({ post } as unknown as HttpClient);

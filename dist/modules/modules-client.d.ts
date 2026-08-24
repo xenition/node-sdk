@@ -12,7 +12,8 @@ import { InventoryClient } from './inventory';
 import { CartClient } from './cart';
 import { OrdersClient } from './orders';
 import { BillingClient } from './billing';
-export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory' | 'cart' | 'orders' | 'billing';
+import { JobsClient } from './jobs';
+export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory' | 'cart' | 'orders' | 'billing' | 'jobs';
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -52,6 +53,8 @@ export declare class ModulesClient {
     use(name: ModuleName): void;
     /** Whether enable()/use() has been called for the module in this client. */
     isEnabled(name: ModuleName): boolean;
+    /** Deferred and background work. See modules/jobs. */
+    get jobs(): JobsClient;
     /** In-app purchases + entitlements. See modules/billing. */
     get billing(): BillingClient;
     get cms(): CmsClient;

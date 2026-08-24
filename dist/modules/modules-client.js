@@ -15,6 +15,7 @@ const inventory_1 = require("./inventory");
 const cart_1 = require("./cart");
 const orders_1 = require("./orders");
 const billing_1 = require("./billing");
+const jobs_1 = require("./jobs");
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -51,6 +52,7 @@ class ModulesClient {
             cart: cart_1.cartModule,
             orders: orders_1.ordersModule,
             billing: billing_1.billingModule,
+            jobs: jobs_1.jobsModule,
         };
         const query = new query_client_1.QueryClient(http);
         this.ctx = {
@@ -91,6 +93,10 @@ class ModulesClient {
     /** Whether enable()/use() has been called for the module in this client. */
     isEnabled(name) {
         return this.enabled.has(name);
+    }
+    /** Deferred and background work. See modules/jobs. */
+    get jobs() {
+        return this.access('jobs');
     }
     /** In-app purchases + entitlements. See modules/billing. */
     get billing() {
