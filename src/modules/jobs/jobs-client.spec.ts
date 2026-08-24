@@ -1,62 +1,16 @@
 import { FakeStore, makeFakeContext } from '../../testing/fake-store';
+import { jobsRawHandler } from '../../testing/jobs-raw';
 import { JobsClient, JOBS_TABLE } from './jobs-client';
 import { Job } from './types';
 
 /**
- * `claim` and `purge` are raw SQL — the two places the builder cannot
- * express what the queue needs (`FOR UPDATE SKIP LOCKED`). This handler
- * simulates them against the same in-memory rows so the queue's SEMANTICS
- * are under test: what is due, what a lease protects, what a second worker
- * sees. It intentionally mirrors the real statements' WHERE clauses; if
- * those change, this has to change with them.
+ * The queue's raw statements are simulated against the same in-memory rows
+ * (see testing/jobs-raw), so these tests exercise the real claim rules
+ * rather than a stub that always says yes.
  */
-const rawHandler = (sql: string, params: unknown[], store: FakeStore) => {
-  const rows = store.rows(JOBS_TABLE) as unknown as Job[];
-  const now = Date.now();
-
-  if (sql.startsWith('UPDATE')) {
-    const [claimedBy, leaseSeconds, limit, types] = params as [string, number, number, string[]?];
-    const due = rows
-      .filter((job) => {
-        const ready =
-          (job.status === 'queued' || job.status === 'failed') && Date.parse(job.run_at) <= now;
-        const stale =
-          job.status === 'running' &&
-          job.lease_expires_at !== null &&
-          Date.parse(job.lease_expires_at) < now;
-        if (!ready && !stale) return false;
-        return !types || types.includes(job.type);
-      })
-      .sort((a, b) => Date.parse(a.run_at) - Date.parse(b.run_at))
-      .slice(0, limit);
-
-    for (const job of due) {
-      job.status = 'running';
-      job.attempts += 1;
-      job.claimed_at = new Date(now).toISOString();
-      job.claimed_by = claimedBy;
-      job.lease_expires_at = new Date(now + leaseSeconds * 1000).toISOString();
-    }
-    return due.map((job) => ({ ...job })) as unknown as Record<string, unknown>[];
-  }
-
-  if (sql.startsWith('DELETE')) {
-    const [cutoff] = params as [string];
-    const doomed = rows.filter(
-      (job) => job.status === 'succeeded' && Date.parse(job.updated_at) < Date.parse(cutoff),
-    );
-    store.tables.set(
-      JOBS_TABLE,
-      rows.filter((job) => !doomed.includes(job)) as unknown as Record<string, unknown>[],
-    );
-    return doomed.map((job) => ({ id: job.id }));
-  }
-
-  throw new Error(`unexpected raw SQL: ${sql.slice(0, 60)}`);
-};
 
 const makeJobs = () => {
-  const { store, ctx } = makeFakeContext({ raw: rawHandler });
+  const { store, ctx } = makeFakeContext({ raw: jobsRawHandler });
   return { store, jobs: new JobsClient(ctx) };
 };
 

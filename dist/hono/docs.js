@@ -415,6 +415,24 @@ const MODULE_PATHS = {
             },
         },
     },
+    jobs: {
+        '/jobs/{id}': {
+            get: {
+                tags: ['jobs'],
+                summary: 'Status of a background job',
+                description: 'Visible only when the job payload names the caller (default field `userId`). ' +
+                    'Unknown and not-yours are the same 404 — distinguishing them would confirm ' +
+                    'which ids exist. Poll until `done`.',
+                security: [{ bearerAuth: [] }],
+                parameters: [pathParam('id')],
+                responses: {
+                    '200': okJson('{ id, type, status, attempts, done, failed, result }'),
+                    '401': UNAUTHORIZED,
+                    '404': NOT_FOUND,
+                },
+            },
+        },
+    },
     billing: {
         '/billing/products': {
             get: {

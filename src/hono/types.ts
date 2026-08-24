@@ -16,7 +16,9 @@ export type XenitionApiModule =
   // Not a data module — mounts the checkout/payments router (mock + Stripe).
   | 'checkout'
   // In-app purchases: verification, entitlements, store notifications.
-  | 'billing';
+  | 'billing'
+  // Background-job status polling (enqueuing stays server-side).
+  | 'jobs';
 
 /**
  * Options shared by every router (and `createXenitionApi`, which adds

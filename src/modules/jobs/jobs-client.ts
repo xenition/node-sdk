@@ -8,11 +8,13 @@ import {
   Job,
   JobHandler,
   JobStatus,
+  CronRun,
   ListJobsOptions,
   WorkSummary,
 } from './types';
 
 export const JOBS_TABLE = 'jobs__runs';
+export const CRON_RUNS_TABLE = 'jobs__cron_runs';
 
 export const JOBS_MIGRATIONS: Migration[] = [
   {
@@ -50,6 +52,26 @@ export const JOBS_MIGRATIONS: Migration[] = [
   {
     id: 'jobs/0004_index_jobs__runs_type',
     sql: `CREATE INDEX IF NOT EXISTS jobs__runs_type_idx ON ${JOBS_TABLE} (type, status)`,
+  },
+  {
+    // The cron ledger. Without it a schedule that silently stops firing is
+    // invisible — nobody notices the absence of a thing that was supposed
+    // to happen, which is exactly how a "daily digest" quietly dies.
+    id: 'jobs/0005_create_jobs__cron_runs',
+    sql: `CREATE TABLE IF NOT EXISTS ${CRON_RUNS_TABLE} (
+  id uuid PRIMARY KEY,
+  name text NOT NULL,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  finished_at timestamptz,
+  ok boolean,
+  error text,
+  duration_ms integer
+)`,
+  },
+  {
+    id: 'jobs/0006_index_jobs__cron_runs_name',
+    sql: `CREATE INDEX IF NOT EXISTS jobs__cron_runs_name_idx
+  ON ${CRON_RUNS_TABLE} (name, started_at DESC)`,
   },
 ];
 
@@ -325,6 +347,64 @@ export class JobsClient {
     }
     return summary;
   }
+
+  // ────────── Cron ledger ─────────────────────────────────────────────────
+
+  /**
+   * Open a ledger entry for a scheduled run. Returns its id for `finishCronRun`.
+   *
+   * Recording the START, not just the outcome, is the point: a run that
+   * never finishes leaves an open row, which is the only trace a hung or
+   * killed schedule ever leaves behind.
+   */
+  async startCronRun(name: string): Promise<string> {
+    const context = 'JobsClient.startCronRun';
+    requireNonEmptyString(context, 'name', name);
+    const id = generateId();
+    await this.ctx.query
+      .from(CRON_RUNS_TABLE)
+      .insert({ id, name, started_at: nowIso() })
+      .execute();
+    return id;
+  }
+
+  /** Close a ledger entry with its outcome. */
+  async finishCronRun(
+    id: string,
+    outcome: { ok: boolean; error?: unknown; durationMs?: number },
+  ): Promise<void> {
+    requireNonEmptyString('JobsClient.finishCronRun', 'id', id);
+    await this.ctx.query
+      .from(CRON_RUNS_TABLE)
+      .update({
+        finished_at: nowIso(),
+        ok: outcome.ok,
+        error: outcome.ok ? null : errorMessage(outcome.error),
+        duration_ms: outcome.durationMs ?? null,
+      })
+      .where('id', id)
+      .execute();
+  }
+
+  /** The most recent run of a schedule — "did the digest go out?". */
+  async lastCronRun(name: string): Promise<CronRun | null> {
+    requireNonEmptyString('JobsClient.lastCronRun', 'name', name);
+    const rows = await this.ctx.query
+      .from(CRON_RUNS_TABLE)
+      .where('name', name)
+      .orderBy('started_at', 'DESC')
+      .limit(1)
+      .rows<CronRun>();
+    return rows[0] ?? null;
+  }
+
+  async listCronRuns(name?: string, limit = 50): Promise<CronRun[]> {
+    let q = this.ctx.query.from(CRON_RUNS_TABLE);
+    if (name) q = q.where('name', name);
+    return q.orderBy('started_at', 'DESC').limit(limit).rows<CronRun>();
+  }
+
+  // ────────── Inspection ───────────────────────────────────────────────────
 
   async list(options: ListJobsOptions = {}): Promise<Job[]> {
     const context = 'JobsClient.list';

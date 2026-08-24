@@ -12,6 +12,7 @@ import { cartRouter } from './cart-router';
 import { ordersRouter } from './orders-router';
 import { checkoutRouter } from './checkout-router';
 import { billingRouter } from './billing-router';
+import { jobsRouter } from './jobs-router';
 import { reviewsRouter } from './reviews-router';
 import { applyCors } from './router-utils';
 import { openApiRouter } from './docs';
@@ -59,6 +60,7 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
     'orders',
     'checkout',
     'billing',
+    'jobs',
   ];
   const app = new Hono();
   // CORS lives on the parent so preflights are answered even for
@@ -81,6 +83,7 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   if (selected.includes('orders')) app.route('/', ordersRouter(childOptions));
   if (selected.includes('checkout')) app.route('/', checkoutRouter(childOptions));
   if (selected.includes('billing')) app.route('/', billingRouter(childOptions));
+  if (selected.includes('jobs')) app.route('/', jobsRouter(childOptions));
   // Every generated app exposes its own machine-readable API spec at `<mount>/openapi.json`
   // (built from the SAME module list), so the platform's template/app preview can always show the
   // API without each app hand-writing a route. OpenAPI only, no docs UI — by decision (see docs.ts).
@@ -101,6 +104,18 @@ export { cartRouter } from './cart-router';
 export { ordersRouter } from './orders-router';
 export { checkoutRouter, verifyStripeSignature } from './checkout-router';
 export { billingRouter, requireEntitlement } from './billing-router';
+export { jobsRouter } from './jobs-router';
+export type { JobsRouterOptions } from './jobs-router';
+export { createScheduledHandler, withScheduled } from './scheduled';
+export type {
+  CronJob,
+  ExecutionContextLike,
+  ScheduledContext,
+  ScheduledEvent,
+  ScheduledHandler,
+  ScheduledOptions,
+  ScheduledSummary,
+} from './scheduled';
 export type { BillingRouterOptions, RequireEntitlementOptions } from './billing-router';
 export { buildOpenApi, openApiRouter } from './docs';
 export type { DocsOptions, OpenApiRouterOptions } from './docs';

@@ -94,3 +94,15 @@ export interface WorkSummary {
   /** Types that were claimed but had no registered handler. */
   unhandled: string[];
 }
+
+/** One recorded execution of a named schedule. */
+export interface CronRun {
+  id: string;
+  name: string;
+  started_at: string;
+  /** Null while running — or forever, if the run was killed mid-flight. */
+  finished_at: string | null;
+  ok: boolean | null;
+  error: string | null;
+  duration_ms: number | null;
+}
