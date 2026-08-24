@@ -259,3 +259,111 @@ describe('verbs and configuration', () => {
     expect(instance.defaults.headers.common['x-session-token']).toBe('tok_123');
   });
 });
+
+/**
+ * Idempotency, retries and the observability hooks. The retry rule is the
+ * consequential one: a write is repeated only when the caller has said it is
+ * safe to repeat.
+ */
+describe('idempotency and retries', () => {
+  const transient = () => axiosError(null, undefined, 'socket hang up');
+
+  it('retries a GET on a transient failure', async () => {
+    requestMock
+      .mockRejectedValueOnce(transient())
+      .mockResolvedValue({ status: 200, data: { ok: true } });
+    await expect(makeClient(2).get('/x')).resolves.toEqual({ ok: true });
+    expect(requestMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT retry an unkeyed write', async () => {
+    // A timeout is precisely the case where the first attempt may already
+    // have succeeded, so repeating it can apply the change twice.
+    requestMock.mockRejectedValue(transient());
+    await expect(makeClient(2).post('/x', {})).rejects.toBeInstanceOf(XenitionError);
+    expect(requestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('DOES retry a write carrying an idempotency key', async () => {
+    requestMock
+      .mockRejectedValueOnce(transient())
+      .mockResolvedValue({ status: 200, data: { ok: true } });
+    await expect(
+      makeClient(2).post('/x', {}, { idempotencyKey: 'order-1' }),
+    ).resolves.toEqual({ ok: true });
+    expect(requestMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends the key as a header and keeps it stable across attempts', async () => {
+    requestMock
+      .mockRejectedValueOnce(transient())
+      .mockResolvedValue({ status: 200, data: {} });
+    await makeClient(2).post('/x', {}, { idempotencyKey: 'order-1' });
+    const keys = requestMock.mock.calls.map((call) => call[0].headers['idempotency-key']);
+    expect(keys).toEqual(['order-1', 'order-1']);
+  });
+
+  it('does not leak the SDK option into the request config', async () => {
+    requestMock.mockResolvedValue({ status: 200, data: {} });
+    await makeClient().post('/x', {}, { idempotencyKey: 'k' });
+    expect(requestMock.mock.calls[0][0]).not.toHaveProperty('idempotencyKey');
+  });
+
+  it('stamps one request id across every attempt of a call', async () => {
+    // A retried call must read as one operation in the logs, not three.
+    requestMock
+      .mockRejectedValueOnce(transient())
+      .mockResolvedValue({ status: 200, data: {} });
+    await makeClient(2).get('/x');
+    const ids = requestMock.mock.calls.map((call) => call[0].headers['x-request-id']);
+    expect(ids[0]).toBeTruthy();
+    expect(new Set(ids).size).toBe(1);
+  });
+});
+
+describe('observability hooks', () => {
+  it('reports a successful request with its duration', async () => {
+    const onRequest = jest.fn();
+    const onResponse = jest.fn();
+    requestMock.mockResolvedValue({ status: 200, data: {} });
+    await new HttpClient('xen_service_test', { onRequest, onResponse }).get('/x');
+
+    expect(onRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'GET', url: '/x', attempt: 0 }),
+    );
+    expect(onResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 200, durationMs: expect.any(Number) }),
+    );
+  });
+
+  it('marks an error that will be retried, so logs do not read as N failures', async () => {
+    const onError = jest.fn();
+    requestMock
+      .mockRejectedValueOnce(axiosError(null, undefined, 'boom'))
+      .mockResolvedValue({ status: 200, data: {} });
+    await new HttpClient('xen_service_test', { retries: 2, onError }).get('/x');
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ willRetry: true, attempt: 0, error: expect.any(XenitionError) }),
+    );
+  });
+
+  it('marks the final failure as not retrying', async () => {
+    const onError = jest.fn();
+    requestMock.mockRejectedValue(axiosError(400, { error: { code: 'VALIDATION_ERROR' } }));
+    await expect(
+      new HttpClient('xen_service_test', { onError }).get('/x'),
+    ).rejects.toBeInstanceOf(XenitionError);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ willRetry: false }));
+  });
+
+  it('a throwing hook never breaks the request', async () => {
+    // Adding logging must not become a way to break production.
+    const boom = () => {
+      throw new Error('bad logger');
+    };
+    requestMock.mockResolvedValue({ status: 200, data: { ok: true } });
+    await expect(
+      new HttpClient('xen_service_test', { onRequest: boom, onResponse: boom }).get('/x'),
+    ).resolves.toEqual({ ok: true });
+  });
+});

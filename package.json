@@ -20,6 +20,11 @@
       "require": "./dist/hono/index.js",
       "types": "./dist/hono/index.d.ts"
     },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "require": "./dist/testing/index.js"
+    },
     "./client": {
       "types": "./dist/client/index.d.ts",
       "import": "./dist/client/index.js",
@@ -67,7 +72,6 @@
   },
   "dependencies": {
     "axios": "^1.7.0",
-    "form-data": "^4.0.5",
     "socket.io-client": "^4.8.3"
   },
   "peerDependencies": {

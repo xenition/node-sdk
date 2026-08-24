@@ -1,6 +1,8 @@
 import { QueryClient } from '../query/query-client';
 import { QueryResult } from '../query/types';
 import { Migration } from '../migrations/types';
+import type { PushClient } from '../push/push-client';
+import type { EmailClient } from '../email/email-client';
 
 /**
  * Module framework v0 — content-domain modules implemented *client-side*
@@ -27,6 +29,18 @@ export interface ModuleContext {
   readonly query: QueryClient;
   /** Raw parameterized SQL — service-key only (server 403s anon keys). */
   raw<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<QueryResult<T>>;
+  /**
+   * Delivery channels, for modules whose job is to SEND something rather
+   * than only to store it.
+   *
+   * Optional because most modules are pure data and should stay that way —
+   * and because tests construct a context by hand. A module that needs a
+   * channel must degrade gracefully when it is absent rather than assume
+   * it: the notifications module still writes its inbox with no push
+   * client, which is the behavior anyone testing it locally wants.
+   */
+  readonly push?: PushClient;
+  readonly email?: EmailClient;
 }
 
 export interface ModuleDefinition<TClient> {

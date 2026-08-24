@@ -29,6 +29,25 @@ exports.XENITION_ERROR_CODES = [
     // Data access
     'QUERY_FAILED',
     'QUERY_TABLE_NOT_FOUND',
+    // Money. Distinct codes because a client must branch on them: a declined
+    // card is retryable with a different card, a missing entitlement means
+    // "show the paywall", and an invalid receipt means "do not retry at all".
+    'PAYMENT_FAILED',
+    'ENTITLEMENT_REQUIRED',
+    'IAP_INVALID_RECEIPT',
+    'IAP_ALREADY_OWNED',
+    // Limits. A quota is a product decision the user can act on (upgrade,
+    // wait until next month); RATE_LIMITED is a technical backpressure signal
+    // meaning "the same request will work shortly". Collapsing them tells the
+    // user to wait when they should be shown a plan.
+    'QUOTA_EXCEEDED',
+    // Storage
+    'STORAGE_TOO_LARGE',
+    'STORAGE_FAILED',
+    // Background work
+    'JOB_FAILED',
+    // The deployment does not implement this endpoint yet
+    'NOT_IMPLEMENTED',
     // Generic fallback
     'UNKNOWN',
 ];

@@ -13,7 +13,7 @@ import { XenitionApiConfigError } from './client';
  *     never a key, never an upstream URL.
  */
 
-type ErrorStatus = 400 | 404 | 409 | 429 | 500 | 502 | 504;
+type ErrorStatus = 400 | 404 | 409 | 429 | 500 | 501 | 502 | 504;
 
 const GENERIC_UPSTREAM = 'Upstream request failed.';
 const GENERIC_INTERNAL = 'Internal error.';
@@ -67,6 +67,11 @@ export function honoErrorHandler(err: Error | unknown, c: Context): Response {
     const message = status < 500 ? scrubMessage(err.message) : GENERIC_UPSTREAM;
     return c.json(errorBody(err.code, message), status);
   }
+  if (err instanceof NotConfiguredError) {
+    // Operator-facing and secret-free by construction: it names which env
+    // vars to set, never their values.
+    return c.json(errorBody('NOT_CONFIGURED', err.message), 501);
+  }
   if (err instanceof XenitionApiConfigError) {
     // Operator-facing and contains no secrets by construction.
     return c.json(errorBody('CONFIG_ERROR', err.message), 500);
@@ -86,7 +91,41 @@ export function jsonNotFound(c: Context): Response {
   return c.json(errorBody('NOT_FOUND', 'Route not found.'), 404);
 }
 
+/**
+ * A capability this app never configured — e.g. Google purchase secrets in
+ * an iOS-only app.
+ *
+ * Distinct from `XenitionApiConfigError`: that one means a REQUIRED secret
+ * is missing and something is broken. This one means an optional platform
+ * was simply never set up, which is a legitimate state, so it answers 501
+ * Not Implemented rather than a 500 that reads like a fault.
+ */
+export class NotConfiguredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotConfiguredError';
+  }
+}
+
 /** 400 helper for router-level input validation (query params, body shape). */
 export function badRequest(c: Context, message: string): Response {
   return c.json(errorBody('VALIDATION_ERROR', message), 400);
+}
+
+/**
+ * 401 — the CALLER did not prove who they are (missing/invalid/expired
+ * end-user token).
+ *
+ * Deliberately not routed through `statusForCode`: an `AUTH_*`
+ * XenitionError reaching the shared handler means the worker's OWN service
+ * key was rejected, which is a 502 config problem. End-user auth failures
+ * are answered here so the two never blur together.
+ */
+export function unauthorized(c: Context, message: string, code = 'UNAUTHORIZED'): Response {
+  return c.json(errorBody(code, message), 401);
+}
+
+/** 403 — the caller is known, but not allowed to do this. */
+export function forbidden(c: Context, message: string, code = 'FORBIDDEN'): Response {
+  return c.json(errorBody(code, message), 403);
 }

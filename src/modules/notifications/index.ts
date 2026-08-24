@@ -1,0 +1,20 @@
+export {
+  NotificationsClient,
+  notificationsModule,
+  NOTIFICATIONS_MIGRATIONS,
+  NOTIFICATIONS_TABLES,
+  quietHoursEndAt,
+} from './notifications-client';
+export type {
+  ListNotificationsOptions,
+  ListNotificationsResult,
+  NotificationChannel,
+  NotificationPreference,
+  NotificationRecord,
+  NotifyInput,
+  NotifyResult,
+  PreferencePatch,
+  ScheduleInput,
+  ScheduledNotification,
+  ScheduledStatus,
+} from './types';

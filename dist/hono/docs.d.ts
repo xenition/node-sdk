@@ -18,6 +18,14 @@ import type { XenitionApiModule } from './types';
 export interface DocsOptions {
     /** Which modules to document. Must match the `createXenitionApi` list. Defaults to all. */
     modules?: XenitionApiModule[];
+    /**
+     * The app's own routers. Their declared `paths` are merged in, so a
+     * custom route is not invisible to everything that reads the spec.
+     */
+    custom?: Array<{
+        name: string;
+        paths?: Record<string, unknown>;
+    }>;
     /** Where the API routers are mounted, prefixed onto every path. Defaults to '/api'. */
     basePath?: string;
     /** OpenAPI `info` overrides (title / version / description). */

@@ -11,9 +11,12 @@ import { inventoryRouter } from './inventory-router';
 import { cartRouter } from './cart-router';
 import { ordersRouter } from './orders-router';
 import { checkoutRouter } from './checkout-router';
+import { billingRouter } from './billing-router';
+import { jobsRouter } from './jobs-router';
 import { reviewsRouter } from './reviews-router';
 import { applyCors } from './router-utils';
 import { openApiRouter } from './docs';
+import { buildCustomRouter } from './define-router';
 import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } from './types';
 
 /**
@@ -43,7 +46,7 @@ import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } fro
  * when explicitly imported.
  */
 export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
-  const { modules, ...routerOptions } = options;
+  const { modules, custom, ...routerOptions } = options;
   const selected: XenitionApiModule[] = modules ?? [
     'cms',
     'forms',
@@ -57,6 +60,8 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
     'cart',
     'orders',
     'checkout',
+    'billing',
+    'jobs',
   ];
   const app = new Hono();
   // CORS lives on the parent so preflights are answered even for
@@ -78,10 +83,18 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   if (selected.includes('cart')) app.route('/', cartRouter(childOptions));
   if (selected.includes('orders')) app.route('/', ordersRouter(childOptions));
   if (selected.includes('checkout')) app.route('/', checkoutRouter(childOptions));
+  if (selected.includes('billing')) app.route('/', billingRouter(childOptions));
+  if (selected.includes('jobs')) app.route('/', jobsRouter(childOptions));
+  // The app's own routers, mounted on the SAME parent as the built-ins so
+  // they inherit the error handler, CORS and JSON 404 above.
+  for (const definition of custom ?? []) {
+    app.route('/', buildCustomRouter(definition, childOptions));
+  }
+
   // Every generated app exposes its own machine-readable API spec at `<mount>/openapi.json`
   // (built from the SAME module list), so the platform's template/app preview can always show the
   // API without each app hand-writing a route. OpenAPI only, no docs UI — by decision (see docs.ts).
-  app.route('/', openApiRouter({ ...childOptions, modules: selected }));
+  app.route('/', openApiRouter({ ...childOptions, modules: selected, custom }));
   return app;
 }
 
@@ -97,8 +110,41 @@ export { inventoryRouter } from './inventory-router';
 export { cartRouter } from './cart-router';
 export { ordersRouter } from './orders-router';
 export { checkoutRouter, verifyStripeSignature } from './checkout-router';
+export { billingRouter, requireEntitlement } from './billing-router';
+export { jobsRouter } from './jobs-router';
+export type { JobsRouterOptions } from './jobs-router';
+export { createScheduledHandler, withScheduled } from './scheduled';
+export type {
+  CronJob,
+  ExecutionContextLike,
+  ScheduledContext,
+  ScheduledEvent,
+  ScheduledHandler,
+  ScheduledOptions,
+  ScheduledSummary,
+} from './scheduled';
+export type { BillingRouterOptions, RequireEntitlementOptions } from './billing-router';
 export { buildOpenApi, openApiRouter } from './docs';
+export { defineRouter, buildCustomRouter } from './define-router';
+export type { RouterDefinition, RouterToolkit } from './define-router';
 export type { DocsOptions, OpenApiRouterOptions } from './docs';
+export {
+  xenitionAuth,
+  requireAuth,
+  currentUser,
+  currentUserId,
+  requireUser,
+  bearerToken,
+} from './auth';
+export type { AuthUser, XenitionAuthOptions } from './auth';
+export {
+  badRequest,
+  forbidden,
+  unauthorized,
+  honoErrorHandler,
+  jsonNotFound,
+  NotConfiguredError,
+} from './errors';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { makeClientResolver, readEnvVar, XenitionApiConfigError } from './client';
-import { badRequest, honoErrorHandler, jsonNotFound } from './errors';
+import { badRequest, forbidden, honoErrorHandler, jsonNotFound } from './errors';
 import { normalizeRow, normalizeRows } from './normalize';
 import { rateLimiter } from './rate-limit';
 import { applyCors } from './router-utils';
@@ -242,10 +242,6 @@ function timingSafeEqual(a: string, b: string): boolean {
 /** 'stripe' when COMMERCE_MODE=stripe, else 'mock' (the safe default). */
 function commerceMode(c: Context): 'mock' | 'stripe' {
   return (readEnvVar(c, 'COMMERCE_MODE') ?? '').toLowerCase() === 'stripe' ? 'stripe' : 'mock';
-}
-
-function forbidden(c: Context, message: string): Response {
-  return c.json({ error: { code: 'FORBIDDEN', message } }, 403);
 }
 
 /** A JSON object body, or undefined for anything else. */
