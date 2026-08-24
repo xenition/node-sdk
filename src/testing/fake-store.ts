@@ -160,7 +160,10 @@ export function makeFakeContext(options: FakeContextOptions = {}): {
   ctx: ModuleContext;
 } {
   const store = new FakeStore();
-  const post = jest.fn((_url: string, body: QueryPayload | { sql: string; params?: unknown[] }) => {
+  // A plain function rather than `jest.fn`: this module ships as
+  // `@xenition/sdk/testing`, and a published helper must not require a test
+  // runner to be present. Assertions read `store.payloads` instead.
+  const post = (_url: string, body: QueryPayload | { sql: string; params?: unknown[] }) => {
     if ('sql' in body) {
       if (!options.raw) {
         throw new Error(
@@ -170,7 +173,7 @@ export function makeFakeContext(options: FakeContextOptions = {}): {
       return Promise.resolve({ data: options.raw(body.sql, body.params ?? [], store) });
     }
     return Promise.resolve(store.handle(body));
-  });
+  };
   const query = new QueryClient({ post } as unknown as HttpClient);
   return { store, ctx: { query, raw: (sql, params = []) => query.raw(sql, params) } };
 }

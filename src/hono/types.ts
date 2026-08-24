@@ -1,4 +1,5 @@
 import type { XenitionClient } from '../xenition-client';
+import type { RouterDefinition } from './define-router';
 
 /** Modules that ship a prebuilt router. */
 export type XenitionApiModule =
@@ -49,6 +50,12 @@ export interface XenitionRouterOptions {
 }
 
 export interface XenitionApiOptions extends XenitionRouterOptions {
-  /** Which module routers to mount. Defaults to all three. */
+  /** Which module routers to mount. Defaults to every one of them. */
   modules?: XenitionApiModule[];
+  /**
+   * The app's OWN routers, built with `defineRouter`. Mounted on the same
+   * parent as the built-ins, so they inherit the shared error mapping, CORS
+   * and 404 handling, and their declared `paths` join the OpenAPI document.
+   */
+  custom?: RouterDefinition[];
 }

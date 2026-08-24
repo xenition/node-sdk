@@ -210,6 +210,82 @@ credentials.
   purchase changed; the new state is always re-read from the store. A forged
   notification cannot grant anything.
 
+## Your own routes
+
+`createXenitionApi()` mounts the built-in modules; `defineRouter` is how the
+app's own routes join them and inherit the same conventions — shared error
+mapping, auth, the entitlement gate, the rate limiter, and a place in the
+generated OpenAPI.
+
+```ts
+import { defineRouter, createXenitionApi, currentUserId } from '@xenition/sdk/hono';
+
+const speeches = defineRouter({
+  name: 'speeches',
+  build(app, { client, requireAuth, requireEntitlement }) {
+    app.get('/speeches', requireAuth, async (c) =>
+      c.json(await client(c).query.from('speeches').where('user_id', currentUserId(c)).rows()));
+    app.post('/speeches/:id/analyze', requireAuth, requireEntitlement('premium'), analyze);
+  },
+  paths: { '/speeches': { get: { tags: ['speeches'], summary: 'The caller’s speeches' } } },
+});
+
+app.route('/api', createXenitionApi({ custom: [speeches] }));
+```
+
+**One caveat, and it applies to the built-ins too:** Hono does not carry a
+sub-app's `notFound` across a prefixed mount, so an app doing
+`app.route('/api', createXenitionApi(...))` answers Hono's text/plain 404 for
+unmatched paths under `/api`. Install the JSON one on the root app:
+
+```ts
+import { jsonNotFound } from '@xenition/sdk/hono';
+app.notFound(jsonNotFound);
+```
+
+## Background work and cron
+
+```ts
+import { withScheduled } from '@xenition/sdk/hono';
+
+const job = await client.modules.jobs.enqueue('speech.analyze', { userId, sessionId });
+// → 202 { jobId: job.id }; the client polls GET /jobs/:id
+
+export default withScheduled(app, {
+  handlers: { 'speech.analyze': analyzeSpeech },   // drains the queue each tick
+  crons: [
+    { name: 'daily-reminders', schedule: '0 9 * * *', run: sendReminders },
+    { name: 'nightly-purge',   schedule: '0 3 * * *', run: ({ jobs }) => jobs.purge() },
+  ],
+});
+```
+
+with matching `[triggers] crons = [...]` in `wrangler.toml`. Include a
+frequent catch-all trigger — that is what makes `enqueue()` actually run.
+
+Delivery is **at least once**: a worker can die after doing the work but
+before recording success, so handlers must be idempotent. `enqueue` takes an
+`idempotencyKey` for the same reason on the producing side.
+
+## Testing without a network
+
+```ts
+import { createTestClient } from '@xenition/sdk/testing';
+
+const { client, store, user } = createTestClient();
+const app = new Hono();
+app.route('/api', createXenitionApi({ client }));
+
+await app.request('/api/billing/entitlements', {
+  headers: { Authorization: 'Bearer test' },
+});
+expect(store.rows('billing__entitlements')).toHaveLength(1);
+```
+
+The store is a real in-memory interpreter of the query IR, so rows written by
+one call are read back by the next — what is under test is the module's
+behavior, not a stub's.
+
 ## End-user auth
 
 Routers hold the **service key**, so without this every route is public and

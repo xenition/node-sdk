@@ -21,6 +21,11 @@ import type { XenitionApiModule } from './types';
 export interface DocsOptions {
   /** Which modules to document. Must match the `createXenitionApi` list. Defaults to all. */
   modules?: XenitionApiModule[];
+  /**
+   * The app's own routers. Their declared `paths` are merged in, so a
+   * custom route is not invisible to everything that reads the spec.
+   */
+  custom?: Array<{ name: string; paths?: Record<string, unknown> }>;
   /** Where the API routers are mounted, prefixed onto every path. Defaults to '/api'. */
   basePath?: string;
   /** OpenAPI `info` overrides (title / version / description). */
@@ -613,6 +618,11 @@ export function buildOpenApi(options: DocsOptions = {}): JsonObject {
       paths[`${basePath}${path}`] = item;
     }
   }
+  for (const router of options.custom ?? []) {
+    for (const [path, item] of Object.entries(router.paths ?? {})) {
+      paths[`${basePath}${path}`] = item as JsonObject;
+    }
+  }
   return {
     openapi: '3.0.3',
     info: {
@@ -628,6 +638,7 @@ export function buildOpenApi(options: DocsOptions = {}): JsonObject {
     tags: [
       { name: 'health' },
       ...modules.map((name) => ({ name })),
+      ...(options.custom ?? []).map((router) => ({ name: router.name })),
     ],
     paths,
     components: {

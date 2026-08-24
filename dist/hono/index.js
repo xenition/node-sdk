@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.NotConfiguredError = exports.unauthorized = exports.forbidden = exports.badRequest = exports.bearerToken = exports.requireUser = exports.currentUserId = exports.currentUser = exports.requireAuth = exports.xenitionAuth = exports.openApiRouter = exports.buildOpenApi = exports.withScheduled = exports.createScheduledHandler = exports.jobsRouter = exports.requireEntitlement = exports.billingRouter = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
+exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.NotConfiguredError = exports.jsonNotFound = exports.honoErrorHandler = exports.unauthorized = exports.forbidden = exports.badRequest = exports.bearerToken = exports.requireUser = exports.currentUserId = exports.currentUser = exports.requireAuth = exports.xenitionAuth = exports.buildCustomRouter = exports.defineRouter = exports.openApiRouter = exports.buildOpenApi = exports.withScheduled = exports.createScheduledHandler = exports.jobsRouter = exports.requireEntitlement = exports.billingRouter = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
 exports.createXenitionApi = createXenitionApi;
 const hono_1 = require("hono");
 const cms_router_1 = require("./cms-router");
@@ -20,6 +20,7 @@ const jobs_router_1 = require("./jobs-router");
 const reviews_router_1 = require("./reviews-router");
 const router_utils_1 = require("./router-utils");
 const docs_1 = require("./docs");
+const define_router_1 = require("./define-router");
 /**
  * `@xenition/sdk/hono` — prebuilt, mountable Hono routers for generated
  * app BACKENDS.
@@ -47,7 +48,7 @@ const docs_1 = require("./docs");
  * when explicitly imported.
  */
 function createXenitionApi(options = {}) {
-    const { modules, ...routerOptions } = options;
+    const { modules, custom, ...routerOptions } = options;
     const selected = modules ?? [
         'cms',
         'forms',
@@ -99,10 +100,15 @@ function createXenitionApi(options = {}) {
         app.route('/', (0, billing_router_1.billingRouter)(childOptions));
     if (selected.includes('jobs'))
         app.route('/', (0, jobs_router_1.jobsRouter)(childOptions));
+    // The app's own routers, mounted on the SAME parent as the built-ins so
+    // they inherit the error handler, CORS and JSON 404 above.
+    for (const definition of custom ?? []) {
+        app.route('/', (0, define_router_1.buildCustomRouter)(definition, childOptions));
+    }
     // Every generated app exposes its own machine-readable API spec at `<mount>/openapi.json`
     // (built from the SAME module list), so the platform's template/app preview can always show the
     // API without each app hand-writing a route. OpenAPI only, no docs UI — by decision (see docs.ts).
-    app.route('/', (0, docs_1.openApiRouter)({ ...childOptions, modules: selected }));
+    app.route('/', (0, docs_1.openApiRouter)({ ...childOptions, modules: selected, custom }));
     return app;
 }
 var cms_router_2 = require("./cms-router");
@@ -141,6 +147,9 @@ Object.defineProperty(exports, "withScheduled", { enumerable: true, get: functio
 var docs_2 = require("./docs");
 Object.defineProperty(exports, "buildOpenApi", { enumerable: true, get: function () { return docs_2.buildOpenApi; } });
 Object.defineProperty(exports, "openApiRouter", { enumerable: true, get: function () { return docs_2.openApiRouter; } });
+var define_router_2 = require("./define-router");
+Object.defineProperty(exports, "defineRouter", { enumerable: true, get: function () { return define_router_2.defineRouter; } });
+Object.defineProperty(exports, "buildCustomRouter", { enumerable: true, get: function () { return define_router_2.buildCustomRouter; } });
 var auth_1 = require("./auth");
 Object.defineProperty(exports, "xenitionAuth", { enumerable: true, get: function () { return auth_1.xenitionAuth; } });
 Object.defineProperty(exports, "requireAuth", { enumerable: true, get: function () { return auth_1.requireAuth; } });
@@ -152,6 +161,8 @@ var errors_2 = require("./errors");
 Object.defineProperty(exports, "badRequest", { enumerable: true, get: function () { return errors_2.badRequest; } });
 Object.defineProperty(exports, "forbidden", { enumerable: true, get: function () { return errors_2.forbidden; } });
 Object.defineProperty(exports, "unauthorized", { enumerable: true, get: function () { return errors_2.unauthorized; } });
+Object.defineProperty(exports, "honoErrorHandler", { enumerable: true, get: function () { return errors_2.honoErrorHandler; } });
+Object.defineProperty(exports, "jsonNotFound", { enumerable: true, get: function () { return errors_2.jsonNotFound; } });
 Object.defineProperty(exports, "NotConfiguredError", { enumerable: true, get: function () { return errors_2.NotConfiguredError; } });
 var normalize_1 = require("./normalize");
 Object.defineProperty(exports, "camelizeKey", { enumerable: true, get: function () { return normalize_1.camelizeKey; } });

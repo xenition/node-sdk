@@ -556,6 +556,11 @@ function buildOpenApi(options = {}) {
             paths[`${basePath}${path}`] = item;
         }
     }
+    for (const router of options.custom ?? []) {
+        for (const [path, item] of Object.entries(router.paths ?? {})) {
+            paths[`${basePath}${path}`] = item;
+        }
+    }
     return {
         openapi: '3.0.3',
         info: {
@@ -570,6 +575,7 @@ function buildOpenApi(options = {}) {
         tags: [
             { name: 'health' },
             ...modules.map((name) => ({ name })),
+            ...(options.custom ?? []).map((router) => ({ name: router.name })),
         ],
         paths,
         components: {
