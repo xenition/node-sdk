@@ -1,5 +1,5 @@
-import FormData from 'form-data';
 import { HttpClient } from '../core/http-client';
+import { buildMultipart, UploadBody } from '../core/multipart';
 import { API_ENDPOINTS } from '../constants';
 import {
   ChatbotConfig,
@@ -22,7 +22,7 @@ import {
  *   await client.chatbot.updateConfig({ welcomeMessage: 'Hi there!' })
  *   await client.chatbot.uploadDocument(pdfBuffer, { title: 'Help Center' })
  *
- * Uploads accept PDF bytes (Buffer), a URL, or raw text. The server
+ * Uploads accept PDF bytes (Blob/File/ArrayBuffer/Buffer), a URL, or raw text. The server
  * chunks + embeds in the background via BullMQ — document `status`
  * moves `pending → processing → ready`.
  */
@@ -65,18 +65,23 @@ export class ChatbotClient {
    * methods below.
    */
   async uploadDocument(
-    pdfBuffer: Buffer,
+    file: UploadBody,
     options: UploadDocumentOptions = {},
   ): Promise<ChatbotDocument> {
-    if (!Buffer.isBuffer(pdfBuffer)) {
-      throw new TypeError('ChatbotClient.uploadDocument: expected a Buffer');
+    if (file === undefined || file === null) {
+      throw new TypeError(
+        'ChatbotClient.uploadDocument: expected file content (Blob, File, ArrayBuffer, ' +
+          'TypedArray, Buffer or string).',
+      );
     }
-    const form = new FormData();
-    form.append('file', pdfBuffer, {
-      filename: options.title ? `${options.title}.pdf` : 'document.pdf',
-      contentType: options.mimeType || 'application/pdf',
-    });
-    if (options.title) form.append('title', options.title);
+    const form = buildMultipart(
+      {
+        body: file,
+        filename: options.title ? `${options.title}.pdf` : 'document.pdf',
+        contentType: options.mimeType || 'application/pdf',
+      },
+      { title: options.title },
+    );
     return this.http.postForm<ChatbotDocument>(
       API_ENDPOINTS.CHATBOT.DOCUMENTS,
       form,

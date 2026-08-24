@@ -453,5 +453,9 @@ export type {
   ResponseEvent,
 } from './core/http-client';
 
+// Multipart helpers (Workers-native uploads)
+export { basename, buildMultipart, byteLengthOf, toBlob } from './core/multipart';
+export type { UploadBody } from './core/multipart';
+
 // Constants (exposed for tooling; generated apps don't usually import these)
 export { XENITION_BASE_URL } from './constants';

@@ -63,5 +63,7 @@ export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorC
 export type { XenitionErrorCode } from './core/errors';
 export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';
 export type { HttpClientOptions, RequestErrorEvent, RequestEvent, RequestOptions, ResponseEvent, } from './core/http-client';
+export { basename, buildMultipart, byteLengthOf, toBlob } from './core/multipart';
+export type { UploadBody } from './core/multipart';
 export { XENITION_BASE_URL } from './constants';
 //# sourceMappingURL=index.d.ts.map

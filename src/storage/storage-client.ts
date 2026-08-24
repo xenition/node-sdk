@@ -1,5 +1,5 @@
-import FormData from 'form-data';
 import { HttpClient } from '../core/http-client';
+import { basename, buildMultipart, UploadBody } from '../core/multipart';
 import { API_ENDPOINTS } from '../constants';
 import {
   ListFilesOptions,
@@ -23,34 +23,71 @@ const DEFAULT_BUCKET = 'default';
  *   client.storage.list({ prefix: 'avatars/' })
  *   client.storage.createSignedUrl('avatars/alice.png', 3600)
  *
- * Buffers are the primary upload input. Strings (filesystem paths) work
- * only in Node — in Workers the SDK has no `fs` access, so the caller
- * must read the file themselves and pass the bytes.
+ * Upload input is anything the runtime holds — Blob, File, ArrayBuffer,
+ * typed array, Buffer or string. The SDK has no `fs` access in a Worker, so
+ * a filesystem path must be read by the caller first.
  */
 export class StorageClient {
   constructor(private readonly http: HttpClient) {}
 
+  /**
+   * Upload bytes.
+   *
+   * Accepts whatever the runtime happens to hold: a `File` a worker just
+   * received, a `Blob`, an `ArrayBuffer` or typed array from a fetch, a
+   * Node `Buffer`, or a plain string. Previously this demanded a Buffer,
+   * which forced every one of those through a conversion the SDK can do
+   * itself — and which only worked in a Worker at all because
+   * `nodejs_compat` shims Buffer.
+   *
+   * For anything large, prefer `createUploadUrl()`: it sends the bytes
+   * straight to storage instead of through the app's worker.
+   */
   async upload(
-    buffer: Buffer,
+    body: UploadBody,
     path: string,
     options: UploadOptions = {},
   ): Promise<UploadResult> {
-    if (!Buffer.isBuffer(buffer)) {
+    if (body === undefined || body === null) {
       throw new TypeError(
-        'StorageClient.upload: expected a Buffer. Read the file first if you have a path.',
+        'StorageClient.upload: expected file content (Blob, File, ArrayBuffer, ' +
+          'TypedArray, Buffer or string).',
       );
     }
-    const form = new FormData();
-    form.append('file', buffer, {
-      filename: basename(path) || 'file',
-      contentType: options.contentType || 'application/octet-stream',
-    });
-    form.append('path', path);
-    form.append('bucket', options.bucket || DEFAULT_BUCKET);
-    if (options.metadata) {
-      form.append('metadata', JSON.stringify(options.metadata));
-    }
+    const form = buildMultipart(
+      {
+        body,
+        filename: basename(path),
+        contentType: options.contentType || 'application/octet-stream',
+      },
+      {
+        path,
+        bucket: options.bucket || DEFAULT_BUCKET,
+        metadata: options.metadata ? JSON.stringify(options.metadata) : undefined,
+      },
+    );
     return this.http.postForm<UploadResult>(API_ENDPOINTS.STORAGE.UPLOAD, form);
+  }
+
+  /**
+   * A presigned PUT the CLIENT uploads to directly.
+   *
+   * The path a mobile app should take for recordings, photos and video: the
+   * bytes go to storage, never through the app's worker, so a long upload
+   * costs no worker time, no CPU budget and no request-size ceiling. Follow
+   * it with a call that records where the file landed.
+   */
+  async createUploadUrl(
+    path: string,
+    options: { bucket?: string; expiresInSeconds?: number; contentType?: string } = {},
+  ): Promise<SignedUrlResult> {
+    return this.http.post<SignedUrlResult>(API_ENDPOINTS.STORAGE.SIGNED_URL, {
+      bucket: options.bucket || DEFAULT_BUCKET,
+      path,
+      operation: 'upload' as const,
+      expiresInSeconds: options.expiresInSeconds ?? 3600,
+      contentType: options.contentType,
+    });
   }
 
   /**
@@ -125,8 +162,3 @@ export class StorageClient {
   }
 }
 
-function basename(p: string): string {
-  const clean = p.replace(/\\/g, '/');
-  const idx = clean.lastIndexOf('/');
-  return idx === -1 ? clean : clean.slice(idx + 1);
-}

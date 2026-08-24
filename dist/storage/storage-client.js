@@ -1,10 +1,7 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StorageClient = void 0;
-const form_data_1 = __importDefault(require("form-data"));
+const multipart_1 = require("../core/multipart");
 const constants_1 = require("../constants");
 const DEFAULT_BUCKET = 'default';
 /**
@@ -17,29 +14,59 @@ const DEFAULT_BUCKET = 'default';
  *   client.storage.list({ prefix: 'avatars/' })
  *   client.storage.createSignedUrl('avatars/alice.png', 3600)
  *
- * Buffers are the primary upload input. Strings (filesystem paths) work
- * only in Node — in Workers the SDK has no `fs` access, so the caller
- * must read the file themselves and pass the bytes.
+ * Upload input is anything the runtime holds — Blob, File, ArrayBuffer,
+ * typed array, Buffer or string. The SDK has no `fs` access in a Worker, so
+ * a filesystem path must be read by the caller first.
  */
 class StorageClient {
     constructor(http) {
         this.http = http;
     }
-    async upload(buffer, path, options = {}) {
-        if (!Buffer.isBuffer(buffer)) {
-            throw new TypeError('StorageClient.upload: expected a Buffer. Read the file first if you have a path.');
+    /**
+     * Upload bytes.
+     *
+     * Accepts whatever the runtime happens to hold: a `File` a worker just
+     * received, a `Blob`, an `ArrayBuffer` or typed array from a fetch, a
+     * Node `Buffer`, or a plain string. Previously this demanded a Buffer,
+     * which forced every one of those through a conversion the SDK can do
+     * itself — and which only worked in a Worker at all because
+     * `nodejs_compat` shims Buffer.
+     *
+     * For anything large, prefer `createUploadUrl()`: it sends the bytes
+     * straight to storage instead of through the app's worker.
+     */
+    async upload(body, path, options = {}) {
+        if (body === undefined || body === null) {
+            throw new TypeError('StorageClient.upload: expected file content (Blob, File, ArrayBuffer, ' +
+                'TypedArray, Buffer or string).');
         }
-        const form = new form_data_1.default();
-        form.append('file', buffer, {
-            filename: basename(path) || 'file',
+        const form = (0, multipart_1.buildMultipart)({
+            body,
+            filename: (0, multipart_1.basename)(path),
             contentType: options.contentType || 'application/octet-stream',
+        }, {
+            path,
+            bucket: options.bucket || DEFAULT_BUCKET,
+            metadata: options.metadata ? JSON.stringify(options.metadata) : undefined,
         });
-        form.append('path', path);
-        form.append('bucket', options.bucket || DEFAULT_BUCKET);
-        if (options.metadata) {
-            form.append('metadata', JSON.stringify(options.metadata));
-        }
         return this.http.postForm(constants_1.API_ENDPOINTS.STORAGE.UPLOAD, form);
+    }
+    /**
+     * A presigned PUT the CLIENT uploads to directly.
+     *
+     * The path a mobile app should take for recordings, photos and video: the
+     * bytes go to storage, never through the app's worker, so a long upload
+     * costs no worker time, no CPU budget and no request-size ceiling. Follow
+     * it with a call that records where the file landed.
+     */
+    async createUploadUrl(path, options = {}) {
+        return this.http.post(constants_1.API_ENDPOINTS.STORAGE.SIGNED_URL, {
+            bucket: options.bucket || DEFAULT_BUCKET,
+            path,
+            operation: 'upload',
+            expiresInSeconds: options.expiresInSeconds ?? 3600,
+            contentType: options.contentType,
+        });
     }
     /**
      * Returns a short-lived signed URL the caller can follow to download
@@ -92,9 +119,4 @@ class StorageClient {
     }
 }
 exports.StorageClient = StorageClient;
-function basename(p) {
-    const clean = p.replace(/\\/g, '/');
-    const idx = clean.lastIndexOf('/');
-    return idx === -1 ? clean : clean.slice(idx + 1);
-}
 //# sourceMappingURL=storage-client.js.map

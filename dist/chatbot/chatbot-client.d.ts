@@ -1,4 +1,5 @@
 import { HttpClient } from '../core/http-client';
+import { UploadBody } from '../core/multipart';
 import { ChatbotConfig, ChatbotConfigPatch, ChatbotDocument, ChatbotMessage, SendMessageInput, SendMessageResult, UploadDocumentOptions } from './types';
 /**
  * Customer-support chatbot with RAG.
@@ -11,7 +12,7 @@ import { ChatbotConfig, ChatbotConfigPatch, ChatbotDocument, ChatbotMessage, Sen
  *   await client.chatbot.updateConfig({ welcomeMessage: 'Hi there!' })
  *   await client.chatbot.uploadDocument(pdfBuffer, { title: 'Help Center' })
  *
- * Uploads accept PDF bytes (Buffer), a URL, or raw text. The server
+ * Uploads accept PDF bytes (Blob/File/ArrayBuffer/Buffer), a URL, or raw text. The server
  * chunks + embeds in the background via BullMQ — document `status`
  * moves `pending → processing → ready`.
  */
@@ -27,7 +28,7 @@ export declare class ChatbotClient {
      * Upload a PDF by bytes. For URL / text ingestion, use the dedicated
      * methods below.
      */
-    uploadDocument(pdfBuffer: Buffer, options?: UploadDocumentOptions): Promise<ChatbotDocument>;
+    uploadDocument(file: UploadBody, options?: UploadDocumentOptions): Promise<ChatbotDocument>;
     uploadDocumentFromUrl(title: string, url: string): Promise<ChatbotDocument>;
     uploadDocumentFromText(title: string, content: string): Promise<ChatbotDocument>;
     deleteDocument(documentId: string): Promise<void>;
