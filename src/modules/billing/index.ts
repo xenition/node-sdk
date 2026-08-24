@@ -7,7 +7,9 @@ export {
   isExpired,
 } from './billing-client';
 export type { RecordPurchaseInput } from './billing-client';
-export { AppleStore, msToIso, toRecordInput } from './apple';
+export { AppleStore, environmentOf, msToIso, toRecordInput } from './apple';
+export { GoogleStore } from './google';
+export type { GoogleConfig } from './google';
 export type { AppleConfig, AppleTransaction } from './apple';
 export {
   base64UrlToBytes,

@@ -50,8 +50,8 @@ export { CartClient, cartModule, CART_MIGRATIONS, CART_TABLES } from './modules/
 export type { CartStatus, CartRecord, CartItem, CartItemView, CartView, } from './modules/cart';
 export { OrdersClient, ordersModule, ORDERS_MIGRATIONS, ORDERS_TABLES } from './modules/orders';
 export type { OrderStatus, OrderRecord, OrderItem, OrderWithItems, CreateOrderInput, MarkPaidInput, ListOrdersOptions, } from './modules/orders';
-export { BillingClient, billingModule, BILLING_MIGRATIONS, BILLING_TABLES, AppleStore, } from './modules/billing';
-export type { AppleConfig, AppleTransaction } from './modules/billing';
+export { BillingClient, billingModule, BILLING_MIGRATIONS, BILLING_TABLES, AppleStore, GoogleStore, } from './modules/billing';
+export type { AppleConfig, AppleTransaction, GoogleConfig } from './modules/billing';
 export type { BillingEvent, BillingPlatform, BillingProduct, DefineProductInput, Entitlement, EntitlementCheck, EntitlementSource, EntitlementStatus, GrantInput, ProductKind, Purchase, PurchaseStatus, RecordPurchaseInput, StartTrialInput, ListProductsOptions as ListBillingProductsOptions, ListPurchasesOptions, } from './modules/billing';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
