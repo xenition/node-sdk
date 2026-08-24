@@ -57,5 +57,7 @@ export { JobsClient, jobsModule, JOBS_MIGRATIONS, JOBS_TABLE } from './modules/j
 export type { ClaimOptions, EnqueueOptions, FailOptions, Job, JobHandler, JobStatus, WorkSummary, ListJobsOptions as ListJobsQueryOptions, } from './modules/jobs';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
+export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';
+export type { HttpClientOptions, RequestErrorEvent, RequestEvent, RequestOptions, ResponseEvent, } from './core/http-client';
 export { XENITION_BASE_URL } from './constants';
 //# sourceMappingURL=index.d.ts.map

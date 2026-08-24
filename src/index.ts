@@ -403,5 +403,15 @@ export {
 } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 
+// HTTP layer (observability hooks, idempotency, request correlation)
+export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';
+export type {
+  HttpClientOptions,
+  RequestErrorEvent,
+  RequestEvent,
+  RequestOptions,
+  ResponseEvent,
+} from './core/http-client';
+
 // Constants (exposed for tooling; generated apps don't usually import these)
 export { XENITION_BASE_URL } from './constants';
