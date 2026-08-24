@@ -90,3 +90,21 @@ export function jsonNotFound(c: Context): Response {
 export function badRequest(c: Context, message: string): Response {
   return c.json(errorBody('VALIDATION_ERROR', message), 400);
 }
+
+/**
+ * 401 — the CALLER did not prove who they are (missing/invalid/expired
+ * end-user token).
+ *
+ * Deliberately not routed through `statusForCode`: an `AUTH_*`
+ * XenitionError reaching the shared handler means the worker's OWN service
+ * key was rejected, which is a 502 config problem. End-user auth failures
+ * are answered here so the two never blur together.
+ */
+export function unauthorized(c: Context, message: string, code = 'UNAUTHORIZED'): Response {
+  return c.json(errorBody(code, message), 401);
+}
+
+/** 403 — the caller is known, but not allowed to do this. */
+export function forbidden(c: Context, message: string, code = 'FORBIDDEN'): Response {
+  return c.json(errorBody(code, message), 403);
+}

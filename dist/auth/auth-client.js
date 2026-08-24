@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthClient = void 0;
+const errors_1 = require("../core/errors");
 const constants_1 = require("../constants");
 /**
  * Auth client — wraps the xenition backend's `/app-platform/auth/*`
@@ -15,6 +16,15 @@ const constants_1 = require("../constants");
  * an anon-key caller hits one of these, the SDK throws
  * `XenitionError(code: 'AUTH_FORBIDDEN')`.
  */
+/**
+ * Per-request `Authorization` header for calls made ON BEHALF OF an end
+ * user, or `undefined` to fall back to the client's own API key.
+ *
+ * Deliberately per request rather than `client.setHeader()`: a backend
+ * worker handles many users concurrently through ONE client, and mutating
+ * shared default headers would let one request's token leak into another's.
+ */
+const asUser = (accessToken) => accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined;
 class AuthClient {
     constructor(http) {
         this.http = http;
@@ -26,14 +36,33 @@ class AuthClient {
     login(input) {
         return this.http.post(constants_1.API_ENDPOINTS.AUTH.LOGIN, input);
     }
-    logout() {
-        return this.http.post(constants_1.API_ENDPOINTS.AUTH.LOGOUT);
+    logout(accessToken) {
+        return this.http.post(constants_1.API_ENDPOINTS.AUTH.LOGOUT, undefined, asUser(accessToken));
     }
-    me() {
-        return this.http.get(constants_1.API_ENDPOINTS.AUTH.ME);
+    me(accessToken) {
+        return this.http.get(constants_1.API_ENDPOINTS.AUTH.ME, asUser(accessToken));
     }
-    updateProfile(input) {
-        return this.http.patch(constants_1.API_ENDPOINTS.AUTH.UPDATE_PROFILE, input);
+    updateProfile(input, accessToken) {
+        return this.http.patch(constants_1.API_ENDPOINTS.AUTH.UPDATE_PROFILE, input, asUser(accessToken));
+    }
+    /**
+     * Resolve the end user an access token belongs to.
+     *
+     * This is the server-side half of end-user auth: a backend holding the
+     * SERVICE key takes the `Authorization: Bearer <token>` its mobile/web
+     * client sent, and asks the platform who that token is. The token is
+     * carried per request, so one shared client can serve many concurrent
+     * users without `setHeader()` mutation racing between them.
+     *
+     * Throws the usual typed errors — `AUTH_INVALID_TOKEN` /
+     * `AUTH_EXPIRED_TOKEN` when the platform rejects the token — so callers
+     * can distinguish "bad token" (401) from "platform is down" (502).
+     */
+    verifyToken(accessToken) {
+        if (typeof accessToken !== 'string' || accessToken.trim() === '') {
+            throw new errors_1.XenitionError('AUTH_INVALID_TOKEN', 'AuthClient.verifyToken: an access token is required.');
+        }
+        return this.me(accessToken);
     }
     // ────────── Admin user operations (service key only) ─────────────────────
     getUserById(userId) {

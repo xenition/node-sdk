@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.openApiRouter = exports.buildOpenApi = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
+exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.unauthorized = exports.forbidden = exports.badRequest = exports.bearerToken = exports.requireUser = exports.currentUserId = exports.currentUser = exports.requireAuth = exports.xenitionAuth = exports.openApiRouter = exports.buildOpenApi = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
 exports.createXenitionApi = createXenitionApi;
 const hono_1 = require("hono");
 const cms_router_1 = require("./cms-router");
@@ -125,6 +125,17 @@ Object.defineProperty(exports, "verifyStripeSignature", { enumerable: true, get:
 var docs_2 = require("./docs");
 Object.defineProperty(exports, "buildOpenApi", { enumerable: true, get: function () { return docs_2.buildOpenApi; } });
 Object.defineProperty(exports, "openApiRouter", { enumerable: true, get: function () { return docs_2.openApiRouter; } });
+var auth_1 = require("./auth");
+Object.defineProperty(exports, "xenitionAuth", { enumerable: true, get: function () { return auth_1.xenitionAuth; } });
+Object.defineProperty(exports, "requireAuth", { enumerable: true, get: function () { return auth_1.requireAuth; } });
+Object.defineProperty(exports, "currentUser", { enumerable: true, get: function () { return auth_1.currentUser; } });
+Object.defineProperty(exports, "currentUserId", { enumerable: true, get: function () { return auth_1.currentUserId; } });
+Object.defineProperty(exports, "requireUser", { enumerable: true, get: function () { return auth_1.requireUser; } });
+Object.defineProperty(exports, "bearerToken", { enumerable: true, get: function () { return auth_1.bearerToken; } });
+var errors_2 = require("./errors");
+Object.defineProperty(exports, "badRequest", { enumerable: true, get: function () { return errors_2.badRequest; } });
+Object.defineProperty(exports, "forbidden", { enumerable: true, get: function () { return errors_2.forbidden; } });
+Object.defineProperty(exports, "unauthorized", { enumerable: true, get: function () { return errors_2.unauthorized; } });
 var normalize_1 = require("./normalize");
 Object.defineProperty(exports, "camelizeKey", { enumerable: true, get: function () { return normalize_1.camelizeKey; } });
 Object.defineProperty(exports, "normalizeRow", { enumerable: true, get: function () { return normalize_1.normalizeRow; } });

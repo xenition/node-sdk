@@ -1,28 +1,29 @@
 import { HttpClient } from '../core/http-client';
 import { AuthResponse, ConfigureSocialProviderInput, LoginInput, OAuthProvider, OAuthUrlResult, PagedResult, RegisterInput, ResetPasswordInput, SearchUsersOptions, ListUsersOptions, SocialProviderStatus, Team, TeamInvitationInput, UpdateProfileInput, User } from './types';
-/**
- * Auth client — wraps the xenition backend's `/app-platform/auth/*`
- * surface. Used through `xenition.auth`, not instantiated directly.
- *
- * Every method accepts a plain request object and returns a plain
- * response type — no `.data` unwrapping needed by callers.
- *
- * Methods that require a service key:
- *   getUserById, listUsers, searchUsers, updateUser
- * The server enforces this via the `permissions` array on the key; if
- * an anon-key caller hits one of these, the SDK throws
- * `XenitionError(code: 'AUTH_FORBIDDEN')`.
- */
 export declare class AuthClient {
     private readonly http;
     constructor(http: HttpClient);
     register(input: RegisterInput): Promise<AuthResponse>;
     login(input: LoginInput): Promise<AuthResponse>;
-    logout(): Promise<{
+    logout(accessToken?: string): Promise<{
         ok: true;
     }>;
-    me(): Promise<User>;
-    updateProfile(input: UpdateProfileInput): Promise<User>;
+    me(accessToken?: string): Promise<User>;
+    updateProfile(input: UpdateProfileInput, accessToken?: string): Promise<User>;
+    /**
+     * Resolve the end user an access token belongs to.
+     *
+     * This is the server-side half of end-user auth: a backend holding the
+     * SERVICE key takes the `Authorization: Bearer <token>` its mobile/web
+     * client sent, and asks the platform who that token is. The token is
+     * carried per request, so one shared client can serve many concurrent
+     * users without `setHeader()` mutation racing between them.
+     *
+     * Throws the usual typed errors — `AUTH_INVALID_TOKEN` /
+     * `AUTH_EXPIRED_TOKEN` when the platform rejects the token — so callers
+     * can distinguish "bad token" (401) from "platform is down" (502).
+     */
+    verifyToken(accessToken: string): Promise<User>;
     getUserById(userId: string): Promise<User>;
     updateUser(userId: string, patch: Partial<User>): Promise<User>;
     listUsers(options?: ListUsersOptions): Promise<PagedResult<User>>;

@@ -7,4 +7,16 @@ export declare function honoErrorHandler(err: Error | unknown, c: Context): Resp
 export declare function jsonNotFound(c: Context): Response;
 /** 400 helper for router-level input validation (query params, body shape). */
 export declare function badRequest(c: Context, message: string): Response;
+/**
+ * 401 — the CALLER did not prove who they are (missing/invalid/expired
+ * end-user token).
+ *
+ * Deliberately not routed through `statusForCode`: an `AUTH_*`
+ * XenitionError reaching the shared handler means the worker's OWN service
+ * key was rejected, which is a 502 config problem. End-user auth failures
+ * are answered here so the two never blur together.
+ */
+export declare function unauthorized(c: Context, message: string, code?: string): Response;
+/** 403 — the caller is known, but not allowed to do this. */
+export declare function forbidden(c: Context, message: string, code?: string): Response;
 //# sourceMappingURL=errors.d.ts.map

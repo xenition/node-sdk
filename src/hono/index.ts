@@ -99,6 +99,16 @@ export { ordersRouter } from './orders-router';
 export { checkoutRouter, verifyStripeSignature } from './checkout-router';
 export { buildOpenApi, openApiRouter } from './docs';
 export type { DocsOptions, OpenApiRouterOptions } from './docs';
+export {
+  xenitionAuth,
+  requireAuth,
+  currentUser,
+  currentUserId,
+  requireUser,
+  bearerToken,
+} from './auth';
+export type { AuthUser, XenitionAuthOptions } from './auth';
+export { badRequest, forbidden, unauthorized } from './errors';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';

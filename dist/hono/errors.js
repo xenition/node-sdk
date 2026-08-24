@@ -4,6 +4,8 @@ exports.scrubMessage = scrubMessage;
 exports.honoErrorHandler = honoErrorHandler;
 exports.jsonNotFound = jsonNotFound;
 exports.badRequest = badRequest;
+exports.unauthorized = unauthorized;
+exports.forbidden = forbidden;
 const errors_1 = require("../core/errors");
 const client_1 = require("./client");
 const GENERIC_UPSTREAM = 'Upstream request failed.';
@@ -70,5 +72,21 @@ function jsonNotFound(c) {
 /** 400 helper for router-level input validation (query params, body shape). */
 function badRequest(c, message) {
     return c.json(errorBody('VALIDATION_ERROR', message), 400);
+}
+/**
+ * 401 — the CALLER did not prove who they are (missing/invalid/expired
+ * end-user token).
+ *
+ * Deliberately not routed through `statusForCode`: an `AUTH_*`
+ * XenitionError reaching the shared handler means the worker's OWN service
+ * key was rejected, which is a 502 config problem. End-user auth failures
+ * are answered here so the two never blur together.
+ */
+function unauthorized(c, message, code = 'UNAUTHORIZED') {
+    return c.json(errorBody(code, message), 401);
+}
+/** 403 — the caller is known, but not allowed to do this. */
+function forbidden(c, message, code = 'FORBIDDEN') {
+    return c.json(errorBody(code, message), 403);
 }
 //# sourceMappingURL=errors.js.map
