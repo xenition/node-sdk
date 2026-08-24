@@ -340,8 +340,15 @@ export {
   BILLING_TABLES,
   AppleStore,
   GoogleStore,
+  handleAppleNotification,
+  handleGoogleNotification,
 } from './modules/billing';
-export type { AppleConfig, AppleTransaction, GoogleConfig } from './modules/billing';
+export type {
+  AppleConfig,
+  AppleTransaction,
+  GoogleConfig,
+  NotificationResult,
+} from './modules/billing';
 export type {
   BillingEvent,
   BillingPlatform,

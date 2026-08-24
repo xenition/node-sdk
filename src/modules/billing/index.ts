@@ -9,6 +9,12 @@ export {
 export type { RecordPurchaseInput } from './billing-client';
 export { AppleStore, environmentOf, msToIso, toRecordInput } from './apple';
 export { GoogleStore } from './google';
+export { handleAppleNotification, handleGoogleNotification } from './notifications';
+export type {
+  AppleNotificationOptions,
+  GoogleNotificationOptions,
+  NotificationResult,
+} from './notifications';
 export type { GoogleConfig } from './google';
 export type { AppleConfig, AppleTransaction } from './apple';
 export {

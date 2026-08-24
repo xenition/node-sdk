@@ -9,6 +9,7 @@ import {
   requireNonEmptyString,
 } from '../util';
 import {
+  BillingEvent,
   BillingPlatform,
   BillingProduct,
   DefineProductInput,
@@ -491,6 +492,62 @@ export class BillingClient {
       .where('user_id', userId)
       .where('entitlement', entitlement)
       .first<Entitlement>();
+    return row ?? null;
+  }
+
+  // ────────── Store notifications ──────────────────────────────────────────
+
+  /**
+   * Record a store notification, or report that it has already been seen.
+   *
+   * Returns false for a replay. Apple retries for three days and Pub/Sub
+   * redelivers at least once, so every notification arrives more than once
+   * in normal operation — this is the guard that makes handling them safe.
+   *
+   * Check-then-insert, with the unique index on `(platform, event_id)` as
+   * the real backstop: two simultaneous redeliveries can both pass the
+   * check, and the second insert then fails at the database instead of
+   * double-applying.
+   */
+  async recordEvent(input: {
+    platform: BillingPlatform;
+    notificationType: string;
+    originalTransactionId?: string | null;
+    eventId: string;
+    payload?: Record<string, unknown>;
+  }): Promise<boolean> {
+    const context = 'BillingClient.recordEvent';
+    const platform = this.requirePlatform(context, input?.platform);
+    const eventId = requireNonEmptyString(context, 'eventId', input?.eventId);
+    const notificationType = requireNonEmptyString(
+      context,
+      'notificationType',
+      input?.notificationType,
+    );
+
+    if (await this.findEvent(platform, eventId)) return false;
+
+    await this.ctx.query
+      .from(BILLING_TABLES.EVENTS)
+      .insert({
+        id: generateId(),
+        platform,
+        notification_type: notificationType,
+        original_transaction_id: input?.originalTransactionId ?? null,
+        event_id: eventId,
+        payload: optionalPlainObject(context, 'payload', input?.payload, {}),
+      })
+      .execute();
+    return true;
+  }
+
+  /** A previously recorded notification, or null. */
+  async findEvent(platform: BillingPlatform, eventId: string): Promise<BillingEvent | null> {
+    const row = await this.ctx.query
+      .from(BILLING_TABLES.EVENTS)
+      .where('platform', platform)
+      .where('event_id', eventId)
+      .first<BillingEvent>();
     return row ?? null;
   }
 
