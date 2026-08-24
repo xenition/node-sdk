@@ -96,6 +96,19 @@ export declare class HttpClient {
      * sent alongside.
      */
     postForm<T>(url: string, form: unknown, config?: RequestOptions): Promise<T>;
+    /**
+     * POST and hand back the raw `Response`, body unread.
+     *
+     * The one call that deliberately bypasses axios and the envelope. Both
+     * exist to give callers a finished value, which is exactly wrong for a
+     * stream: by the time axios resolves, the body it was supposed to deliver
+     * incrementally has already been buffered.
+     *
+     * The caller owns the body and must consume or cancel it. Errors are still
+     * normalized, so a failed stream throws the same `XenitionError` shape as
+     * everything else rather than a bare Response.
+     */
+    stream(url: string, body?: unknown, config?: RequestOptions): Promise<Response>;
     private request;
     /**
      * Hooks are observability, so a throwing hook must never become the

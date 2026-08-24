@@ -73,6 +73,10 @@ export const API_ENDPOINTS = {
     IMAGE:      '/app-platform/ai/image',
     VIDEO:      '/app-platform/ai/video',
     EMBEDDINGS: '/app-platform/ai/embeddings',
+    // Mobile/media surface — see docs/PLATFORM-ENDPOINTS.md.
+    TRANSCRIBE: '/app-platform/ai/transcribe',
+    SPEECH:     '/app-platform/ai/speech',
+    CHAT_STREAM:'/app-platform/ai/chat/stream',
     KEYS:       '/app-platform/ai/keys',
     KEY:        (id: string) => `/app-platform/ai/keys/${id}`,
   },

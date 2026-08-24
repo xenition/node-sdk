@@ -67,6 +67,9 @@ export declare const API_ENDPOINTS: {
         readonly IMAGE: "/app-platform/ai/image";
         readonly VIDEO: "/app-platform/ai/video";
         readonly EMBEDDINGS: "/app-platform/ai/embeddings";
+        readonly TRANSCRIBE: "/app-platform/ai/transcribe";
+        readonly SPEECH: "/app-platform/ai/speech";
+        readonly CHAT_STREAM: "/app-platform/ai/chat/stream";
         readonly KEYS: "/app-platform/ai/keys";
         readonly KEY: (id: string) => string;
     };

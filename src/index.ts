@@ -74,7 +74,7 @@ export type {
 } from './push';
 
 // AI module
-export { AiClient, AiKeysClient } from './ai';
+export { AiClient, AiKeysClient, parseSseStream } from './ai';
 export type {
   AiProvider,
   AiUsage,
@@ -92,6 +92,14 @@ export type {
   GenerateEmbeddingsOptions,
   CreateAiKeyInput,
   UpdateAiKeyInput,
+  ChatDelta,
+  ResponseFormat,
+  SpeechFormat,
+  SpeechOptions,
+  SpeechOutput,
+  TranscribeOptions,
+  TranscribeOutput,
+  TranscribedWord,
 } from './ai';
 
 // Chatbot module

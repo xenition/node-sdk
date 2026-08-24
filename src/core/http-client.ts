@@ -181,6 +181,53 @@ export class HttpClient {
     return this.request<T>(merged);
   }
 
+  /**
+   * POST and hand back the raw `Response`, body unread.
+   *
+   * The one call that deliberately bypasses axios and the envelope. Both
+   * exist to give callers a finished value, which is exactly wrong for a
+   * stream: by the time axios resolves, the body it was supposed to deliver
+   * incrementally has already been buffered.
+   *
+   * The caller owns the body and must consume or cancel it. Errors are still
+   * normalized, so a failed stream throws the same `XenitionError` shape as
+   * everything else rather than a bare Response.
+   */
+  async stream(url: string, body?: unknown, config: RequestOptions = {}): Promise<Response> {
+    const fetchImpl = globalThis.fetch;
+    if (typeof fetchImpl !== 'function') {
+      throw new XenitionError(
+        'NETWORK_ERROR',
+        'HttpClient.stream: no global fetch available in this runtime.',
+      );
+    }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      [REQUEST_ID_HEADER]: this.newRequestId(),
+      ...(this.axios.defaults.headers.common as Record<string, string>),
+      ...((config.headers ?? {}) as Record<string, string>),
+    };
+    const apiKey = this.axios.defaults.headers['x-api-key'];
+    if (typeof apiKey === 'string') headers['x-api-key'] = apiKey;
+
+    const response = await fetchImpl(`${this.baseUrl}${url}`, {
+      method: 'POST',
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new XenitionError(
+        this.classifyStatus(response.status),
+        detail ? detail.slice(0, 300) : `Request failed with ${response.status}`,
+        { status: response.status },
+      );
+    }
+    return response;
+  }
+
   // ────────── Internals ────────────────────────────────────────────────────
 
   private async request<T>(config: AxiosRequestConfig): Promise<T> {
