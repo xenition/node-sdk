@@ -1,6 +1,8 @@
 import { HttpClient } from '../core/http-client';
 import { XenitionError } from '../core/errors';
 import { QueryClient } from '../query/query-client';
+import { PushClient } from '../push/push-client';
+import { EmailClient } from '../email/email-client';
 import { MigrationsClient } from '../migrations/migrations-client';
 import { ModuleContext, ModuleDefinition } from './core';
 import { CmsClient, cmsModule } from './cms';
@@ -16,6 +18,7 @@ import { CartClient, cartModule } from './cart';
 import { OrdersClient, ordersModule } from './orders';
 import { BillingClient, billingModule } from './billing';
 import { JobsClient, jobsModule } from './jobs';
+import { NotificationsClient, notificationsModule } from './notifications';
 
 export type ModuleName =
   | 'cms'
@@ -30,7 +33,8 @@ export type ModuleName =
   | 'cart'
   | 'orders'
   | 'billing'
-  | 'jobs';
+  | 'jobs'
+  | 'notifications';
 
 /**
  * `client.modules` — the module framework entry point.
@@ -68,6 +72,7 @@ export class ModulesClient {
     orders: ordersModule,
     billing: billingModule,
     jobs: jobsModule,
+    notifications: notificationsModule,
   };
 
   constructor(
@@ -78,6 +83,8 @@ export class ModulesClient {
     this.ctx = {
       query,
       raw: (sql, params = []) => query.raw(sql, params),
+      push: new PushClient(http),
+      email: new EmailClient(http),
     };
   }
 
@@ -117,6 +124,11 @@ export class ModulesClient {
   /** Whether enable()/use() has been called for the module in this client. */
   isEnabled(name: ModuleName): boolean {
     return this.enabled.has(name);
+  }
+
+  /** Inbox, preferences, quiet hours, scheduled sends. See modules/notifications. */
+  get notifications(): NotificationsClient {
+    return this.access<NotificationsClient>('notifications');
   }
 
   /** Deferred and background work. See modules/jobs. */

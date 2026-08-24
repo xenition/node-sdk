@@ -392,6 +392,27 @@ export type {
   ListJobsOptions as ListJobsQueryOptions,
 } from './modules/jobs';
 
+// notifications module (inbox, preferences, quiet hours, scheduling)
+export {
+  NotificationsClient,
+  notificationsModule,
+  NOTIFICATIONS_MIGRATIONS,
+  NOTIFICATIONS_TABLES,
+} from './modules/notifications';
+export type {
+  ListNotificationsResult,
+  NotificationChannel,
+  NotificationPreference,
+  NotificationRecord,
+  NotifyInput,
+  NotifyResult,
+  PreferencePatch,
+  ScheduleInput,
+  ScheduledNotification,
+  ScheduledStatus,
+  ListNotificationsOptions as ListInboxOptions,
+} from './modules/notifications';
+
 // Errors
 export {
   XenitionError,

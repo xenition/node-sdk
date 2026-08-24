@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ModulesClient = void 0;
 const errors_1 = require("../core/errors");
 const query_client_1 = require("../query/query-client");
+const push_client_1 = require("../push/push-client");
+const email_client_1 = require("../email/email-client");
 const cms_1 = require("./cms");
 const forms_1 = require("./forms");
 const reviews_1 = require("./reviews");
@@ -16,6 +18,7 @@ const cart_1 = require("./cart");
 const orders_1 = require("./orders");
 const billing_1 = require("./billing");
 const jobs_1 = require("./jobs");
+const notifications_1 = require("./notifications");
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -53,11 +56,14 @@ class ModulesClient {
             orders: orders_1.ordersModule,
             billing: billing_1.billingModule,
             jobs: jobs_1.jobsModule,
+            notifications: notifications_1.notificationsModule,
         };
         const query = new query_client_1.QueryClient(http);
         this.ctx = {
             query,
             raw: (sql, params = []) => query.raw(sql, params),
+            push: new push_client_1.PushClient(http),
+            email: new email_client_1.EmailClient(http),
         };
     }
     /**
@@ -93,6 +99,10 @@ class ModulesClient {
     /** Whether enable()/use() has been called for the module in this client. */
     isEnabled(name) {
         return this.enabled.has(name);
+    }
+    /** Inbox, preferences, quiet hours, scheduled sends. See modules/notifications. */
+    get notifications() {
+        return this.access('notifications');
     }
     /** Deferred and background work. See modules/jobs. */
     get jobs() {
