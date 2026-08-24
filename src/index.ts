@@ -332,6 +332,33 @@ export type {
   ListOrdersOptions,
 } from './modules/orders';
 
+// billing module (in-app purchases + entitlements)
+export {
+  BillingClient,
+  billingModule,
+  BILLING_MIGRATIONS,
+  BILLING_TABLES,
+} from './modules/billing';
+export type {
+  BillingEvent,
+  BillingPlatform,
+  BillingProduct,
+  DefineProductInput,
+  Entitlement,
+  EntitlementCheck,
+  EntitlementSource,
+  EntitlementStatus,
+  GrantInput,
+  ProductKind,
+  Purchase,
+  PurchaseStatus,
+  RecordPurchaseInput,
+  StartTrialInput,
+  // Aliased — the catalog module already exports a list-products option type.
+  ListProductsOptions as ListBillingProductsOptions,
+  ListPurchasesOptions,
+} from './modules/billing';
+
 // Errors
 export {
   XenitionError,

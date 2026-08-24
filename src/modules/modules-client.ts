@@ -14,6 +14,7 @@ import { CatalogClient, catalogModule } from './catalog';
 import { InventoryClient, inventoryModule } from './inventory';
 import { CartClient, cartModule } from './cart';
 import { OrdersClient, ordersModule } from './orders';
+import { BillingClient, billingModule } from './billing';
 
 export type ModuleName =
   | 'cms'
@@ -26,7 +27,8 @@ export type ModuleName =
   | 'catalog'
   | 'inventory'
   | 'cart'
-  | 'orders';
+  | 'orders'
+  | 'billing';
 
 /**
  * `client.modules` — the module framework entry point.
@@ -62,6 +64,7 @@ export class ModulesClient {
     inventory: inventoryModule,
     cart: cartModule,
     orders: ordersModule,
+    billing: billingModule,
   };
 
   constructor(
@@ -111,6 +114,11 @@ export class ModulesClient {
   /** Whether enable()/use() has been called for the module in this client. */
   isEnabled(name: ModuleName): boolean {
     return this.enabled.has(name);
+  }
+
+  /** In-app purchases + entitlements. See modules/billing. */
+  get billing(): BillingClient {
+    return this.access<BillingClient>('billing');
   }
 
   get cms(): CmsClient {
