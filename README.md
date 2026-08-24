@@ -4,6 +4,10 @@ Official Node.js SDK for Xenition. Gives apps created via xenition's seller
 dashboard an auth / query / storage / chatbot / payments / push / email /
 AI / search surface over HTTPS.
 
+> **Picking up the mobile-backend work?** Start with
+> **[HANDOVER.md](HANDOVER.md)** — what was added, what was fixed, what is
+> still owed, and the traps to avoid.
+
 ## Install
 
 ```bash
