@@ -338,7 +338,9 @@ export {
   billingModule,
   BILLING_MIGRATIONS,
   BILLING_TABLES,
+  AppleStore,
 } from './modules/billing';
+export type { AppleConfig, AppleTransaction } from './modules/billing';
 export type {
   BillingEvent,
   BillingPlatform,
