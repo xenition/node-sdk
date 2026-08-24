@@ -72,6 +72,13 @@ class XenitionClient {
         return this.query.raw(sql, params);
     }
     /**
+     * Run several statements as one transaction — all commit or none do.
+     * Service-key only. See `QueryClient.transaction`.
+     */
+    transaction(statements, options = {}) {
+        return this.query.transaction(statements, options);
+    }
+    /**
      * Escape hatch for adding custom headers (e.g. session token on a
      * subsequent request). Use sparingly — most flows should not need it.
      */

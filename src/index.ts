@@ -421,6 +421,17 @@ export type {
   ListNotificationsOptions as ListInboxOptions,
 } from './modules/notifications';
 
+// quotas module (durable freemium counters)
+export {
+  QuotasClient,
+  quotasModule,
+  QUOTAS_MIGRATIONS,
+  QUOTAS_TABLE,
+  periodEndFor,
+  periodStartFor,
+} from './modules/quotas';
+export type { QuotaPeriod, QuotaState, ConsumeOptions as ConsumeQuotaOptions } from './modules/quotas';
+
 // Errors
 export {
   XenitionError,

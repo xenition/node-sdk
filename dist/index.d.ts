@@ -57,6 +57,8 @@ export { JobsClient, jobsModule, JOBS_MIGRATIONS, JOBS_TABLE } from './modules/j
 export type { ClaimOptions, EnqueueOptions, FailOptions, Job, JobHandler, JobStatus, WorkSummary, ListJobsOptions as ListJobsQueryOptions, } from './modules/jobs';
 export { NotificationsClient, notificationsModule, NOTIFICATIONS_MIGRATIONS, NOTIFICATIONS_TABLES, } from './modules/notifications';
 export type { ListNotificationsResult, NotificationChannel, NotificationPreference, NotificationRecord, NotifyInput, NotifyResult, PreferencePatch, ScheduleInput, ScheduledNotification, ScheduledStatus, ListNotificationsOptions as ListInboxOptions, } from './modules/notifications';
+export { QuotasClient, quotasModule, QUOTAS_MIGRATIONS, QUOTAS_TABLE, periodEndFor, periodStartFor, } from './modules/quotas';
+export type { QuotaPeriod, QuotaState, ConsumeOptions as ConsumeQuotaOptions } from './modules/quotas';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';

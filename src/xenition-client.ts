@@ -102,6 +102,17 @@ export class XenitionClient {
   }
 
   /**
+   * Run several statements as one transaction — all commit or none do.
+   * Service-key only. See `QueryClient.transaction`.
+   */
+  transaction<T = Record<string, unknown>>(
+    statements: Array<{ sql: string; params?: unknown[] }>,
+    options: { idempotencyKey?: string } = {},
+  ): Promise<QueryResult<T>[]> {
+    return this.query.transaction<T>(statements, options);
+  }
+
+  /**
    * Escape hatch for adding custom headers (e.g. session token on a
    * subsequent request). Use sparingly — most flows should not need it.
    */

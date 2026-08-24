@@ -51,6 +51,7 @@ exports.API_ENDPOINTS = {
         COUNT: '/app-platform/query/count',
         EXISTS: '/app-platform/query/exists',
         RAW: '/app-platform/raw',
+        TRANSACTION: '/app-platform/raw/transaction',
     },
     STORAGE: {
         UPLOAD: '/app-platform/storage/upload',

@@ -45,6 +45,7 @@ export declare const API_ENDPOINTS: {
         readonly COUNT: "/app-platform/query/count";
         readonly EXISTS: "/app-platform/query/exists";
         readonly RAW: "/app-platform/raw";
+        readonly TRANSACTION: "/app-platform/raw/transaction";
     };
     readonly STORAGE: {
         readonly UPLOAD: "/app-platform/storage/upload";

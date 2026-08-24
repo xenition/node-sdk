@@ -14,7 +14,8 @@ import { OrdersClient } from './orders';
 import { BillingClient } from './billing';
 import { JobsClient } from './jobs';
 import { NotificationsClient } from './notifications';
-export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory' | 'cart' | 'orders' | 'billing' | 'jobs' | 'notifications';
+import { QuotasClient } from './quotas';
+export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory' | 'cart' | 'orders' | 'billing' | 'jobs' | 'notifications' | 'quotas';
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -56,6 +57,8 @@ export declare class ModulesClient {
     isEnabled(name: ModuleName): boolean;
     /** Inbox, preferences, quiet hours, scheduled sends. See modules/notifications. */
     get notifications(): NotificationsClient;
+    /** Durable usage counters — freemium limits. See modules/quotas. */
+    get quotas(): QuotasClient;
     /** Deferred and background work. See modules/jobs. */
     get jobs(): JobsClient;
     /** In-app purchases + entitlements. See modules/billing. */

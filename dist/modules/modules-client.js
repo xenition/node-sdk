@@ -19,6 +19,7 @@ const orders_1 = require("./orders");
 const billing_1 = require("./billing");
 const jobs_1 = require("./jobs");
 const notifications_1 = require("./notifications");
+const quotas_1 = require("./quotas");
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -57,6 +58,7 @@ class ModulesClient {
             billing: billing_1.billingModule,
             jobs: jobs_1.jobsModule,
             notifications: notifications_1.notificationsModule,
+            quotas: quotas_1.quotasModule,
         };
         const query = new query_client_1.QueryClient(http);
         this.ctx = {
@@ -103,6 +105,10 @@ class ModulesClient {
     /** Inbox, preferences, quiet hours, scheduled sends. See modules/notifications. */
     get notifications() {
         return this.access('notifications');
+    }
+    /** Durable usage counters — freemium limits. See modules/quotas. */
+    get quotas() {
+        return this.access('quotas');
     }
     /** Deferred and background work. See modules/jobs. */
     get jobs() {

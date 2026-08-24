@@ -19,6 +19,7 @@ import { OrdersClient, ordersModule } from './orders';
 import { BillingClient, billingModule } from './billing';
 import { JobsClient, jobsModule } from './jobs';
 import { NotificationsClient, notificationsModule } from './notifications';
+import { QuotasClient, quotasModule } from './quotas';
 
 export type ModuleName =
   | 'cms'
@@ -34,7 +35,8 @@ export type ModuleName =
   | 'orders'
   | 'billing'
   | 'jobs'
-  | 'notifications';
+  | 'notifications'
+  | 'quotas';
 
 /**
  * `client.modules` — the module framework entry point.
@@ -73,6 +75,7 @@ export class ModulesClient {
     billing: billingModule,
     jobs: jobsModule,
     notifications: notificationsModule,
+    quotas: quotasModule,
   };
 
   constructor(
@@ -129,6 +132,11 @@ export class ModulesClient {
   /** Inbox, preferences, quiet hours, scheduled sends. See modules/notifications. */
   get notifications(): NotificationsClient {
     return this.access<NotificationsClient>('notifications');
+  }
+
+  /** Durable usage counters — freemium limits. See modules/quotas. */
+  get quotas(): QuotasClient {
+    return this.access<QuotasClient>('quotas');
   }
 
   /** Deferred and background work. See modules/jobs. */
