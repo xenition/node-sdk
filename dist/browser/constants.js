@@ -13,7 +13,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.API_ENDPOINTS = exports.XENITION_BASE_URL = void 0;
-exports.XENITION_BASE_URL = 'https://api-dev.xenition.com/v1';
+exports.XENITION_BASE_URL = 'https://api.xenition.com/v1';
 exports.API_ENDPOINTS = {
     AUTH: {
         REGISTER: '/app-platform/auth/register',

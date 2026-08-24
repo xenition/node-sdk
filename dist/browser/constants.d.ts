@@ -10,7 +10,7 @@
  *   "@xenition/sdk": "github:xenition/node-sdk#develop"  // dev
  *   "@xenition/sdk": "github:xenition/node-sdk"          // prod (main)
  */
-export declare const XENITION_BASE_URL = "https://api-dev.xenition.com/v1";
+export declare const XENITION_BASE_URL = "https://api.xenition.com/v1";
 export declare const API_ENDPOINTS: {
     readonly AUTH: {
         readonly REGISTER: "/app-platform/auth/register";

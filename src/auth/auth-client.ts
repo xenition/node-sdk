@@ -1,4 +1,5 @@
 import { HttpClient } from '../core/http-client';
+import { XenitionError } from '../core/errors';
 import { API_ENDPOINTS } from '../constants';
 import {
   AuthResponse,
@@ -31,6 +32,17 @@ import {
  * an anon-key caller hits one of these, the SDK throws
  * `XenitionError(code: 'AUTH_FORBIDDEN')`.
  */
+/**
+ * Per-request `Authorization` header for calls made ON BEHALF OF an end
+ * user, or `undefined` to fall back to the client's own API key.
+ *
+ * Deliberately per request rather than `client.setHeader()`: a backend
+ * worker handles many users concurrently through ONE client, and mutating
+ * shared default headers would let one request's token leak into another's.
+ */
+const asUser = (accessToken?: string) =>
+  accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined;
+
 export class AuthClient {
   constructor(private readonly http: HttpClient) {}
 
@@ -44,16 +56,47 @@ export class AuthClient {
     return this.http.post<AuthResponse>(API_ENDPOINTS.AUTH.LOGIN, input);
   }
 
-  logout(): Promise<{ ok: true }> {
-    return this.http.post<{ ok: true }>(API_ENDPOINTS.AUTH.LOGOUT);
+  logout(accessToken?: string): Promise<{ ok: true }> {
+    return this.http.post<{ ok: true }>(
+      API_ENDPOINTS.AUTH.LOGOUT,
+      undefined,
+      asUser(accessToken),
+    );
   }
 
-  me(): Promise<User> {
-    return this.http.get<User>(API_ENDPOINTS.AUTH.ME);
+  me(accessToken?: string): Promise<User> {
+    return this.http.get<User>(API_ENDPOINTS.AUTH.ME, asUser(accessToken));
   }
 
-  updateProfile(input: UpdateProfileInput): Promise<User> {
-    return this.http.patch<User>(API_ENDPOINTS.AUTH.UPDATE_PROFILE, input);
+  updateProfile(input: UpdateProfileInput, accessToken?: string): Promise<User> {
+    return this.http.patch<User>(
+      API_ENDPOINTS.AUTH.UPDATE_PROFILE,
+      input,
+      asUser(accessToken),
+    );
+  }
+
+  /**
+   * Resolve the end user an access token belongs to.
+   *
+   * This is the server-side half of end-user auth: a backend holding the
+   * SERVICE key takes the `Authorization: Bearer <token>` its mobile/web
+   * client sent, and asks the platform who that token is. The token is
+   * carried per request, so one shared client can serve many concurrent
+   * users without `setHeader()` mutation racing between them.
+   *
+   * Throws the usual typed errors — `AUTH_INVALID_TOKEN` /
+   * `AUTH_EXPIRED_TOKEN` when the platform rejects the token — so callers
+   * can distinguish "bad token" (401) from "platform is down" (502).
+   */
+  verifyToken(accessToken: string): Promise<User> {
+    if (typeof accessToken !== 'string' || accessToken.trim() === '') {
+      throw new XenitionError(
+        'AUTH_INVALID_TOKEN',
+        'AuthClient.verifyToken: an access token is required.',
+      );
+    }
+    return this.me(accessToken);
   }
 
   // ────────── Admin user operations (service key only) ─────────────────────
