@@ -144,3 +144,33 @@ describe('client resolution from the environment', () => {
     expect(res.status).toBe(502); // built from process.env, failed upstream
   }, 15_000);
 });
+
+/**
+ * Anything an app needs outside a router has to be reachable. `readEnvVar`
+ * was internal, so every generated app reimplemented it — a shared client
+ * helper, a job handler and a migration script each need to read a Worker
+ * secret, and none of them has a router toolkit to hand.
+ */
+describe('public surface', () => {
+  it('exports the env reader alongside the client factory', async () => {
+    const hono = await import('./index');
+    expect(typeof hono.readEnvVar).toBe('function');
+    expect(typeof hono.createClientFromEnv).toBe('function');
+  });
+
+  it('reads a Workers binding first and process.env second', async () => {
+    const { readEnvVar } = await import('./index');
+    const ctx = { env: { FROM_BINDING: 'binding' } } as never;
+    expect(readEnvVar(ctx, 'FROM_BINDING')).toBe('binding');
+
+    const previous = process.env.FROM_PROCESS;
+    process.env.FROM_PROCESS = 'process';
+    try {
+      expect(readEnvVar({ env: {} } as never, 'FROM_PROCESS')).toBe('process');
+      expect(readEnvVar({ env: {} } as never, 'NOT_SET_ANYWHERE')).toBeUndefined();
+    } finally {
+      if (previous === undefined) delete process.env.FROM_PROCESS;
+      else process.env.FROM_PROCESS = previous;
+    }
+  });
+});

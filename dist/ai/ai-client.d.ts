@@ -26,6 +26,27 @@ export declare class AiClient {
     generateVideo(prompt: string, options?: GenerateVideoOptions): Promise<GenerateVideoOutput>;
     generateEmbeddings(input: string | string[], options?: GenerateEmbeddingsOptions): Promise<GenerateEmbeddingsOutput>;
     /**
+     * Chat, but the reply comes back parsed and shape-checked.
+     *
+     * `responseFormat: { type: 'json_schema' }` asks the provider for JSON —
+     * it does not guarantee you get it. Providers still occasionally wrap the
+     * object in prose, emit a trailing comma, or truncate at the token limit.
+     * So every caller writes the same defensive `JSON.parse` in a try/catch
+     * with a fallback, and the two apps built on this SDK each wrote it twice.
+     *
+     *   const score = await ai.chatJson<Score>(messages, SCORE_SCHEMA);
+     *
+     * Throws `AI_UNPARSEABLE` rather than returning a half-built object: a
+     * score of 0 because the JSON was malformed is worse than an error,
+     * because it silently becomes the user's result.
+     *
+     * The schema is sent to the provider AND used to check the reply has the
+     * required keys. This is a shape check, not full JSON Schema validation —
+     * enough to catch a truncated or wrapped reply, which is what actually
+     * goes wrong.
+     */
+    chatJson<T = Record<string, unknown>>(messages: ChatMessage[], schema: Record<string, unknown>, options?: Omit<ChatOptions, 'responseFormat'>): Promise<T>;
+    /**
      * Transcribe recorded audio.
      *
      * Pass a URL the platform can fetch — typically the one
@@ -55,6 +76,14 @@ export declare class AiClient {
      */
     streamChat(messages: ChatMessage[], options?: ChatOptions): AsyncGenerator<ChatDelta, void, unknown>;
 }
+/**
+ * Parse a model's JSON reply, tolerating the ways providers wrap it.
+ *
+ * Fenced code blocks and leading prose are common enough that stripping
+ * them is worth doing before giving up — the alternative is failing a job
+ * over a markdown fence the model added unasked.
+ */
+export declare function parseJsonReply<T = Record<string, unknown>>(raw: string, schema?: Record<string, unknown>): T;
 /**
  * Parse a `text/event-stream` body into deltas.
  *

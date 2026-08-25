@@ -1,5 +1,5 @@
 import { createAppClient } from './app-client';
-import { AppClientError } from './errors';
+import { AppClientError, isPaymentRequired } from './errors';
 import { formatDate } from './format';
 
 /**
@@ -670,6 +670,403 @@ describe('checkout.order', () => {
   });
 });
 
+/* ============================ billing =========================== */
+
+describe('billing.products', () => {
+  it('GETs the public product route and unwraps the envelope', async () => {
+    const product = { id: 'p1', productId: 'com.acme.premium.monthly', platform: 'apple', entitlement: 'premium', kind: 'subscription', period: 'monthly', active: true, createdAt: 'a' };
+    fetchMock.mockResolvedValue(jsonOk({ products: [product] }));
+    const products = await api().billing.products();
+    expect(calledUrl()).toBe('/api/billing/products');
+    expect(products).toEqual([product]);
+  });
+
+  it('passes the platform filter through', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ products: [] }));
+    await api().billing.products({ platform: 'google' });
+    expect(calledUrl()).toBe('/api/billing/products?platform=google');
+  });
+
+  it('sends no Authorization header on a guest client (a paywall precedes sign-in)', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ products: [] }));
+    await api().billing.products();
+    expect(fetchMock.mock.calls[0]![1]).toBeUndefined();
+  });
+
+  it('returns [] when the envelope is empty', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    expect(await api().billing.products()).toEqual([]);
+  });
+});
+
+describe('billing.entitlements', () => {
+  it('returns the derived checks the router builds, not raw rows', async () => {
+    // `listEntitlements` BUILDS an EntitlementCheck per record rather than
+    // handing the row through, so what arrives is already camelCase and
+    // already answers "may they, right now". A client that camelized here
+    // would be describing a route that does not exist.
+    fetchMock.mockResolvedValue(jsonOk({ entitlements: [{ allowed: true, entitlement: 'premium', source: 'purchase', status: 'active', expiresAt: '2026-09-01T00:00:00Z', daysRemaining: 7, isTrial: false, reason: null }] }));
+    const [entitlement] = await api().billing.entitlements();
+    expect(calledUrl()).toBe('/api/billing/entitlements');
+    expect(entitlement).toEqual({ allowed: true, entitlement: 'premium', source: 'purchase', status: 'active', expiresAt: '2026-09-01T00:00:00Z', daysRemaining: 7, isTrial: false, reason: null });
+  });
+
+  it('hands a perpetual entitlement through with its nulls intact', async () => {
+    // `expiresAt: null` is "never expires", not "unknown" — a client that
+    // filled it in would turn a lifetime purchase into an expired one.
+    const perpetual = { allowed: true, entitlement: 'premium', source: 'grant', status: 'active', expiresAt: null, daysRemaining: null, isTrial: false, reason: null };
+    fetchMock.mockResolvedValue(jsonOk({ entitlements: [perpetual] }));
+    expect(await api().billing.entitlements()).toEqual([perpetual]);
+  });
+
+  it('returns [] when the envelope is empty', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    expect(await api().billing.entitlements()).toEqual([]);
+  });
+});
+
+describe('billing.entitlement', () => {
+  it('GETs the check route and passes the built shape through untouched', async () => {
+    const check = { allowed: true, entitlement: 'premium', source: 'trial', status: 'active', expiresAt: '2026-09-01T00:00:00Z', daysRemaining: 7, isTrial: true, reason: null };
+    fetchMock.mockResolvedValue(jsonOk(check));
+    expect(await api().billing.entitlement('premium')).toEqual(check);
+    expect(calledUrl()).toBe('/api/billing/entitlements/premium');
+  });
+
+  it('treats never-had-it as a normal answer, not a 404', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ allowed: false, entitlement: 'premium', source: null, status: 'none', expiresAt: null, daysRemaining: null, isTrial: false, reason: 'none' }));
+    const check = await api().billing.entitlement('premium');
+    expect(check.allowed).toBe(false);
+    expect(check.status).toBe('none');
+  });
+
+  it('encodes the key', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    await api().billing.entitlement('pro/plus');
+    expect(calledUrl()).toBe('/api/billing/entitlements/pro%2Fplus');
+  });
+});
+
+describe('billing.verify', () => {
+  it('POSTs the apple shape', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ ok: true, entitlement: null, product: null }, 201));
+    await api().billing.verify({ platform: 'apple', transactionId: 'tx-1' });
+    expect(calledUrl()).toBe('/api/billing/verify');
+    expect(calledInit().method).toBe('POST');
+    expect(JSON.parse(calledInit().body as string)).toEqual({ platform: 'apple', transactionId: 'tx-1' });
+  });
+
+  it('POSTs the google shape and surfaces `acknowledged`', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ ok: true, entitlement: { allowed: true }, product: { id: 'p1' }, acknowledged: false }, 201));
+    const res = await api().billing.verify({ platform: 'google', productId: 'premium.monthly', purchaseToken: 'tok', kind: 'subscription' });
+    expect(JSON.parse(calledInit().body as string)).toEqual({ platform: 'google', productId: 'premium.monthly', purchaseToken: 'tok', kind: 'subscription' });
+    // false means Play was never told, and Play refunds unacknowledged
+    // purchases after three days — so it must not be swallowed.
+    expect(res.acknowledged).toBe(false);
+  });
+
+  it('surfaces a rejected receipt as the router 400', async () => {
+    fetchMock.mockResolvedValue(jsonErr(400, 'VALIDATION_ERROR', '"transactionId" is required for apple.'));
+    await expect(api().billing.verify({ platform: 'apple', transactionId: '' })).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+  });
+});
+
+describe('billing.restore', () => {
+  it('POSTs the apple chain id and returns the resulting entitlements', async () => {
+    // restore answers from `listEntitlements` too, so it hands back the
+    // caller's whole entitlement picture, not only what it just recovered.
+    fetchMock.mockResolvedValue(jsonOk({ entitlements: [{ allowed: true, entitlement: 'premium', source: 'purchase', status: 'active', expiresAt: '2026-09-01T00:00:00Z', daysRemaining: 7, isTrial: false, reason: null }] }));
+    const entitlements = await api().billing.restore({ platform: 'apple', originalTransactionId: 'otx-1' });
+    expect(calledUrl()).toBe('/api/billing/restore');
+    expect(JSON.parse(calledInit().body as string)).toEqual({ platform: 'apple', originalTransactionId: 'otx-1' });
+    expect(entitlements).toEqual([{ allowed: true, entitlement: 'premium', source: 'purchase', status: 'active', expiresAt: '2026-09-01T00:00:00Z', daysRemaining: 7, isTrial: false, reason: null }]);
+  });
+
+  it('POSTs the google token', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ entitlements: [] }));
+    await api().billing.restore({ platform: 'google', productId: 'premium.monthly', purchaseToken: 'tok' });
+    expect(JSON.parse(calledInit().body as string)).toEqual({ platform: 'google', productId: 'premium.monthly', purchaseToken: 'tok' });
+  });
+});
+
+describe('billing.startTrial', () => {
+  it('POSTs with NO body — the length is the server\'s, never a client argument', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ allowed: true, entitlement: 'premium', status: 'active', isTrial: true }, 201));
+    const check = await api().billing.startTrial();
+    expect(calledUrl()).toBe('/api/billing/trial');
+    const init = calledInit();
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+    expect(check.isTrial).toBe(true);
+  });
+
+  it('surfaces the 501 of an app that offers no trial', async () => {
+    fetchMock.mockResolvedValue(jsonErr(501, 'NOT_CONFIGURED', 'Trials are not enabled — set BILLING_TRIAL_DAYS or the trialDays option.'));
+    await expect(api().billing.startTrial()).rejects.toMatchObject({ status: 501, code: 'NOT_CONFIGURED' });
+  });
+});
+
+/* ========================== access token ======================== */
+
+describe('accessToken', () => {
+  const authed = (token: unknown) =>
+    createAppClient('/api', { accessToken: token as string });
+
+  it('attaches the bearer header to a GET', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ entitlements: [] }));
+    await authed('tok-1').billing.entitlements();
+    expect((calledInit().headers as Record<string, string>).Authorization).toBe('Bearer tok-1');
+  });
+
+  it('attaches it alongside Content-Type on a write', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ ok: true, entitlement: null, product: null }, 201));
+    await authed('tok-1').billing.verify({ platform: 'apple', transactionId: 'tx' });
+    const headers = calledInit().headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer tok-1');
+    expect(headers['Content-Type']).toBe('application/json');
+  });
+
+  it('attaches it to a body-less write too', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ allowed: true }));
+    await authed('tok-1').billing.startTrial();
+    const init = calledInit();
+    expect(init.body).toBeUndefined();
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok-1');
+  });
+
+  it('reads the token per request, so a refresh is picked up', async () => {
+    let token = 'first';
+    const client = createAppClient('/api', { accessToken: () => token });
+    fetchMock.mockResolvedValue(jsonOk({ count: 0 }));
+    await client.notifications.unreadCount();
+    token = 'second';
+    await client.notifications.unreadCount();
+    expect((fetchMock.mock.calls[0]![1]!.headers as Record<string, string>).Authorization).toBe('Bearer first');
+    expect((fetchMock.mock.calls[1]![1]!.headers as Record<string, string>).Authorization).toBe('Bearer second');
+  });
+
+  it('awaits an async resolver (device storage)', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ count: 3 }));
+    const client = createAppClient('/api', { accessToken: async () => 'stored' });
+    expect(await client.notifications.unreadCount()).toBe(3);
+    expect((calledInit().headers as Record<string, string>).Authorization).toBe('Bearer stored');
+  });
+
+  it('sends no header at all when the resolver has no token (signed out)', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ products: [] }));
+    await createAppClient('/api', { accessToken: () => null }).billing.products();
+    expect(fetchMock.mock.calls[0]![1]).toBeUndefined();
+  });
+});
+
+/* ============================= auth ============================= */
+
+describe('auth', () => {
+  it('POSTs /auth/login and returns the session', async () => {
+    const result = { user: { id: 'u1', email: 'a@b.co', role: 'user', createdAt: 'a', updatedAt: 'b' }, session: { id: 's1', userId: 'u1', expiresAt: 'z', createdAt: 'a' }, token: 't', refreshToken: 'r', expiresAt: 123 };
+    fetchMock.mockResolvedValue(jsonOk(result));
+    const res = await api().auth.login({ email: 'a@b.co', password: 'pw' });
+    expect(calledUrl()).toBe('/api/auth/login');
+    expect(JSON.parse(calledInit().body as string)).toEqual({ email: 'a@b.co', password: 'pw' });
+    expect(res.refreshToken).toBe('r');
+  });
+
+  it('POSTs /auth/refresh with the refresh token in the body', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ token: 't2', refreshToken: 'r2' }));
+    await api().auth.refresh('r1');
+    expect(calledUrl()).toBe('/api/auth/refresh');
+    expect(JSON.parse(calledInit().body as string)).toEqual({ refreshToken: 'r1' });
+  });
+
+  it('POSTs the id token to the provider route', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ token: 't' }));
+    await api().auth.signInWithIdToken({ provider: 'apple', idToken: 'id-1', nonce: 'n' });
+    expect(calledUrl()).toBe('/api/auth/oauth/apple/id-token');
+    expect(JSON.parse(calledInit().body as string)).toEqual({ idToken: 'id-1', nonce: 'n' });
+  });
+
+  it('throws on a guest me() rather than collapsing 401 to null', async () => {
+    fetchMock.mockResolvedValue(jsonErr(401, 'UNAUTHORIZED', 'Authentication required.'));
+    await expect(api().auth.me()).rejects.toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
+  });
+
+  it('PATCHes the profile', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'u1', email: 'a@b.co', role: 'user', createdAt: 'a', updatedAt: 'b' }));
+    await api().auth.updateProfile({ name: 'Ada' });
+    expect(calledUrl()).toBe('/api/auth/profile');
+    expect(calledInit().method).toBe('PATCH');
+  });
+
+  it('unwraps the sessions envelope', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ sessions: [{ id: 's1', userId: 'u1', expiresAt: 'z', createdAt: 'a' }] }));
+    expect(await api().auth.sessions()).toHaveLength(1);
+    expect(calledUrl()).toBe('/api/auth/sessions');
+  });
+
+  it('DELETEs one session by id', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ revoked: true }));
+    await api().auth.revokeSession('s 1');
+    expect(calledUrl()).toBe('/api/auth/sessions/s%201');
+    expect(calledInit().method).toBe('DELETE');
+  });
+
+  it('returns how many revokeAllSessions signed out', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ revoked: 4 }));
+    expect(await api().auth.revokeAllSessions()).toBe(4);
+  });
+
+  it('DELETEs the account and surfaces the grace period', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ deleted: true, purgeAt: '2026-09-03T00:00:00Z' }));
+    const res = await api().auth.deleteAccount({ password: 'pw' });
+    expect(calledUrl()).toBe('/api/auth/account');
+    expect(calledInit().method).toBe('DELETE');
+    expect(JSON.parse(calledInit().body as string)).toEqual({ password: 'pw' });
+    expect(res.purgeAt).toBe('2026-09-03T00:00:00Z');
+  });
+
+  it('GETs the data export', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ user: { id: 'u1' }, generatedAt: 'now' }));
+    expect((await api().auth.exportData()).generatedAt).toBe('now');
+    expect(calledUrl()).toBe('/api/auth/account/export');
+  });
+
+  it('unwraps the social provider list', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ providers: [{ provider: 'google', isAvailable: true }] }));
+    const providers = await api().auth.socialProviders();
+    expect(calledUrl()).toBe('/api/auth/oauth/providers');
+    expect(providers[0]!.isAvailable).toBe(true);
+  });
+
+  it('builds the oauth url route with the redirect query', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ url: 'https://x', state: 's' }));
+    await api().auth.oauthUrl('google', 'https://app.example.com/cb');
+    expect(calledUrl()).toBe('/api/auth/oauth/google/url?redirectUrl=https%3A%2F%2Fapp.example.com%2Fcb');
+  });
+});
+
+/* ============================= jobs ============================= */
+
+describe('jobs.get', () => {
+  it('GETs /jobs/:id and returns the polling view', async () => {
+    const job = { id: 'j1', type: 'speech.analyze', status: 'succeeded', attempts: 1, done: true, result: { score: 9 }, failed: false, createdAt: 'a', updatedAt: 'b' };
+    fetchMock.mockResolvedValue(jsonOk(job));
+    const res = await api().jobs.get('j1');
+    expect(calledUrl()).toBe('/api/jobs/j1');
+    expect(res).toEqual(job);
+  });
+
+  it('keeps `failed` (a rest between retries) distinct from `done`', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ id: 'j1', status: 'failed', attempts: 2, done: false, failed: false, result: null }));
+    const res = await api().jobs.get('j1');
+    expect(res!.status).toBe('failed');
+    // Still coming back — `done`/`failed` are what a poller stops on.
+    expect(res!.done).toBe(false);
+    expect(res!.failed).toBe(false);
+  });
+
+  it('returns null for an unknown id AND for another user\'s job (same 404)', async () => {
+    fetchMock.mockResolvedValue(jsonErr(404, 'NOT_FOUND', 'Job not found.'));
+    expect(await api().jobs.get('someone-elses')).toBeNull();
+  });
+
+  it('encodes the id', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    await api().jobs.get('a/b');
+    expect(calledUrl()).toBe('/api/jobs/a%2Fb');
+  });
+});
+
+/* ========================= notifications ======================== */
+
+describe('notifications.inbox', () => {
+  it('GETs the feed and returns the page whole', async () => {
+    const page = { notifications: [{ id: 'n1', userId: 'u1', category: 'reminder', title: 'T', body: 'B', data: {}, readAt: null, createdAt: '2026-08-01T00:00:00Z', expiresAt: null }], nextCursor: '2026-08-01T00:00:00Z' };
+    fetchMock.mockResolvedValue(jsonOk(page));
+    const res = await api().notifications.inbox();
+    expect(calledUrl()).toBe('/api/notifications');
+    expect(res).toEqual(page);
+  });
+
+  it('pages on nextCursor — a keyset, never an offset', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ notifications: [], nextCursor: null }));
+    await api().notifications.inbox({ before: '2026-08-01T00:00:00Z', limit: 50 });
+    expect(calledUrl()).toBe('/api/notifications?limit=50&before=2026-08-01T00%3A00%3A00Z');
+  });
+
+  it('sends unread as the router\'s 1/0 flag', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ notifications: [], nextCursor: null }));
+    await api().notifications.inbox({ unread: true, category: 'billing' });
+    expect(calledUrl()).toBe('/api/notifications?unread=1&category=billing');
+  });
+
+  it('carries a null nextCursor through as "the feed is done"', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ notifications: [], nextCursor: null }));
+    expect((await api().notifications.inbox()).nextCursor).toBeNull();
+  });
+});
+
+describe('notifications.unreadCount', () => {
+  it('unwraps the badge number', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ count: 7 }));
+    expect(await api().notifications.unreadCount()).toBe(7);
+    expect(calledUrl()).toBe('/api/notifications/unread-count');
+  });
+});
+
+describe('notifications.markRead', () => {
+  it('POSTs the read route with no body', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ read: true }));
+    await api().notifications.markRead('n 1');
+    expect(calledUrl()).toBe('/api/notifications/n%201/read');
+    const init = calledInit();
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeUndefined();
+  });
+});
+
+describe('notifications.markAllRead', () => {
+  it('returns the resulting unread count instead of a second round trip', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ read: true, unreadCount: 0 }));
+    expect(await api().notifications.markAllRead()).toBe(0);
+    expect(calledUrl()).toBe('/api/notifications/read-all');
+    expect(calledInit().method).toBe('POST');
+  });
+});
+
+describe('notifications.preferences', () => {
+  it('unwraps the preferences envelope', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ preferences: [{ id: 'p1', userId: 'u1', category: 'general', inApp: true, push: true, email: false, quietStartMinute: 1320, quietEndMinute: 420, utcOffsetMinutes: -300, updatedAt: 'a' }] }));
+    const [preference] = await api().notifications.preferences();
+    expect(calledUrl()).toBe('/api/notifications/preferences');
+    expect(preference!.quietStartMinute).toBe(1320);
+  });
+
+  it('returns [] when the envelope is empty', async () => {
+    fetchMock.mockResolvedValue(jsonOk({}));
+    expect(await api().notifications.preferences()).toEqual([]);
+  });
+});
+
+describe('notifications.savePreferences', () => {
+  it('PUTs the camelCase patch and returns EVERY row it touched', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ preferences: [{ id: 'p1', category: 'general' }, { id: 'p2', category: 'billing' }] }));
+    // No category: one quiet-hours control means "quiet everywhere", so the
+    // patch lands on every configured category — hence the plural.
+    const written = await api().notifications.savePreferences({ quietStartMinute: 1320, quietEndMinute: 420 });
+    expect(calledUrl()).toBe('/api/notifications/preferences');
+    expect(calledInit().method).toBe('PUT');
+    expect(JSON.parse(calledInit().body as string)).toEqual({ quietStartMinute: 1320, quietEndMinute: 420 });
+    expect(written).toHaveLength(2);
+  });
+
+  it('sends null through as "clear the window" rather than dropping it', async () => {
+    fetchMock.mockResolvedValue(jsonOk({ preferences: [] }));
+    await api().notifications.savePreferences({ category: 'reminder', quietStartMinute: null, quietEndMinute: null });
+    expect(JSON.parse(calledInit().body as string)).toEqual({ category: 'reminder', quietStartMinute: null, quietEndMinute: null });
+  });
+});
+
 describe('AppClientError', () => {
   it('carries status, code, and message', () => {
     const e = new AppClientError(429, 'RATE_LIMITED', 'Slow down');
@@ -697,6 +1094,109 @@ describe('AppClientError', () => {
       },
     } as unknown as Response);
     await expect(api().cms.items('posts')).rejects.toMatchObject({ status: 500 });
+  });
+});
+
+/* ======================== payment required ====================== */
+
+describe('402', () => {
+  /** A `Response`-like for an arbitrary error body (the 402 blocks). */
+  const errBody = (status: number, body: unknown): Response =>
+    ({ ok: false, status, json: async () => body } as unknown as Response);
+
+  /**
+   * The rejection, typed. `.catch()` widens to a union with whatever the
+   * call resolves to, which is not what any of these assertions mean.
+   */
+  const caught = (p: Promise<unknown>): Promise<AppClientError> =>
+    p.then(
+      () => {
+        throw new Error('expected a rejection');
+      },
+      (err: unknown) => err as AppClientError,
+    );
+
+  /** The gate's body: `requireEntitlement('premium')` refused. */
+  const gateBody = {
+    error: { code: 'PAYMENT_REQUIRED', message: 'This feature requires "premium".' },
+    entitlement: 'premium',
+    check: { allowed: false, entitlement: 'premium', source: null, status: 'none', expiresAt: null, daysRemaining: null, isTrial: false, reason: 'none' },
+  };
+
+  /** The meter's body: the free allowance is spent. Same status, same code. */
+  const meterBody = {
+    error: { code: 'PAYMENT_REQUIRED', message: 'You have used all 5 of your "analysis" allowance.' },
+    entitlement: 'premium',
+    quota: { key: 'analysis', limit: 5, used: 5, resetAt: '2026-09-01T00:00:00Z' },
+  };
+
+  it('flags a 402 as the paywall, not a failure', async () => {
+    fetchMock.mockResolvedValue(errBody(402, gateBody));
+    await expect(api().jobs.get('j1')).rejects.toMatchObject({ status: 402, isPaymentRequired: true });
+  });
+
+  it('lifts the entitlement KEY and the gate full check', async () => {
+    fetchMock.mockResolvedValue(errBody(402, gateBody));
+    const err = await caught(api().billing.entitlements());
+    expect(err).toBeInstanceOf(AppClientError);
+    expect(err.code).toBe('PAYMENT_REQUIRED');
+    expect(err.entitlement).toBe('premium');
+    expect(err.check).toEqual(gateBody.check);
+    // No meter refused, so no quota — that absence IS the distinction.
+    expect(err.quota).toBeUndefined();
+  });
+
+  it('lifts the quota, so a paywall can say when the window resets', async () => {
+    fetchMock.mockResolvedValue(errBody(402, meterBody));
+    const err = await caught(api().billing.entitlements());
+    expect(err.quota).toEqual(meterBody.quota);
+    expect(err.quota!.resetAt).toBe('2026-09-01T00:00:00Z');
+    expect(err.entitlement).toBe('premium');
+    expect(err.check).toBeUndefined();
+  });
+
+  it('tells the two refusals apart by the presence of quota, not by the code', async () => {
+    fetchMock.mockResolvedValue(errBody(402, gateBody));
+    const gate = await caught(api().billing.entitlements());
+    fetchMock.mockResolvedValue(errBody(402, meterBody));
+    const meter = await caught(api().billing.entitlements());
+    expect(gate.code).toBe(meter.code);
+    expect(gate.quota).toBeUndefined();
+    expect(meter.quota).toBeDefined();
+  });
+
+  it('needs no fields to be recognised — the STATUS decides', async () => {
+    // An app's own HTTPException(402) never went through the SDK helper.
+    fetchMock.mockResolvedValue(jsonErr(402, 'PAYMENT_REQUIRED', 'Payment required.'));
+    const err = await caught(api().billing.entitlements());
+    expect(err.isPaymentRequired).toBe(true);
+    expect(err.entitlement).toBeUndefined();
+  });
+
+  it('ignores a half-built body rather than reporting allowed: undefined', async () => {
+    fetchMock.mockResolvedValue(errBody(402, { error: { code: 'X' }, entitlement: '', quota: {}, check: {} }));
+    const err = await caught(api().billing.entitlements());
+    expect(err.entitlement).toBeUndefined();
+    expect(err.quota).toBeUndefined();
+    expect(err.check).toBeUndefined();
+  });
+
+  it('does not flag any other status', async () => {
+    fetchMock.mockResolvedValue(jsonErr(403, 'FORBIDDEN'));
+    const err = await caught(api().billing.entitlements());
+    expect(err.isPaymentRequired).toBe(false);
+  });
+
+  it('narrows an unknown catch with isPaymentRequired()', async () => {
+    fetchMock.mockResolvedValue(errBody(402, meterBody));
+    try {
+      await api().jobs.get('j1');
+      throw new Error('should have thrown');
+    } catch (err: unknown) {
+      expect(isPaymentRequired(err)).toBe(true);
+      if (isPaymentRequired(err)) expect(err.quota!.used).toBe(5);
+    }
+    expect(isPaymentRequired(new Error('nope'))).toBe(false);
   });
 });
 

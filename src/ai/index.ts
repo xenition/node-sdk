@@ -1,4 +1,4 @@
-export { AiClient, AiKeysClient, parseSseStream } from './ai-client';
+export { AiClient, AiKeysClient, parseJsonReply, parseSseStream } from './ai-client';
 export type {
   AiProvider,
   ChatMessage,

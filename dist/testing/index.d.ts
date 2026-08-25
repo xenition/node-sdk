@@ -25,7 +25,7 @@ import { FakeStore, RawHandler } from './fake-store';
  * module's, not a stub's.
  */
 export { FakeStore, makeFakeContext } from './fake-store';
-export type { FakeContextOptions, RawHandler } from './fake-store';
+export type { AggregatePayload, FakeContextOptions, RawHandler } from './fake-store';
 export { jobsRawHandler } from './jobs-raw';
 export interface TestClientOptions {
     /** The user every token resolves to. Defaults to a stable fake. */

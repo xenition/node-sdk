@@ -30,8 +30,11 @@ describe('buildOpenApi — module selection', () => {
       cart: '/api/cart',
       orders: '/api/orders/{id}',
       checkout: '/api/checkout/{cartToken}',
+      auth: '/api/auth/login',
       billing: '/api/billing/verify',
       jobs: '/api/jobs/{id}',
+      notifications: '/api/notifications',
+      quotas: '/api/quotas/{key}',
     };
     for (const path of Object.values(expected)) expect(paths).toContain(path);
   });

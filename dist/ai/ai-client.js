@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AiKeysClient = exports.AiClient = void 0;
+exports.parseJsonReply = parseJsonReply;
 exports.parseSseStream = parseSseStream;
 const errors_1 = require("../core/errors");
 const constants_1 = require("../constants");
@@ -56,6 +57,34 @@ class AiClient {
         };
         return this.http.post(constants_1.API_ENDPOINTS.AI.EMBEDDINGS, body);
     }
+    /**
+     * Chat, but the reply comes back parsed and shape-checked.
+     *
+     * `responseFormat: { type: 'json_schema' }` asks the provider for JSON —
+     * it does not guarantee you get it. Providers still occasionally wrap the
+     * object in prose, emit a trailing comma, or truncate at the token limit.
+     * So every caller writes the same defensive `JSON.parse` in a try/catch
+     * with a fallback, and the two apps built on this SDK each wrote it twice.
+     *
+     *   const score = await ai.chatJson<Score>(messages, SCORE_SCHEMA);
+     *
+     * Throws `AI_UNPARSEABLE` rather than returning a half-built object: a
+     * score of 0 because the JSON was malformed is worse than an error,
+     * because it silently becomes the user's result.
+     *
+     * The schema is sent to the provider AND used to check the reply has the
+     * required keys. This is a shape check, not full JSON Schema validation —
+     * enough to catch a truncated or wrapped reply, which is what actually
+     * goes wrong.
+     */
+    async chatJson(messages, schema, options = {}) {
+        const result = await this.chat(messages, {
+            ...options,
+            responseFormat: { type: 'json_schema', schema },
+        });
+        const raw = result.message?.content ?? '';
+        return parseJsonReply(raw, schema);
+    }
     // ────────── Speech ───────────────────────────────────────────────────────
     /**
      * Transcribe recorded audio.
@@ -109,6 +138,58 @@ class AiClient {
     }
 }
 exports.AiClient = AiClient;
+/**
+ * Parse a model's JSON reply, tolerating the ways providers wrap it.
+ *
+ * Fenced code blocks and leading prose are common enough that stripping
+ * them is worth doing before giving up — the alternative is failing a job
+ * over a markdown fence the model added unasked.
+ */
+function parseJsonReply(raw, schema) {
+    const text = raw.trim();
+    const candidates = [text, stripFence(text), sliceOutermostObject(text)].filter((c) => Boolean(c));
+    for (const candidate of candidates) {
+        let parsed;
+        try {
+            parsed = JSON.parse(candidate);
+        }
+        catch {
+            continue;
+        }
+        if (typeof parsed !== 'object' || parsed === null)
+            continue;
+        const missing = missingRequired(parsed, schema);
+        if (missing.length > 0) {
+            throw new errors_1.XenitionError('AI_UNPARSEABLE', `AiClient.chatJson: reply is missing required field(s): ${missing.join(', ')}.`, { details: { missing, raw: text.slice(0, 400) } });
+        }
+        return parsed;
+    }
+    throw new errors_1.XenitionError('AI_UNPARSEABLE', 'AiClient.chatJson: the model did not return parseable JSON.', { details: { raw: text.slice(0, 400) } });
+}
+/** ```json … ``` — the most common unasked-for wrapper. */
+function stripFence(text) {
+    const match = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+    return match?.[1]?.trim() ?? null;
+}
+/** Everything between the first `{` and the last `}` — strips leading prose. */
+function sliceOutermostObject(text) {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    return start !== -1 && end > start ? text.slice(start, end + 1) : null;
+}
+/**
+ * Required top-level keys the reply does not have.
+ *
+ * Deliberately shallow: the failure worth catching is a truncated or
+ * wrapped reply, and a full JSON Schema validator is a dependency this SDK
+ * does not need for that.
+ */
+function missingRequired(value, schema) {
+    const required = schema?.required;
+    if (!Array.isArray(required))
+        return [];
+    return required.filter((key) => typeof key === 'string' && !(key in value));
+}
 /**
  * Parse a `text/event-stream` body into deltas.
  *

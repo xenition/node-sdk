@@ -92,6 +92,15 @@ export declare class QueryBuilder<T = Record<string, unknown>> {
     all<R = T>(): Promise<R[]>;
     fetch<R = T>(): Promise<R[]>;
     toArray<R = T>(): Promise<R[]>;
+    /**
+     * The first matching row, or null.
+     *
+     * SELECT only. `.update({…}).first()` reads like "update it and give me
+     * the row back", which is why it kept being written — but it is a SELECT
+     * verb on a write, and it used to quietly attach `limit: 1` to an UPDATE.
+     * Use `.returning('*')` then `.rows()` for that instead, which is what the
+     * error says.
+     */
     first<R = T>(): Promise<R | null>;
     one<R = T>(): Promise<R | null>;
     find<R = T>(): Promise<R | null>;

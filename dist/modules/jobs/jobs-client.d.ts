@@ -1,6 +1,6 @@
 import { Migration } from '../../migrations/types';
 import { ModuleContext } from '../core';
-import { ClaimOptions, EnqueueOptions, FailOptions, Job, JobHandler, CronRun, ListJobsOptions, WorkSummary } from './types';
+import { ClaimOptions, EnqueueOptions, FailOptions, Job, JobContext, JobHandler, CronRun, ListJobsOptions, WorkSummary } from './types';
 export declare const JOBS_TABLE = "jobs__runs";
 export declare const CRON_RUNS_TABLE = "jobs__cron_runs";
 export declare const JOBS_MIGRATIONS: Migration[];
@@ -75,6 +75,7 @@ export declare class JobsClient {
      */
     work(handlers: Record<string, JobHandler>, options?: ClaimOptions & {
         worker?: string;
+        context?: JobContext;
     }): Promise<WorkSummary>;
     /**
      * Open a ledger entry for a scheduled run. Returns its id for `finishCronRun`.
@@ -93,6 +94,14 @@ export declare class JobsClient {
     /** The most recent run of a schedule — "did the digest go out?". */
     lastCronRun(name: string): Promise<CronRun | null>;
     listCronRuns(name?: string, limit?: number): Promise<CronRun[]>;
+    /**
+     * The context handed to a handler.
+     *
+     * Required in practice, optional in the type: `work()` predates it, and a
+     * caller that drains the queue without supplying one gets a message
+     * naming the fix rather than `undefined.client` three frames deeper.
+     */
+    private handlerContext;
     list(options?: ListJobsOptions): Promise<Job[]>;
     /**
      * Delete finished jobs older than `olderThanDays` (default 30).

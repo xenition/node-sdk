@@ -27,6 +27,8 @@ import type { XenitionApiOptions } from './types';
  * when explicitly imported.
  */
 export declare function createXenitionApi(options?: XenitionApiOptions): Hono;
+export { authRouter } from './auth-router';
+export type { AuthRouterOptions } from './auth-router';
 export { cmsRouter } from './cms-router';
 export { formsRouter } from './forms-router';
 export { reviewsRouter } from './reviews-router';
@@ -42,6 +44,10 @@ export { checkoutRouter, verifyStripeSignature } from './checkout-router';
 export { billingRouter, requireEntitlement } from './billing-router';
 export { jobsRouter } from './jobs-router';
 export type { JobsRouterOptions } from './jobs-router';
+export { notificationsRouter } from './notifications-router';
+export type { NotificationsRouterOptions } from './notifications-router';
+export { quotasRouter } from './quotas-router';
+export type { QuotaDefinition, QuotasRouterOptions } from './quotas-router';
 export { createScheduledHandler, withScheduled } from './scheduled';
 export type { CronJob, ExecutionContextLike, ScheduledContext, ScheduledEvent, ScheduledHandler, ScheduledOptions, ScheduledSummary, } from './scheduled';
 export type { BillingRouterOptions, RequireEntitlementOptions } from './billing-router';
@@ -51,9 +57,10 @@ export type { RouterDefinition, RouterToolkit } from './define-router';
 export type { DocsOptions, OpenApiRouterOptions } from './docs';
 export { xenitionAuth, requireAuth, currentUser, currentUserId, requireUser, bearerToken, } from './auth';
 export type { AuthUser, XenitionAuthOptions } from './auth';
-export { badRequest, forbidden, unauthorized, honoErrorHandler, jsonNotFound, NotConfiguredError, } from './errors';
+export { badRequest, forbidden, unauthorized, honoErrorHandler, jsonNotFound, NotConfiguredError, paymentRequired, paymentRequiredBody, } from './errors';
+export type { PaymentRequiredBody, PaymentRequiredOptions, PaymentRequiredQuota, } from './errors';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
-export { createClientFromEnv, XenitionApiConfigError } from './client';
+export { createClientFromEnv, readEnvVar, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';
 export type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } from './types';
 //# sourceMappingURL=index.d.ts.map

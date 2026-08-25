@@ -46,6 +46,8 @@ exports.XENITION_ERROR_CODES = [
     'STORAGE_FAILED',
     // Background work
     'JOB_FAILED',
+    // The model did not return usable JSON for a schema-constrained call
+    'AI_UNPARSEABLE',
     // The deployment does not implement this endpoint yet
     'NOT_IMPLEMENTED',
     // Generic fallback

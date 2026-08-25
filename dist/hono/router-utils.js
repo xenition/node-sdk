@@ -7,19 +7,36 @@ exports.parsePublished = parsePublished;
 exports.parseBooleanFlag = parseBooleanFlag;
 exports.parseDirection = parseDirection;
 const cors_1 = require("hono/cors");
+/** Every method the SDK's own routers answer with. */
+const DEFAULT_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 /**
- * Small shared pieces for the routers: CORS wiring and query-string
- * parsing that reports precise 400 messages instead of coercing garbage.
+ * Headers every client already sends. `Authorization` is the load-bearing
+ * one — without it no authenticated request survives a preflight.
  */
+const DEFAULT_HEADERS = ['Content-Type', 'Authorization'];
+const unique = (values) => [...new Set(values)];
 function applyCors(app, option) {
     if (option === false)
         return;
-    const origin = option === true || option === undefined ? '*' : option;
+    const config = option === true || option === undefined
+        ? {}
+        : Array.isArray(option)
+            ? { origin: option }
+            : option;
+    // `credentials` and a wildcard origin are mutually exclusive by spec, and a
+    // browser rejects the pair silently — which reads as "CORS is broken"
+    // rather than "this combination is not allowed".
+    if (config.credentials && (config.origin === undefined || config.origin === '*')) {
+        throw new Error('cors: `credentials: true` requires an explicit origin allowlist — a browser ' +
+            'refuses credentialed requests against `Access-Control-Allow-Origin: *`.');
+    }
     app.use('*', (0, cors_1.cors)({
-        origin,
-        allowMethods: ['GET', 'POST', 'OPTIONS'],
-        allowHeaders: ['Content-Type'],
-        maxAge: 600,
+        origin: config.origin ?? '*',
+        allowMethods: unique([...DEFAULT_METHODS, ...(config.allowMethods ?? [])]),
+        allowHeaders: unique([...DEFAULT_HEADERS, ...(config.allowHeaders ?? [])]),
+        ...(config.exposeHeaders ? { exposeHeaders: config.exposeHeaders } : {}),
+        ...(config.credentials ? { credentials: true } : {}),
+        maxAge: config.maxAge ?? 600,
     }));
 }
 /** Thrown by the parse helpers; routers convert it to a 400. */

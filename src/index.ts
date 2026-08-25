@@ -74,7 +74,7 @@ export type {
 } from './push';
 
 // AI module
-export { AiClient, AiKeysClient, parseSseStream } from './ai';
+export { AiClient, AiKeysClient, parseJsonReply, parseSseStream } from './ai';
 export type {
   AiProvider,
   AiUsage,
@@ -394,6 +394,7 @@ export type {
   EnqueueOptions,
   FailOptions,
   Job,
+  JobContext,
   JobHandler,
   JobStatus,
   WorkSummary,

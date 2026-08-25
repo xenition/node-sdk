@@ -219,7 +219,20 @@ class QueryBuilder {
     async all() { return this.rows(); }
     async fetch() { return this.rows(); }
     async toArray() { return this.rows(); }
+    /**
+     * The first matching row, or null.
+     *
+     * SELECT only. `.update({…}).first()` reads like "update it and give me
+     * the row back", which is why it kept being written — but it is a SELECT
+     * verb on a write, and it used to quietly attach `limit: 1` to an UPDATE.
+     * Use `.returning('*')` then `.rows()` for that instead, which is what the
+     * error says.
+     */
     async first() {
+        if (this.queryType !== 'SELECT') {
+            throw new Error(`QueryBuilder.first(): cannot be used on ${this.queryType}. ` +
+                `Use .returning('*') then .rows() to read back the affected rows.`);
+        }
         this.limitValue = 1;
         const result = await this.execute();
         return result.data?.[0] ?? null;
@@ -288,10 +301,18 @@ class QueryBuilder {
             payload.having = this.havingConditions;
         if (this.orderByClause.length > 0)
             payload.orderBy = this.orderByClause;
-        if (this.limitValue !== undefined)
-            payload.limit = this.limitValue;
-        if (this.offsetValue !== undefined)
-            payload.offset = this.offsetValue;
+        // SELECT only. Postgres has no `UPDATE … LIMIT` or `DELETE … LIMIT`, so
+        // sending one is at best ignored and at worst a syntax error — and the
+        // way to reach here is not exotic: `.update({…}).first()` is the obvious
+        // way to ask for the updated row back, and it silently set limit = 1.
+        // `first()` now refuses that outright; this is the backstop for anyone
+        // who calls `.limit()` directly on a write.
+        if (this.queryType === 'SELECT') {
+            if (this.limitValue !== undefined)
+                payload.limit = this.limitValue;
+            if (this.offsetValue !== undefined)
+                payload.offset = this.offsetValue;
+        }
         if (this.returningColumns.length > 0)
             payload.returning = this.returningColumns;
         return payload;

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { authRouter } from './auth-router';
 import { cmsRouter } from './cms-router';
 import { formsRouter } from './forms-router';
 import { honoErrorHandler, jsonNotFound } from './errors';
@@ -13,6 +14,8 @@ import { ordersRouter } from './orders-router';
 import { checkoutRouter } from './checkout-router';
 import { billingRouter } from './billing-router';
 import { jobsRouter } from './jobs-router';
+import { notificationsRouter } from './notifications-router';
+import { quotasRouter } from './quotas-router';
 import { reviewsRouter } from './reviews-router';
 import { applyCors } from './router-utils';
 import { openApiRouter } from './docs';
@@ -46,8 +49,13 @@ import type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } fro
  * when explicitly imported.
  */
 export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
-  const { modules, custom, ...routerOptions } = options;
+  // `quotas` and `notificationCategories` are pulled out rather than spread
+  // into every child: they are one router's configuration each, and the
+  // quota limits in particular must reach the quotas router unchanged —
+  // that map is the paywall.
+  const { modules, custom, quotas, notificationCategories, ...routerOptions } = options;
   const selected: XenitionApiModule[] = modules ?? [
+    'auth',
     'cms',
     'forms',
     'reviews',
@@ -62,6 +70,8 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
     'checkout',
     'billing',
     'jobs',
+    'notifications',
+    'quotas',
   ];
   const app = new Hono();
   // CORS lives on the parent so preflights are answered even for
@@ -71,6 +81,7 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   app.notFound(jsonNotFound);
 
   const childOptions: XenitionRouterOptions = { ...routerOptions, cors: false };
+  if (selected.includes('auth')) app.route('/', authRouter(childOptions));
   if (selected.includes('cms')) app.route('/cms', cmsRouter(childOptions));
   if (selected.includes('forms')) app.route('/forms', formsRouter(childOptions));
   if (selected.includes('reviews')) app.route('/reviews', reviewsRouter(childOptions));
@@ -85,6 +96,10 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   if (selected.includes('checkout')) app.route('/', checkoutRouter(childOptions));
   if (selected.includes('billing')) app.route('/', billingRouter(childOptions));
   if (selected.includes('jobs')) app.route('/', jobsRouter(childOptions));
+  if (selected.includes('notifications')) {
+    app.route('/', notificationsRouter({ ...childOptions, categories: notificationCategories }));
+  }
+  if (selected.includes('quotas')) app.route('/', quotasRouter({ ...childOptions, quotas }));
   // The app's own routers, mounted on the SAME parent as the built-ins so
   // they inherit the error handler, CORS and JSON 404 above.
   for (const definition of custom ?? []) {
@@ -98,6 +113,8 @@ export function createXenitionApi(options: XenitionApiOptions = {}): Hono {
   return app;
 }
 
+export { authRouter } from './auth-router';
+export type { AuthRouterOptions } from './auth-router';
 export { cmsRouter } from './cms-router';
 export { formsRouter } from './forms-router';
 export { reviewsRouter } from './reviews-router';
@@ -113,6 +130,10 @@ export { checkoutRouter, verifyStripeSignature } from './checkout-router';
 export { billingRouter, requireEntitlement } from './billing-router';
 export { jobsRouter } from './jobs-router';
 export type { JobsRouterOptions } from './jobs-router';
+export { notificationsRouter } from './notifications-router';
+export type { NotificationsRouterOptions } from './notifications-router';
+export { quotasRouter } from './quotas-router';
+export type { QuotaDefinition, QuotasRouterOptions } from './quotas-router';
 export { createScheduledHandler, withScheduled } from './scheduled';
 export type {
   CronJob,
@@ -144,8 +165,15 @@ export {
   honoErrorHandler,
   jsonNotFound,
   NotConfiguredError,
+  paymentRequired,
+  paymentRequiredBody,
+} from './errors';
+export type {
+  PaymentRequiredBody,
+  PaymentRequiredOptions,
+  PaymentRequiredQuota,
 } from './errors';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
-export { createClientFromEnv, XenitionApiConfigError } from './client';
+export { createClientFromEnv, readEnvVar, XenitionApiConfigError } from './client';
 export type { XenitionEnvVars } from './client';
 export type { XenitionApiModule, XenitionApiOptions, XenitionRouterOptions } from './types';

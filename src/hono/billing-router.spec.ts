@@ -387,13 +387,31 @@ describe('requireEntitlement', () => {
   it('answers 402 with the paywall payload, not 403', async () => {
     // The caller is allowed to ask — they just have not paid. The app should
     // show the paywall, and 403 would read as "you may never do this".
+    //
+    // The body is the SDK's one payment-required shape, the same one a
+    // metered quota refuses with: `PAYMENT_REQUIRED` and a flat entitlement
+    // key, so a client renders one paywall without knowing which feature
+    // said no. The full check is still here, under `check`, for the apps
+    // that distinguish an expired subscription from one that never existed.
     const { app } = await gatedApp(false);
     const res = await app.request('/coach/session', auth);
     expect(res.status).toBe(402);
     expect(await res.json()).toMatchObject({
-      error: { code: 'ENTITLEMENT_REQUIRED' },
-      entitlement: { allowed: false, entitlement: 'premium' },
+      error: { code: 'PAYMENT_REQUIRED' },
+      entitlement: 'premium',
+      check: { allowed: false, entitlement: 'premium' },
     });
+  });
+
+  it('leaves out the quota block when an entitlement is what refused', async () => {
+    // `quota` present means "you are out of runs"; absent means "you must
+    // upgrade". That distinction is the only thing telling the two 402s
+    // apart, so it has to hold on this side too.
+    const { app } = await gatedApp(false);
+    const body = (await (await app.request('/coach/session', auth)).json()) as {
+      quota?: unknown;
+    };
+    expect(body.quota).toBeUndefined();
   });
 
   it('401s before checking entitlement when there is no token', async () => {

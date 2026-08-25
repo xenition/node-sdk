@@ -279,6 +279,10 @@ class JobsClient {
         const types = options.types ?? Object.keys(handlers);
         if (types.length === 0)
             return { claimed: 0, succeeded: 0, failed: 0, unhandled: [] };
+        // Checked BEFORE claiming. Inside the loop it would be caught by the
+        // per-job handler and counted as a job failure, burning an attempt on
+        // every job in the batch for what is a wiring bug in the runner.
+        const handlerContext = this.handlerContext(options.context);
         const jobs = await this.claim(options.worker ?? `worker-${(0, util_1.generateId)()}`, {
             ...options,
             types,
@@ -298,7 +302,7 @@ class JobsClient {
                 continue;
             }
             try {
-                const result = await handler(job);
+                const result = await handler(job, handlerContext);
                 await this.complete(job.id, result ?? null);
                 summary.succeeded++;
             }
@@ -359,6 +363,20 @@ class JobsClient {
         return q.orderBy('started_at', 'DESC').limit(limit).rows();
     }
     // ────────── Inspection ───────────────────────────────────────────────────
+    /**
+     * The context handed to a handler.
+     *
+     * Required in practice, optional in the type: `work()` predates it, and a
+     * caller that drains the queue without supplying one gets a message
+     * naming the fix rather than `undefined.client` three frames deeper.
+     */
+    handlerContext(context) {
+        if (!context) {
+            throw new Error('JobsClient.work: handlers need a JobContext. Pass `{ context: { client, env } }` — ' +
+                '`withScheduled()` does this for you.');
+        }
+        return context;
+    }
     async list(options = {}) {
         const context = 'JobsClient.list';
         let q = this.ctx.query.from(exports.JOBS_TABLE);

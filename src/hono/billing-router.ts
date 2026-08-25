@@ -11,7 +11,13 @@ import {
 import type { EntitlementCheck } from '../modules/billing';
 import { currentUser, requireAuth, requireUser } from './auth';
 import { makeClientResolver, readEnvVar, XenitionApiConfigError } from './client';
-import { badRequest, honoErrorHandler, jsonNotFound, NotConfiguredError } from './errors';
+import {
+  badRequest,
+  honoErrorHandler,
+  jsonNotFound,
+  NotConfiguredError,
+  paymentRequired,
+} from './errors';
 import { normalizeRow, normalizeRows } from './normalize';
 import { rateLimiter } from './rate-limit';
 import { applyCors } from './router-utils';
@@ -267,9 +273,14 @@ export interface RequireEntitlementOptions {
  *
  * Answers 402 Payment Required rather than 403: the caller is perfectly
  * entitled to ask, they just have not paid, and the app should show the
- * paywall instead of an error. The body carries the same `EntitlementCheck`
- * the client gets from `/billing/entitlements/:key`, so one code path in the
- * app can render the paywall from either.
+ * paywall instead of an error.
+ *
+ * The body is `paymentRequiredBody` — the SAME shape a metered quota
+ * refuses with, so a client renders one paywall from `error.code` rather
+ * than learning which SDK feature said no. It still carries the full
+ * `EntitlementCheck` the client gets from `/billing/entitlements/:key`,
+ * under `check`: that moved out of the top-level `entitlement` field, which
+ * is now the flat entitlement key.
  *
  * Must be mounted AFTER `requireAuth()` — without a caller there is nothing
  * to check, and that is a wiring bug rather than a payment problem.
@@ -293,16 +304,7 @@ export function requireEntitlement(
     }
     const check = await resolveClient(c).modules.billing.check(user.id, entitlement);
     if (!check.allowed) {
-      return c.json(
-        {
-          error: {
-            code: 'ENTITLEMENT_REQUIRED',
-            message: options.message ?? `This feature requires "${entitlement}".`,
-          },
-          entitlement: check,
-        },
-        402,
-      );
+      return paymentRequired(c, { entitlement, message: options.message, check });
     }
     await next();
   };
