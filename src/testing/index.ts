@@ -37,7 +37,7 @@ import { jobsRawHandler } from './jobs-raw';
  */
 
 export { FakeStore, makeFakeContext } from './fake-store';
-export type { FakeContextOptions, RawHandler } from './fake-store';
+export type { AggregatePayload, FakeContextOptions, RawHandler } from './fake-store';
 export { jobsRawHandler } from './jobs-raw';
 
 export interface TestClientOptions {

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { XenitionApiModule } from './types';
+import type { CorsOptions } from './router-utils';
 /**
  * API docs for generated app backends — an OpenAPI 3.0 document assembled
  * from the SAME module list `createXenitionApi` mounts. OpenAPI only, by
@@ -44,8 +45,13 @@ type JsonObject = Record<string, unknown>;
 export declare function buildOpenApi(options?: DocsOptions): JsonObject;
 /** CORS is the only router option that matters for a GET-only spec route. */
 export interface OpenApiRouterOptions extends DocsOptions {
-    /** Same contract as every other router: `true` (default) | allowlist | `false`. */
-    cors?: boolean | string[];
+    /**
+     * Same contract as every other router — see `XenitionRouterOptions.cors`.
+     * Spelled with the shared type rather than a narrower copy, because a
+     * second declaration of the same option is a second thing to forget when
+     * the first one grows.
+     */
+    cors?: boolean | string[] | CorsOptions;
 }
 /**
  * A mountable spec router: GET /openapi.json — the OpenAPI document for the

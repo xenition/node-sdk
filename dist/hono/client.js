@@ -21,6 +21,10 @@ exports.XenitionApiConfigError = XenitionApiConfigError;
  * Read one env var from the Hono context env (Cloudflare Workers bindings
  * / secrets) with a `process.env` fallback (Node, tests). Checked in that
  * order so Workers secrets always win.
+ *
+ * Exported because app code outside a router needs it too — a shared client
+ * helper, a job handler, a migration script. It used to be internal, and
+ * every generated app reimplemented these five lines verbatim.
  */
 function readEnvVar(c, name) {
     const fromCtx = c.env?.[name];
@@ -46,6 +50,13 @@ function createClientFromEnv(vars) {
  * stable within a Workers isolate / Node process. `modules.use()` (never
  * `enable()` — no DDL at request time) is idempotent, so marking the
  * module usable on every call is free.
+ *
+ * `module` is `null` for a router that touches NO data module — the auth
+ * router talks to `client.auth`, which is not a module and has no accessor
+ * to unlock. Passing a made-up name there would be worse than passing
+ * nothing: `ModuleName` is the list the module framework migrates and
+ * enables, and putting `'auth'` in it would claim a module exists that
+ * never will.
  */
 function makeClientResolver(module, provided) {
     let cached = provided;
@@ -56,7 +67,8 @@ function makeClientResolver(module, provided) {
                 XENITION_API_URL: readEnvVar(c, 'XENITION_API_URL'),
             });
         }
-        cached.modules.use(module);
+        if (module)
+            cached.modules.use(module);
         return cached;
     };
 }

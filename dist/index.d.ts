@@ -10,7 +10,7 @@ export { EmailClient } from './email';
 export type { SendEmailOptions, SendEmailResult, SendBulkResult } from './email';
 export { PushClient } from './push';
 export type { PushPlatform, PushDevice, PushNotification, PushTarget, RegisterDeviceInput, SendPushInput, SendPushResult, } from './push';
-export { AiClient, AiKeysClient, parseSseStream } from './ai';
+export { AiClient, AiKeysClient, parseJsonReply, parseSseStream } from './ai';
 export type { AiProvider, AiUsage, ChatMessage, GenerateTextOutput, ChatOutput, GenerateImageOutput, GenerateVideoOutput, GenerateEmbeddingsOutput, AiKeyRecord, GenerateTextOptions, ChatOptions, GenerateImageOptions, GenerateVideoOptions, GenerateEmbeddingsOptions, CreateAiKeyInput, UpdateAiKeyInput, ChatDelta, ResponseFormat, SpeechFormat, SpeechOptions, SpeechOutput, TranscribeOptions, TranscribeOutput, TranscribedWord, } from './ai';
 export { ChatbotClient } from './chatbot';
 export type { ChatbotConfig, ChatbotConfigPatch, ChatbotDocument, ChatbotMessage, SendMessageInput, SendMessageResult, UploadDocumentOptions, } from './chatbot';
@@ -54,7 +54,7 @@ export { BillingClient, billingModule, BILLING_MIGRATIONS, BILLING_TABLES, Apple
 export type { AppleConfig, AppleTransaction, GoogleConfig, NotificationResult, } from './modules/billing';
 export type { BillingEvent, BillingPlatform, BillingProduct, DefineProductInput, Entitlement, EntitlementCheck, EntitlementSource, EntitlementStatus, GrantInput, ProductKind, Purchase, PurchaseStatus, RecordPurchaseInput, StartTrialInput, ListProductsOptions as ListBillingProductsOptions, ListPurchasesOptions, } from './modules/billing';
 export { JobsClient, jobsModule, JOBS_MIGRATIONS, JOBS_TABLE } from './modules/jobs';
-export type { ClaimOptions, EnqueueOptions, FailOptions, Job, JobHandler, JobStatus, WorkSummary, ListJobsOptions as ListJobsQueryOptions, } from './modules/jobs';
+export type { ClaimOptions, EnqueueOptions, FailOptions, Job, JobContext, JobHandler, JobStatus, WorkSummary, ListJobsOptions as ListJobsQueryOptions, } from './modules/jobs';
 export { NotificationsClient, notificationsModule, NOTIFICATIONS_MIGRATIONS, NOTIFICATIONS_TABLES, } from './modules/notifications';
 export type { ListNotificationsResult, NotificationChannel, NotificationPreference, NotificationRecord, NotifyInput, NotifyResult, PreferencePatch, ScheduleInput, ScheduledNotification, ScheduledStatus, ListNotificationsOptions as ListInboxOptions, } from './modules/notifications';
 export { QuotasClient, quotasModule, QUOTAS_MIGRATIONS, QUOTAS_TABLE, periodEndFor, periodStartFor, } from './modules/quotas';

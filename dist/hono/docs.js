@@ -46,6 +46,282 @@ const UNAUTHORIZED = errorResponse('Missing, invalid, or expired end-user access
 const NOT_CONFIGURED = errorResponse('This app never configured that store platform');
 /* ── per-module route descriptions (paths relative to the API mount) ──── */
 const MODULE_PATHS = {
+    auth: {
+        '/auth/register': {
+            post: {
+                tags: ['auth'],
+                summary: 'Create an account and return a session',
+                description: 'Fields are copied by name — email, password, name?, metadata? — and anything else ' +
+                    'in the body is dropped rather than forwarded to a service-key call. Rate limited ' +
+                    'harder than the write default (5/min per IP).',
+                requestBody: jsonBody('Registration', {
+                    email: 'ada@example.com',
+                    password: 'correct horse battery staple',
+                }),
+                responses: {
+                    '201': okJson('{ user, session, token, refreshToken, expiresAt }'),
+                    '400': BAD_REQUEST,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/login': {
+            post: {
+                tags: ['auth'],
+                summary: 'Sign in with email and password',
+                requestBody: jsonBody('Credentials', { email: 'ada@example.com', password: '…' }),
+                responses: {
+                    '200': okJson('{ user, session, token, refreshToken, expiresAt }'),
+                    '400': BAD_REQUEST,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/refresh': {
+            post: {
+                tags: ['auth'],
+                summary: 'Exchange a refresh token for a fresh session',
+                description: 'Public: the access token has just expired, which is why the caller is here — the ' +
+                    'refresh token IS the credential. Store what comes BACK; a platform that rotates ' +
+                    'refresh tokens invalidates the one you sent. Answers 404 naming the endpoint on a ' +
+                    'deployment whose gateway has not shipped it yet.',
+                requestBody: jsonBody('The stored refresh token', { refreshToken: '…' }),
+                responses: {
+                    '200': okJson('{ user, session, token, refreshToken, expiresAt }'),
+                    '400': BAD_REQUEST,
+                    '404': errorResponse('This deployment does not implement /app-platform/auth/refresh'),
+                },
+            },
+        },
+        '/auth/otp/send': {
+            post: {
+                tags: ['auth'],
+                summary: 'Send a one-time code by email or SMS',
+                description: 'One of `email` / `phone` is required. The response never says whether the address ' +
+                    'was known — that would make this an account-enumeration oracle. 5/min per IP.',
+                requestBody: jsonBody('{ email? , phone?, purpose? }', {
+                    email: 'ada@example.com',
+                    purpose: 'signin',
+                }),
+                responses: {
+                    '200': okJson('{ sent: true, channel, expiresAt, retryAfterSeconds? }'),
+                    '400': BAD_REQUEST,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/otp/verify': {
+            post: {
+                tags: ['auth'],
+                summary: 'Redeem a one-time code',
+                description: "`purpose: 'signin'` returns a full session. Rate limited at 5/min per IP: a " +
+                    'six-digit code is the most brute-forceable thing on this router.',
+                requestBody: jsonBody('{ code, email? , phone?, purpose? }', {
+                    email: 'ada@example.com',
+                    code: '123456',
+                }),
+                responses: {
+                    '200': okJson('{ user, session, token, refreshToken, expiresAt }'),
+                    '400': BAD_REQUEST,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/password-reset/request': {
+            post: {
+                tags: ['auth'],
+                summary: 'Send the password-reset email',
+                description: 'Answers `{ requested: true }` whether or not the address exists.',
+                requestBody: jsonBody('{ email, redirectUrl }', {
+                    email: 'ada@example.com',
+                    redirectUrl: 'https://app.example.com/reset',
+                }),
+                responses: { '200': okJson('{ requested: true }'), '400': BAD_REQUEST, '429': RATE_LIMITED },
+            },
+        },
+        '/auth/password-reset/confirm': {
+            post: {
+                tags: ['auth'],
+                summary: 'Set a new password with the emailed token',
+                requestBody: jsonBody('{ token, newPassword }', { token: '…', newPassword: '…' }),
+                responses: { '200': okJson('{ reset: true }'), '400': BAD_REQUEST, '429': RATE_LIMITED },
+            },
+        },
+        '/auth/email/verify': {
+            post: {
+                tags: ['auth'],
+                summary: 'Verify an email address with its token',
+                requestBody: jsonBody('{ token }', { token: '…' }),
+                responses: { '200': okJson('{ verified: true }'), '400': BAD_REQUEST, '429': RATE_LIMITED },
+            },
+        },
+        '/auth/oauth/providers': {
+            get: {
+                tags: ['auth'],
+                summary: 'Which sign-in buttons to render',
+                description: 'Read-only and public — a login screen is drawn before anyone signs in. Render only ' +
+                    'providers whose `isAvailable` is true. Configuring a provider is a service-key ' +
+                    'operation and has no route here.',
+                responses: { '200': okJson('{ providers: [{ provider, isAvailable, … }] }') },
+            },
+        },
+        '/auth/oauth/{provider}/url': {
+            get: {
+                tags: ['auth'],
+                summary: 'Start the browser redirect flow',
+                description: 'Mobile uses `/auth/oauth/{provider}/id-token` instead.',
+                parameters: [
+                    pathParam('provider', 'google | github | facebook | twitter | apple'),
+                    queryParam('redirectUrl', 'Where the provider sends the user back'),
+                ],
+                responses: { '200': okJson('{ url, state }'), '400': BAD_REQUEST },
+            },
+        },
+        '/auth/oauth/{provider}/callback': {
+            post: {
+                tags: ['auth'],
+                summary: 'Finish the browser redirect flow',
+                parameters: [pathParam('provider')],
+                requestBody: jsonBody('{ code, state }', { code: '…', state: '…' }),
+                responses: {
+                    '200': okJson('{ user, session, token, refreshToken, expiresAt }'),
+                    '400': BAD_REQUEST,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/oauth/{provider}/id-token': {
+            post: {
+                tags: ['auth'],
+                summary: 'Native sign-in with a device-obtained id token',
+                description: 'What a phone actually does: the platform SDK completes sign-in locally and the ' +
+                    "server verifies the token against the provider's published keys. Pass the `nonce` " +
+                    'the app generated — Apple echoes it inside the token, which is what stops a token ' +
+                    'captured from another session being replayed.',
+                parameters: [pathParam('provider')],
+                requestBody: jsonBody('{ idToken, nonce?, name? }', { idToken: '…', nonce: '…' }),
+                responses: {
+                    '200': okJson('{ user, session, token, refreshToken, expiresAt }'),
+                    '400': BAD_REQUEST,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/me': {
+            get: {
+                tags: ['auth'],
+                summary: 'The signed-in caller',
+                description: 'Always the bearer of the token — there is no user id parameter, and a body field ' +
+                    'here would let anyone read anyone. Answered from the identity `requireAuth()` just ' +
+                    "resolved, so it is as fresh as that middleware's token cache (default 60s).",
+                security: [{ bearerAuth: [] }],
+                responses: { '200': okJson('The user, camelCased'), '401': UNAUTHORIZED },
+            },
+        },
+        '/auth/profile': {
+            patch: {
+                tags: ['auth'],
+                summary: "Update the caller's own profile",
+                description: 'Only `name`, `phone` and `metadata` are read; every other field is dropped. Returns ' +
+                    'the updated record, so an app never has to re-read /auth/me after a change.',
+                security: [{ bearerAuth: [] }],
+                requestBody: jsonBody('{ name?, phone?, metadata? }', { name: 'Ada Lovelace' }),
+                responses: {
+                    '200': okJson('The updated user, camelCased'),
+                    '400': BAD_REQUEST,
+                    '401': UNAUTHORIZED,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/password': {
+            post: {
+                tags: ['auth'],
+                summary: 'Change the password while signed in',
+                description: 'Proves identity with the CURRENT password rather than an emailed token, so someone ' +
+                    'holding an unlocked phone cannot silently lock the owner out. 5/min per IP.',
+                security: [{ bearerAuth: [] }],
+                requestBody: jsonBody('{ currentPassword, newPassword }', {
+                    currentPassword: '…',
+                    newPassword: '…',
+                }),
+                responses: {
+                    '200': okJson('{ changed: true }'),
+                    '400': BAD_REQUEST,
+                    '401': UNAUTHORIZED,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/logout': {
+            post: {
+                tags: ['auth'],
+                summary: 'End the current session',
+                description: "Reads no body. `requireAuth()`'s token cache is isolate-local with no eviction " +
+                    'hook, so the token can still authenticate for up to `cacheTtlSeconds` (default 60) ' +
+                    'afterwards — mount the middleware with `cacheTtlSeconds: 0` if that matters.',
+                security: [{ bearerAuth: [] }],
+                responses: { '200': okJson('{ ok: true }'), '401': UNAUTHORIZED, '429': RATE_LIMITED },
+            },
+        },
+        '/auth/sessions': {
+            get: {
+                tags: ['auth'],
+                summary: 'The "signed in on these devices" list',
+                security: [{ bearerAuth: [] }],
+                responses: { '200': okJson('{ sessions: [...] }'), '401': UNAUTHORIZED },
+            },
+            delete: {
+                tags: ['auth'],
+                summary: 'Sign every device out, this one included',
+                description: 'The button someone reaches for after losing a phone.',
+                security: [{ bearerAuth: [] }],
+                responses: { '200': okJson('{ revoked: <count> }'), '401': UNAUTHORIZED, '429': RATE_LIMITED },
+            },
+        },
+        '/auth/sessions/{sessionId}': {
+            delete: {
+                tags: ['auth'],
+                summary: 'Sign one other device out',
+                description: "Scoped by the caller's own token: the id is never resolved against anyone else's " +
+                    'sessions.',
+                security: [{ bearerAuth: [] }],
+                parameters: [pathParam('sessionId')],
+                responses: { '200': okJson('{ revoked: true }'), '401': UNAUTHORIZED, '429': RATE_LIMITED },
+            },
+        },
+        '/auth/account': {
+            delete: {
+                tags: ['auth'],
+                summary: "Delete the caller's own account",
+                description: 'Apple has required in-app account deletion since June 2022 and rejects at review ' +
+                    'without it. Mounted before the gateway implements it, so an app has the route the ' +
+                    'day it ships; until then it answers 404 naming the missing endpoint.',
+                security: [{ bearerAuth: [] }],
+                requestBody: jsonBody('{ password?, reason? }', {}),
+                responses: {
+                    '200': okJson('{ deleted: true, purgeAt? }'),
+                    '401': UNAUTHORIZED,
+                    '404': errorResponse('This deployment does not implement /app-platform/auth/account'),
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/auth/account/export': {
+            get: {
+                tags: ['auth'],
+                summary: 'Everything the platform holds about the caller',
+                description: 'The other half of the same obligation as deletion: a user must be able to leave ' +
+                    'WITH their data, not merely to leave.',
+                security: [{ bearerAuth: [] }],
+                responses: {
+                    '200': okJson('{ user, sessions?, data?, generatedAt }'),
+                    '401': UNAUTHORIZED,
+                    '404': errorResponse('This deployment does not implement /app-platform/auth/account/export'),
+                },
+            },
+        },
+    },
     cms: {
         '/cms/pages/{slug}': {
             get: {
@@ -529,6 +805,130 @@ const MODULE_PATHS = {
                 summary: 'Play Real-time Developer Notification (Pub/Sub push) endpoint',
                 description: 'Same contract as the Apple webhook. Idempotent on the Pub/Sub messageId.',
                 responses: { '200': okJson('{ received, handled, type }'), '400': BAD_REQUEST },
+            },
+        },
+    },
+    notifications: {
+        '/notifications': {
+            get: {
+                tags: ['notifications'],
+                summary: "The caller's inbox, newest first",
+                description: 'Keyset-paginated: pass the returned `nextCursor` back as `before`. An offset would ' +
+                    'skip and duplicate rows in a feed that is written to while it is read. Always the ' +
+                    "authenticated caller's inbox — there is no user id parameter.",
+                security: [{ bearerAuth: [] }],
+                parameters: [
+                    queryParam('unread', 'Unread only', { type: 'string', enum: ['1', '0', 'true', 'false'] }),
+                    queryParam('category', 'One category, e.g. "billing"'),
+                    intParam('limit', 'Default 25, capped at 100'),
+                    queryParam('before', 'Cursor — the createdAt of the last row you saw'),
+                ],
+                responses: {
+                    '200': okJson('{ notifications: [...], nextCursor }'),
+                    '400': BAD_REQUEST,
+                    '401': UNAUTHORIZED,
+                },
+            },
+        },
+        '/notifications/unread-count': {
+            get: {
+                tags: ['notifications'],
+                summary: 'Badge count for the caller',
+                security: [{ bearerAuth: [] }],
+                responses: { '200': okJson('{ count }'), '401': UNAUTHORIZED },
+            },
+        },
+        '/notifications/read-all': {
+            post: {
+                tags: ['notifications'],
+                summary: 'Mark every unread notification read',
+                description: 'Returns the resulting badge count, so the app need not ask again.',
+                security: [{ bearerAuth: [] }],
+                responses: {
+                    '200': okJson('{ read: true, unreadCount }'),
+                    '401': UNAUTHORIZED,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+        '/notifications/{id}/read': {
+            post: {
+                tags: ['notifications'],
+                summary: 'Mark one notification read',
+                description: 'Idempotent, and scoped to the caller: an id belonging to someone else updates ' +
+                    'nothing and reports the same success, which tells the caller nothing about which ' +
+                    'ids exist.',
+                security: [{ bearerAuth: [] }],
+                parameters: [pathParam('id')],
+                responses: { '200': okJson('{ read: true }'), '401': UNAUTHORIZED, '429': RATE_LIMITED },
+            },
+        },
+        '/notifications/preferences': {
+            get: {
+                tags: ['notifications'],
+                summary: 'Per-category channels and quiet hours',
+                description: 'A category the user has never touched comes back with the module defaults ' +
+                    '(in-app and push on, email off) rather than being missing, so a settings screen ' +
+                    'renders on a fresh account.',
+                security: [{ bearerAuth: [] }],
+                responses: { '200': okJson('{ preferences: [...] }'), '401': UNAUTHORIZED },
+            },
+            put: {
+                tags: ['notifications'],
+                summary: 'Update channels and quiet hours',
+                description: 'camelCase throughout: { category?, inApp?, push?, email?, quietStartMinute?, ' +
+                    'quietEndMinute?, utcOffsetMinutes? }. Quiet minutes are 0–1439 past local ' +
+                    'midnight; null clears the window and an omitted field leaves it alone. An omitted ' +
+                    'category writes to every configured category — one quiet-hours control means ' +
+                    'quiet everywhere.',
+                requestBody: jsonBody('Preference patch', {
+                    push: false,
+                    quietStartMinute: 1320,
+                    quietEndMinute: 420,
+                    utcOffsetMinutes: 60,
+                }),
+                security: [{ bearerAuth: [] }],
+                responses: {
+                    '200': okJson('{ preferences: [...] }'),
+                    '400': BAD_REQUEST,
+                    '401': UNAUTHORIZED,
+                    '429': RATE_LIMITED,
+                },
+            },
+        },
+    },
+    quotas: {
+        '/quotas': {
+            get: {
+                tags: ['quotas'],
+                summary: 'Peek several quotas at once',
+                description: 'Comma-separated `keys`, or every quota this app meters when omitted. Reading ' +
+                    'never consumes. Limits and periods are server-side configuration — a ' +
+                    'client-supplied limit would let anyone grant themselves an unlimited allowance.',
+                security: [{ bearerAuth: [] }],
+                parameters: [queryParam('keys', 'Comma-separated quota keys, e.g. "analysis,export"')],
+                responses: {
+                    '200': okJson('{ quotas: [{ key, allowed, used, limit, remaining, period, resetAt }] }'),
+                    '400': BAD_REQUEST,
+                    '401': UNAUTHORIZED,
+                    '501': NOT_CONFIGURED,
+                },
+            },
+        },
+        '/quotas/{key}': {
+            get: {
+                tags: ['quotas'],
+                summary: 'Peek one quota — "2 of 5 used"',
+                description: 'A read never spends a run; consuming stays server-side, in the route ' +
+                    'that does the expensive work.',
+                security: [{ bearerAuth: [] }],
+                parameters: [pathParam('key', 'Quota key, e.g. "analysis"')],
+                responses: {
+                    '200': okJson('{ key, allowed, used, limit, remaining, period, resetAt }'),
+                    '401': UNAUTHORIZED,
+                    '404': errorResponse('This app meters no such quota'),
+                    '501': NOT_CONFIGURED,
+                },
             },
         },
     },

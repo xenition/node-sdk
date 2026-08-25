@@ -1,7 +1,7 @@
 import { HttpClient } from '../core/http-client';
 import { XenitionError } from '../core/errors';
 import { API_ENDPOINTS } from '../constants';
-import { AiClient, parseSseStream } from './ai-client';
+import { AiClient, parseJsonReply, parseSseStream } from './ai-client';
 import { ChatDelta } from './types';
 
 const makeAi = () => {
@@ -184,5 +184,70 @@ describe('parseSseStream', () => {
       parseSseStream(sseResponse(['data: {"text":"z"}\n\ndata: [DONE]\n\n'])),
     );
     expect(deltas.map((d) => d.text)).toEqual(['z', '']);
+  });
+});
+
+/**
+ * `responseFormat: json_schema` asks a provider for JSON; it does not
+ * guarantee one. These are the shapes that actually come back when it goes
+ * wrong — a markdown fence the model added unasked, leading prose, a reply
+ * truncated at the token limit.
+ */
+describe('chatJson', () => {
+  const SCHEMA = {
+    type: 'object',
+    required: ['score', 'summary'],
+    properties: { score: { type: 'integer' }, summary: { type: 'string' } },
+  };
+  const reply = (content: string) => ({ message: { role: 'assistant', content } });
+
+  it('sends the schema and returns the parsed object', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue(reply('{"score":82,"summary":"Good pace"}'));
+    await expect(ai.chatJson([{ role: 'user', content: 'x' }], SCHEMA)).resolves.toEqual({
+      score: 82,
+      summary: 'Good pace',
+    });
+    expect(post.mock.calls[0][1].responseFormat).toMatchObject({
+      type: 'json_schema',
+      schema: SCHEMA,
+    });
+  });
+
+  it('survives a markdown fence the model added unasked', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue(reply('```json\n{"score":70,"summary":"ok"}\n```'));
+    await expect(ai.chatJson([], SCHEMA)).resolves.toMatchObject({ score: 70 });
+  });
+
+  it('survives leading prose', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue(reply('Sure! Here is the result:\n{"score":55,"summary":"ok"}'));
+    await expect(ai.chatJson([], SCHEMA)).resolves.toMatchObject({ score: 55 });
+  });
+
+  it('throws rather than returning a half-built object when a field is missing', async () => {
+    // A score of 0 because the reply was truncated is worse than an error —
+    // it silently becomes the user's result.
+    const { post, ai } = makeAi();
+    post.mockResolvedValue(reply('{"score":82}'));
+    await expect(ai.chatJson([], SCHEMA)).rejects.toMatchObject({ code: 'AI_UNPARSEABLE' });
+  });
+
+  it('throws on unparseable output', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue(reply('I cannot do that.'));
+    await expect(ai.chatJson([], SCHEMA)).rejects.toThrow(/did not return parseable JSON/);
+  });
+
+  it('does not leak the whole reply into the error', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue(reply('x'.repeat(5000)));
+    const err = await ai.chatJson([], SCHEMA).catch((e) => e);
+    expect(JSON.stringify(err.details).length).toBeLessThan(600);
+  });
+
+  it('parseJsonReply works standalone with no schema', () => {
+    expect(parseJsonReply('{"a":1}')).toEqual({ a: 1 });
   });
 });

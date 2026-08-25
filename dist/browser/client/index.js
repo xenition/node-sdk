@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.formatDate = exports.AppClientError = exports.createAppClient = void 0;
+exports.formatDate = exports.isPaymentRequired = exports.AppClientError = exports.createAppClient = void 0;
 /**
  * `@xenition/sdk/client` — the browser/worker data layer for generated apps.
  *
@@ -17,6 +17,7 @@ var app_client_1 = require("./app-client");
 Object.defineProperty(exports, "createAppClient", { enumerable: true, get: function () { return app_client_1.createAppClient; } });
 var errors_1 = require("./errors");
 Object.defineProperty(exports, "AppClientError", { enumerable: true, get: function () { return errors_1.AppClientError; } });
+Object.defineProperty(exports, "isPaymentRequired", { enumerable: true, get: function () { return errors_1.isPaymentRequired; } });
 var format_1 = require("./format");
 Object.defineProperty(exports, "formatDate", { enumerable: true, get: function () { return format_1.formatDate; } });
 //# sourceMappingURL=index.js.map

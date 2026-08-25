@@ -1,6 +1,12 @@
 import { errorFromResponse } from './errors';
 import type {
   AppClient,
+  AppClientOptions,
+  AuthResult,
+  AuthSession,
+  AuthUser,
+  BillingProduct,
+  BillingProductsOptions,
   BookForm,
   BookResult,
   Booking,
@@ -16,22 +22,38 @@ import type {
   CmsItemsOptions,
   CmsPage,
   Collection,
+  DeleteAccountInput,
+  DeleteAccountResult,
+  Entitlement,
+  EntitlementCheck,
   EventDetail,
   EventSummary,
   EventsListOptions,
   FormSchema,
   FormSubmitResult,
+  IdTokenSignInInput,
+  InboxOptions,
+  InboxPage,
+  Job,
   Listing,
   ListingSubmitInput,
   ListingSubmitResult,
   ListingsListOptions,
+  LoginInput,
   MediaAlbum,
   MediaAlbumWithItems,
   MediaAlbumsOptions,
+  NotificationPreference,
+  NotificationPreferenceInput,
+  OAuthProvider,
+  OAuthUrlResult,
   Order,
   Product,
   ProductWithVariants,
   ProductsListOptions,
+  RegisterInput,
+  ResetPasswordInput,
+  RestorePurchasesInput,
   Review,
   ReviewAggregate,
   ReviewSubmitInput,
@@ -40,8 +62,16 @@ import type {
   Rsvp,
   RsvpInput,
   RsvpResult,
+  SendOtpInput,
+  SendOtpResult,
   SlotsRange,
+  SocialProvider,
   Stock,
+  UpdateProfileInput,
+  UserDataExport,
+  VerifyOtpInput,
+  VerifyPurchaseInput,
+  VerifyPurchaseResult,
 } from './types';
 
 /**
@@ -59,42 +89,78 @@ import type {
  *   const api = createAppClient(`${import.meta.env.VITE_API_URL ?? ''}/api`);
  *   const posts = await api.cms.items('posts', { orderBy: 'created_at', direction: 'DESC' });
  *
+ * Signed-in routes (all of `auth`'s account half, `jobs`, `notifications`,
+ * and everything under `billing` except its public product list) sit behind
+ * the backend's `requireAuth()`. Hand the client the END USER's access
+ * token — their own credential from `auth.login()`, never a platform key —
+ * and it attaches the `Authorization` header to every request:
+ *
+ *   const api = createAppClient('/api', { accessToken: () => store.getToken() });
+ *   const check = await api.billing.entitlement('premium');
+ *
  * Error contract:
  *   - single-get (cms.page/cms.item, listings.get, events.get, events.getRsvp,
- *     booking.getBooking) → 404 is null
+ *     booking.getBooking, jobs.get) → 404 is null
  *   - every other non-2xx throws `AppClientError(status, code?, message)`
  *     (POST validation 400s surface the server's message).
+ *   - a 402 is a PAYWALL, not a failure of the request: check
+ *     `err.isPaymentRequired` and read `err.entitlement` / `err.quota`.
+ *     Never branch on the message text.
  */
-export function createAppClient(baseUrl: string): AppClient {
+export function createAppClient(baseUrl: string, options: AppClientOptions = {}): AppClient {
   const base = baseUrl.replace(/\/+$/, '');
   const url = (path: string) => `${base}${path}`;
 
+  /**
+   * The `Authorization` header for this request, or undefined.
+   *
+   * Resolved per request rather than once at construction: a token is
+   * refreshed, and a user signs out, while the client object lives on. A
+   * client built without one sends no header at all — which is exactly
+   * right for the public routes and for a signed-out app.
+   */
+  async function authHeader(): Promise<Record<string, string> | undefined> {
+    const source = options.accessToken;
+    if (source === undefined) return undefined;
+    const token = typeof source === 'function' ? await source() : source;
+    return token ? { Authorization: `Bearer ${token}` } : undefined;
+  }
+
+  /** GET, carrying the caller's token when there is one. */
+  async function get(path: string): Promise<Response> {
+    const headers = await authHeader();
+    return headers ? fetch(url(path), { headers }) : fetch(url(path));
+  }
+
   /** GET expecting JSON; throws AppClientError on any non-2xx (incl. 404). */
   async function getJson<T>(path: string): Promise<T> {
-    const res = await fetch(url(path));
+    const res = await get(path);
     if (!res.ok) throw await errorFromResponse(res);
     return (await res.json()) as T;
   }
 
   /** GET a single resource; 404 collapses to null, other non-2xx throw. */
   async function getOrNull<T>(path: string): Promise<T | null> {
-    const res = await fetch(url(path));
+    const res = await get(path);
     if (res.status === 404) return null;
     if (!res.ok) throw await errorFromResponse(res);
     return (await res.json()) as T;
   }
 
   /**
-   * Send a write (`POST`/`PATCH`/`DELETE`); throws AppClientError on non-2xx
-   * (surfacing the 400/409 message). A `body` of `undefined` sends no body /
-   * Content-Type — used by DELETE and the body-less `POST /cart`.
+   * Send a write (`POST`/`PATCH`/`PUT`/`DELETE`); throws AppClientError on
+   * non-2xx (surfacing the 400/409 message). A `body` of `undefined` sends
+   * no body / Content-Type — used by DELETE and by the routes that read no
+   * body at all (`POST /billing/trial`, the two mark-read routes).
    */
   async function sendJson<T>(method: string, path: string, body?: unknown): Promise<T> {
     const init: RequestInit = { method };
+    const headers: Record<string, string> = { ...(await authHeader()) };
     if (body !== undefined) {
-      init.headers = { 'Content-Type': 'application/json' };
+      headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(body);
     }
+    if (Object.keys(headers).length > 0) init.headers = headers;
     const res = await fetch(url(path), init);
     if (!res.ok) throw await errorFromResponse(res);
     return (await res.json()) as T;
@@ -328,6 +394,201 @@ export function createAppClient(baseUrl: string): AppClient {
       },
       order(id) {
         return getOrNull<Order>(`/checkout/order/${encodeURIComponent(id)}`);
+      },
+    },
+
+    billing: {
+      async products(options: BillingProductsOptions = {}) {
+        const qs = query({ platform: options.platform });
+        const body = await getJson<{ products: BillingProduct[] }>(`/billing/products${qs}`);
+        return body.products ?? [];
+      },
+      async entitlements() {
+        // Already camelCase, and not rows at all: `listEntitlements` BUILDS
+        // an EntitlementCheck per record rather than handing the row through,
+        // so there is nothing for ../hono/normalize.ts to do and nothing to
+        // do here. What comes back is the derived "may they, right now"
+        // answer for every capability — an expired subscription arrives as
+        // `allowed: false, reason: 'expired'` rather than as a date to compare.
+        const body = await getJson<{ entitlements: EntitlementCheck[] }>(`/billing/entitlements`);
+        return body.entitlements ?? [];
+      },
+      entitlement(key) {
+        // Already camelCase — the module BUILDS an EntitlementCheck rather
+        // than returning a row, so there is nothing to normalize.
+        return getJson<EntitlementCheck>(`/billing/entitlements/${encodeURIComponent(key)}`);
+      },
+      verify(input: VerifyPurchaseInput) {
+        return postJson<VerifyPurchaseResult>(`/billing/verify`, input);
+      },
+      async restore(input: RestorePurchasesInput) {
+        // The router answers restore from `listEntitlements` too, so this is
+        // the caller's whole entitlement picture rather than only what this
+        // call recovered.
+        const body = await postJson<{ entitlements: EntitlementCheck[] }>(`/billing/restore`, input);
+        return body.entitlements ?? [];
+      },
+      startTrial() {
+        // No body: the trial's length is the server's, never a client
+        // argument — otherwise anyone could grant themselves ten years.
+        return sendJson<EntitlementCheck>('POST', `/billing/trial`);
+      },
+    },
+
+    // These paths and bodies mirror the end-user half of
+    // `src/auth/auth-client.ts` (and the segments of API_ENDPOINTS.AUTH,
+    // minus its `/app-platform` prefix). `authRouter()` in
+    // `@xenition/sdk/hono` serves them — and `hono/auth-router.spec.ts`
+    // drives THIS client against THAT router, so a path or body renamed on
+    // one side fails there rather than in somebody's app.
+    //
+    // What is deliberately absent is the service-key half — `listUsers`,
+    // `searchUsers`, `getUserById`, `updateUser`, `configureSocialProvider`,
+    // team administration. This client carries no key and must never look
+    // like it could: a method here is a promise that a phone may call it.
+    auth: {
+      register(input: RegisterInput) {
+        return postJson<AuthResult>(`/auth/register`, input);
+      },
+      login(input: LoginInput) {
+        return postJson<AuthResult>(`/auth/login`, input);
+      },
+      refresh(refreshToken) {
+        return postJson<AuthResult>(`/auth/refresh`, { refreshToken });
+      },
+      signInWithIdToken(input: IdTokenSignInInput) {
+        return postJson<AuthResult>(
+          `/auth/oauth/${encodeURIComponent(input.provider)}/id-token`,
+          { idToken: input.idToken, nonce: input.nonce, name: input.name },
+        );
+      },
+      sendOtp(input: SendOtpInput) {
+        return postJson<SendOtpResult>(`/auth/otp/send`, input);
+      },
+      verifyOtp(input: VerifyOtpInput) {
+        return postJson<AuthResult>(`/auth/otp/verify`, input);
+      },
+      me() {
+        // Not `getOrNull`: a guest gets a 401 here, and collapsing that to
+        // null would read as "no such user" and send someone debugging the
+        // wrong thing.
+        return getJson<AuthUser>(`/auth/me`);
+      },
+      updateProfile(input: UpdateProfileInput) {
+        return sendJson<AuthUser>('PATCH', `/auth/profile`, input);
+      },
+      changePassword(input) {
+        return postJson<{ changed: true }>(`/auth/password`, input);
+      },
+      requestPasswordReset(email, redirectUrl) {
+        return postJson<{ requested: true }>(`/auth/password-reset/request`, {
+          email,
+          redirectUrl,
+        });
+      },
+      resetPassword(input: ResetPasswordInput) {
+        return postJson<{ reset: true }>(`/auth/password-reset/confirm`, input);
+      },
+      verifyEmail(token) {
+        return postJson<{ verified: true }>(`/auth/email/verify`, { token });
+      },
+      logout() {
+        return sendJson<{ ok: true }>('POST', `/auth/logout`);
+      },
+      async sessions() {
+        const body = await getJson<{ sessions: AuthSession[] }>(`/auth/sessions`);
+        return body.sessions ?? [];
+      },
+      revokeSession(sessionId) {
+        return sendJson<{ revoked: true }>(
+          'DELETE',
+          `/auth/sessions/${encodeURIComponent(sessionId)}`,
+        );
+      },
+      async revokeAllSessions() {
+        const body = await sendJson<{ revoked: number }>('DELETE', `/auth/sessions`);
+        return body.revoked ?? 0;
+      },
+      deleteAccount(input: DeleteAccountInput = {}) {
+        return sendJson<DeleteAccountResult>('DELETE', `/auth/account`, input);
+      },
+      exportData() {
+        return getJson<UserDataExport>(`/auth/account/export`);
+      },
+      async socialProviders() {
+        const body = await getJson<{ providers: SocialProvider[] }>(`/auth/oauth/providers`);
+        return body.providers ?? [];
+      },
+      oauthUrl(provider: OAuthProvider, redirectUrl) {
+        const qs = query({ redirectUrl });
+        return getJson<OAuthUrlResult>(
+          `/auth/oauth/${encodeURIComponent(provider)}/url${qs}`,
+        );
+      },
+      oauthCallback(provider: OAuthProvider, code, state) {
+        return postJson<AuthResult>(`/auth/oauth/${encodeURIComponent(provider)}/callback`, {
+          code,
+          state,
+        });
+      },
+    },
+
+    jobs: {
+      // One method, because the router is one route. Enqueuing is NOT a
+      // public operation: the app decides what work exists and what it
+      // costs, and an endpoint that let a device queue arbitrary job types
+      // would be a free denial-of-service against its own worker. A job the
+      // caller does not own answers 404, same as one that does not exist.
+      get(id) {
+        return getOrNull<Job>(`/jobs/${encodeURIComponent(id)}`);
+      },
+    },
+
+    notifications: {
+      inbox(options: InboxOptions = {}) {
+        const qs = query({
+          unread: options.unread,
+          category: options.category,
+          limit: options.limit,
+          before: options.before,
+        });
+        return getJson<InboxPage>(`/notifications${qs}`);
+      },
+      async unreadCount() {
+        const body = await getJson<{ count: number }>(`/notifications/unread-count`);
+        return body.count ?? 0;
+      },
+      async markRead(id) {
+        // The route reads no body, and its `{ read: true }` says nothing the
+        // caller did not already know, so nothing is returned.
+        await sendJson<{ read: true }>(
+          'POST',
+          `/notifications/${encodeURIComponent(id)}/read`,
+        );
+      },
+      async markAllRead() {
+        // The badge is the thing the caller actually wanted changed, and the
+        // router returns it here rather than making the app pay for a second
+        // round trip a moment later.
+        const body = await sendJson<{ read: true; unreadCount: number }>(
+          'POST',
+          `/notifications/read-all`,
+        );
+        return body.unreadCount ?? 0;
+      },
+      async preferences() {
+        const body = await getJson<{ preferences: NotificationPreference[] }>(
+          `/notifications/preferences`,
+        );
+        return body.preferences ?? [];
+      },
+      async savePreferences(input: NotificationPreferenceInput) {
+        const body = await sendJson<{ preferences: NotificationPreference[] }>(
+          'PUT',
+          `/notifications/preferences`,
+          input,
+        );
+        return body.preferences ?? [];
       },
     },
   };

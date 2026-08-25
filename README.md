@@ -186,9 +186,31 @@ Gate a feature in one line:
 app.use('/coach/*', requireAuth(), requireEntitlement('premium'));
 ```
 
-It answers **402 Payment Required**, not 403, and the body carries the same
-`EntitlementCheck` the client reads from `/billing/entitlements/:key` — so
-one code path in the app renders the paywall from either.
+It answers **402 Payment Required**, not 403, in the SDK's one
+payment-required shape:
+
+```jsonc
+{
+  "error": { "code": "PAYMENT_REQUIRED", "message": "This feature requires \"premium\"." },
+  "entitlement": "premium",
+  // present only when a metered quota is what refused:
+  "quota": { "key": "analysis", "limit": 5, "used": 5, "resetAt": "2026-09-01T00:00:00.000Z" },
+  // present when an entitlement gate is what refused — the same
+  // EntitlementCheck the client reads from /billing/entitlements/:key:
+  "check": { "allowed": false, "status": "expired", "expiresAt": "…", "reason": "expired" }
+}
+```
+
+The gate and a `quotas` meter answer the **same** body, so one code path in
+the app renders the paywall from either — the presence of `quota` is what
+tells "you are out of runs" from "you must upgrade". Build it yourself with
+`paymentRequired(c, { entitlement, quota })` rather than hand-rolling a
+402 next to a metered call:
+
+```ts
+const quota = await client.modules.quotas.consume(userId, 'analysis', { limit: 5 });
+if (!quota.allowed) return paymentRequired(c, { entitlement: 'premium', quota: { key: 'analysis', ...quota } });
+```
 
 **Secrets** — `APPLE_KEY_ID`, `APPLE_ISSUER_ID`, `APPLE_PRIVATE_KEY`,
 `APPLE_BUNDLE_ID`, `APPLE_ENVIRONMENT` (`production`/`sandbox`/`auto`,
@@ -326,7 +348,11 @@ every row leaving these routers is normalized to camelCase
 their inner keys untouched — that casing is your app's contract.
 
 Errors map to proper HTTP statuses (400 validation, 404 missing, 429 rate
-limited, 502/504 upstream) and never leak keys or upstream URLs. `hono`
+limited, 502/504 upstream) and never leak keys or upstream URLs. Hono's own
+`throw new HTTPException(404, { message })` maps too — same `{ error: {
+code, message } }` JSON, its own status — so an app's routes refuse requests
+the idiomatic way instead of falling through to a 500. An exception you
+build with its own `res` is passed through exactly as built. `hono`
 is an **optional peer dependency** — the SDK core never imports it, and
 the `./hono` subpath is Worker/Node-only (excluded from the browser
 build). Routers only ever call `modules.use()` — never `enable()`/DDL at

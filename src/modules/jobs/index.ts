@@ -8,6 +8,7 @@ export {
 export type {
   ClaimOptions,
   CronRun,
+  JobContext,
   EnqueueOptions,
   FailOptions,
   Job,

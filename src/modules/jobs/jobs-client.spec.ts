@@ -15,6 +15,13 @@ const makeJobs = () => {
 };
 
 const rowsOf = (store: FakeStore): Job[] => store.rows(JOBS_TABLE) as unknown as Job[];
+
+/**
+ * Handlers now receive `{ client, env }`. These tests never touch either —
+ * they are about claim/complete/fail bookkeeping — but `work()` requires a
+ * context because in production every handler needs one.
+ */
+const CTX = { client: {} as never, env: {} };
 const YESTERDAY = () => new Date(Date.now() - 86_400_000).toISOString();
 const TOMORROW = () => new Date(Date.now() + 86_400_000).toISOString();
 
@@ -216,10 +223,15 @@ describe('work', () => {
     await jobs.enqueue('speech.analyze', { sessionId: 's1' });
     const handler = jest.fn(async () => ({ words: 10 }));
 
-    const summary = await jobs.work({ 'speech.analyze': handler }, { limit: 10 });
+    const summary = await jobs.work({ 'speech.analyze': handler }, { context: CTX, limit: 10 });
 
     expect(summary).toMatchObject({ claimed: 1, succeeded: 1, failed: 0 });
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ payload: { sessionId: 's1' } }));
+    // Two arguments now: the job, and the context that lets a handler reach
+    // the platform at all.
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: { sessionId: 's1' } }),
+      CTX,
+    );
     expect(rowsOf(store)[0]).toMatchObject({ status: 'succeeded', result: { words: 10 } });
   });
 
@@ -234,7 +246,7 @@ describe('work', () => {
         },
         b: async () => ({ ok: true }),
       },
-      { limit: 10 },
+      { context: CTX, limit: 10 },
     );
     expect(summary).toMatchObject({ claimed: 2, succeeded: 1, failed: 1 });
   });
@@ -243,7 +255,7 @@ describe('work', () => {
     const { store, jobs } = makeJobs();
     await jobs.enqueue('known');
     await jobs.enqueue('other');
-    await jobs.work({ known: async () => undefined }, { limit: 10 });
+    await jobs.work({ known: async () => undefined }, { context: CTX, limit: 10 });
     const other = rowsOf(store).find((job) => job.type === 'other');
     expect(other).toMatchObject({ status: 'queued', attempts: 0 });
   });
@@ -251,7 +263,7 @@ describe('work', () => {
   it('kills an unroutable job rather than retrying it forever', async () => {
     const { store, jobs } = makeJobs();
     await jobs.enqueue('ghost');
-    const summary = await jobs.work({ ghost: undefined as never }, { types: ['ghost'], limit: 10 });
+    const summary = await jobs.work({ ghost: undefined as never }, { context: CTX, types: ['ghost'], limit: 10 });
     expect(summary.unhandled).toEqual(['ghost']);
     expect(rowsOf(store)[0]).toMatchObject({ status: 'dead' });
   });
@@ -259,13 +271,13 @@ describe('work', () => {
   it('does nothing when no handlers are registered', async () => {
     const { jobs } = makeJobs();
     await jobs.enqueue('x');
-    expect(await jobs.work({})).toMatchObject({ claimed: 0, succeeded: 0, failed: 0 });
+    expect(await jobs.work({}, { context: CTX })).toMatchObject({ claimed: 0, succeeded: 0, failed: 0 });
   });
 
   it('treats a void handler as success with no result', async () => {
     const { store, jobs } = makeJobs();
     await jobs.enqueue('x');
-    await jobs.work({ x: async () => undefined });
+    await jobs.work({ x: async () => undefined }, { context: CTX });
     expect(rowsOf(store)[0]).toMatchObject({ status: 'succeeded', result: null });
   });
 });
@@ -305,5 +317,35 @@ describe('list and purge', () => {
   it('rejects a non-positive window', async () => {
     const { jobs } = makeJobs();
     await expect(jobs.purge({ olderThanDays: 0 })).rejects.toThrow(/must be positive/);
+  });
+});
+
+/**
+ * A handler runs on a scheduled tick, so it has no request to build a client
+ * from — and in a Worker the secrets are on `env`, not `process.env`.
+ * Without a context a handler cannot transcribe, notify, or read a row it
+ * does not already hold.
+ */
+describe('handler context', () => {
+  it('passes the client and env through to the handler', async () => {
+    const { jobs } = makeJobs();
+    await jobs.enqueue('x');
+    const seen: unknown[] = [];
+    await jobs.work({ x: (_job, ctx) => void seen.push(ctx) }, { context: CTX });
+    expect(seen).toEqual([CTX]);
+  });
+
+  it('refuses to run handlers with no context, and names the fix', async () => {
+    const { jobs } = makeJobs();
+    await jobs.enqueue('x');
+    await expect(jobs.work({ x: async () => undefined })).rejects.toThrow(
+      /handlers need a JobContext.*withScheduled/s,
+    );
+  });
+
+  it('still short-circuits with no handlers, context or not', async () => {
+    const { jobs } = makeJobs();
+    await jobs.enqueue('x');
+    await expect(jobs.work({})).resolves.toMatchObject({ claimed: 0 });
   });
 });

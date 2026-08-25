@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.XenitionApiConfigError = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.NotConfiguredError = exports.jsonNotFound = exports.honoErrorHandler = exports.unauthorized = exports.forbidden = exports.badRequest = exports.bearerToken = exports.requireUser = exports.currentUserId = exports.currentUser = exports.requireAuth = exports.xenitionAuth = exports.buildCustomRouter = exports.defineRouter = exports.openApiRouter = exports.buildOpenApi = exports.withScheduled = exports.createScheduledHandler = exports.jobsRouter = exports.requireEntitlement = exports.billingRouter = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = void 0;
+exports.XenitionApiConfigError = exports.readEnvVar = exports.createClientFromEnv = exports.normalizeRows = exports.normalizeRow = exports.camelizeKey = exports.paymentRequiredBody = exports.paymentRequired = exports.NotConfiguredError = exports.jsonNotFound = exports.honoErrorHandler = exports.unauthorized = exports.forbidden = exports.badRequest = exports.bearerToken = exports.requireUser = exports.currentUserId = exports.currentUser = exports.requireAuth = exports.xenitionAuth = exports.buildCustomRouter = exports.defineRouter = exports.openApiRouter = exports.buildOpenApi = exports.withScheduled = exports.createScheduledHandler = exports.quotasRouter = exports.notificationsRouter = exports.jobsRouter = exports.requireEntitlement = exports.billingRouter = exports.verifyStripeSignature = exports.checkoutRouter = exports.ordersRouter = exports.cartRouter = exports.inventoryRouter = exports.catalogRouter = exports.bookingRouter = exports.mediaRouter = exports.eventsRouter = exports.listingsRouter = exports.reviewsRouter = exports.formsRouter = exports.cmsRouter = exports.authRouter = void 0;
 exports.createXenitionApi = createXenitionApi;
 const hono_1 = require("hono");
+const auth_router_1 = require("./auth-router");
 const cms_router_1 = require("./cms-router");
 const forms_router_1 = require("./forms-router");
 const errors_1 = require("./errors");
@@ -17,6 +18,8 @@ const orders_router_1 = require("./orders-router");
 const checkout_router_1 = require("./checkout-router");
 const billing_router_1 = require("./billing-router");
 const jobs_router_1 = require("./jobs-router");
+const notifications_router_1 = require("./notifications-router");
+const quotas_router_1 = require("./quotas-router");
 const reviews_router_1 = require("./reviews-router");
 const router_utils_1 = require("./router-utils");
 const docs_1 = require("./docs");
@@ -48,8 +51,13 @@ const define_router_1 = require("./define-router");
  * when explicitly imported.
  */
 function createXenitionApi(options = {}) {
-    const { modules, custom, ...routerOptions } = options;
+    // `quotas` and `notificationCategories` are pulled out rather than spread
+    // into every child: they are one router's configuration each, and the
+    // quota limits in particular must reach the quotas router unchanged —
+    // that map is the paywall.
+    const { modules, custom, quotas, notificationCategories, ...routerOptions } = options;
     const selected = modules ?? [
+        'auth',
         'cms',
         'forms',
         'reviews',
@@ -64,6 +72,8 @@ function createXenitionApi(options = {}) {
         'checkout',
         'billing',
         'jobs',
+        'notifications',
+        'quotas',
     ];
     const app = new hono_1.Hono();
     // CORS lives on the parent so preflights are answered even for
@@ -72,6 +82,8 @@ function createXenitionApi(options = {}) {
     app.onError(errors_1.honoErrorHandler);
     app.notFound(errors_1.jsonNotFound);
     const childOptions = { ...routerOptions, cors: false };
+    if (selected.includes('auth'))
+        app.route('/', (0, auth_router_1.authRouter)(childOptions));
     if (selected.includes('cms'))
         app.route('/cms', (0, cms_router_1.cmsRouter)(childOptions));
     if (selected.includes('forms'))
@@ -100,6 +112,11 @@ function createXenitionApi(options = {}) {
         app.route('/', (0, billing_router_1.billingRouter)(childOptions));
     if (selected.includes('jobs'))
         app.route('/', (0, jobs_router_1.jobsRouter)(childOptions));
+    if (selected.includes('notifications')) {
+        app.route('/', (0, notifications_router_1.notificationsRouter)({ ...childOptions, categories: notificationCategories }));
+    }
+    if (selected.includes('quotas'))
+        app.route('/', (0, quotas_router_1.quotasRouter)({ ...childOptions, quotas }));
     // The app's own routers, mounted on the SAME parent as the built-ins so
     // they inherit the error handler, CORS and JSON 404 above.
     for (const definition of custom ?? []) {
@@ -111,6 +128,8 @@ function createXenitionApi(options = {}) {
     app.route('/', (0, docs_1.openApiRouter)({ ...childOptions, modules: selected, custom }));
     return app;
 }
+var auth_router_2 = require("./auth-router");
+Object.defineProperty(exports, "authRouter", { enumerable: true, get: function () { return auth_router_2.authRouter; } });
 var cms_router_2 = require("./cms-router");
 Object.defineProperty(exports, "cmsRouter", { enumerable: true, get: function () { return cms_router_2.cmsRouter; } });
 var forms_router_2 = require("./forms-router");
@@ -141,6 +160,10 @@ Object.defineProperty(exports, "billingRouter", { enumerable: true, get: functio
 Object.defineProperty(exports, "requireEntitlement", { enumerable: true, get: function () { return billing_router_2.requireEntitlement; } });
 var jobs_router_2 = require("./jobs-router");
 Object.defineProperty(exports, "jobsRouter", { enumerable: true, get: function () { return jobs_router_2.jobsRouter; } });
+var notifications_router_2 = require("./notifications-router");
+Object.defineProperty(exports, "notificationsRouter", { enumerable: true, get: function () { return notifications_router_2.notificationsRouter; } });
+var quotas_router_2 = require("./quotas-router");
+Object.defineProperty(exports, "quotasRouter", { enumerable: true, get: function () { return quotas_router_2.quotasRouter; } });
 var scheduled_1 = require("./scheduled");
 Object.defineProperty(exports, "createScheduledHandler", { enumerable: true, get: function () { return scheduled_1.createScheduledHandler; } });
 Object.defineProperty(exports, "withScheduled", { enumerable: true, get: function () { return scheduled_1.withScheduled; } });
@@ -164,11 +187,14 @@ Object.defineProperty(exports, "unauthorized", { enumerable: true, get: function
 Object.defineProperty(exports, "honoErrorHandler", { enumerable: true, get: function () { return errors_2.honoErrorHandler; } });
 Object.defineProperty(exports, "jsonNotFound", { enumerable: true, get: function () { return errors_2.jsonNotFound; } });
 Object.defineProperty(exports, "NotConfiguredError", { enumerable: true, get: function () { return errors_2.NotConfiguredError; } });
+Object.defineProperty(exports, "paymentRequired", { enumerable: true, get: function () { return errors_2.paymentRequired; } });
+Object.defineProperty(exports, "paymentRequiredBody", { enumerable: true, get: function () { return errors_2.paymentRequiredBody; } });
 var normalize_1 = require("./normalize");
 Object.defineProperty(exports, "camelizeKey", { enumerable: true, get: function () { return normalize_1.camelizeKey; } });
 Object.defineProperty(exports, "normalizeRow", { enumerable: true, get: function () { return normalize_1.normalizeRow; } });
 Object.defineProperty(exports, "normalizeRows", { enumerable: true, get: function () { return normalize_1.normalizeRows; } });
 var client_1 = require("./client");
 Object.defineProperty(exports, "createClientFromEnv", { enumerable: true, get: function () { return client_1.createClientFromEnv; } });
+Object.defineProperty(exports, "readEnvVar", { enumerable: true, get: function () { return client_1.readEnvVar; } });
 Object.defineProperty(exports, "XenitionApiConfigError", { enumerable: true, get: function () { return client_1.XenitionApiConfigError; } });
 //# sourceMappingURL=index.js.map

@@ -1,3 +1,5 @@
+import type { XenitionClient } from '../../xenition-client';
+
 /**
  * Types for the jobs module — deferred and background work.
  */
@@ -82,8 +84,25 @@ export interface ListJobsOptions {
 }
 
 /** A handler for one job type. Its return value is stored as the result. */
+/**
+ * What a handler is given besides the job.
+ *
+ * A handler runs on a scheduled tick, not a request, so there is no Hono
+ * context to build a client from — and in a Worker, secrets live on `env`,
+ * not `process.env`. Without this a handler literally could not reach the
+ * platform: it could not transcribe, notify, or read a row it did not
+ * already have.
+ */
+export interface JobContext {
+  /** Service-key client, supplied by whatever is draining the queue. */
+  client: XenitionClient;
+  /** Worker env bindings / secrets. Empty object outside a Worker. */
+  env: Record<string, unknown>;
+}
+
 export type JobHandler = (
   job: Job,
+  context: JobContext,
 ) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void;
 
 /** What one `work()` pass did. */

@@ -167,6 +167,10 @@ export function createScheduledHandler(options: ScheduledOptions = {}): Schedule
           limit: options.jobBatch ?? 25,
           leaseSeconds: options.leaseSeconds,
           worker: `cron:${cron ?? 'manual'}`,
+          // The whole reason handlers can reach the platform at all: a
+          // scheduled run has no request to build a client from, and in a
+          // Worker the secrets are on `env`, not `process.env`.
+          context: { client, env: env ?? {} },
         });
       } catch (err) {
         summary.failed.push('jobs.work');

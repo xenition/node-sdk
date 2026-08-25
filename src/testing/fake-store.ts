@@ -1,7 +1,9 @@
 import { HttpClient } from '../core/http-client';
+import { API_ENDPOINTS } from '../constants';
 import { QueryClient } from '../query/query-client';
 import { QueryPayload, WhereCondition } from '../query/types';
 import { ModuleContext } from '../modules/core';
+import { generateId, nowIso } from '../modules/util';
 
 /**
  * A tiny in-memory interpreter for the QueryBuilder's IR, used by the
@@ -21,10 +23,30 @@ import { ModuleContext } from '../modules/core';
  * ordering, limit/offset — and anything else throws loudly rather than
  * silently returning the wrong rows.
  */
+/**
+ * What `.count()` and `.exists()` post. Deliberately NOT a `QueryPayload`:
+ * those two terminals skip `/query` for the `/query/count` and
+ * `/query/exists` siblings, and their bodies carry no `type` discriminator —
+ * which is exactly why routing them through `handle()` used to end in
+ * `unsupported query type undefined`.
+ */
+export interface AggregatePayload {
+  table: string;
+  /** COUNT's argument. `'*'` counts rows; a named column skips NULLs. */
+  column?: string;
+  where?: WhereCondition[];
+}
+
 export class FakeStore {
   readonly tables = new Map<string, Record<string, unknown>[]>();
   /** Every payload seen, for tests that assert on the emitted IR itself. */
   readonly payloads: QueryPayload[] = [];
+  /**
+   * The count/exists bodies seen, kept apart from `payloads` only because
+   * they are a different shape and callers already narrow that array on
+   * `.type`.
+   */
+  readonly aggregates: AggregatePayload[] = [];
 
   rows(table: string): Record<string, unknown>[] {
     let rows = this.tables.get(table);
@@ -56,6 +78,36 @@ export class FakeStore {
     }
   }
 
+  /**
+   * `POST /query/count` — the endpoint behind `QueryBuilder.count()`.
+   *
+   * Without it every row cap answered 500 under test, so the one rule a
+   * suite most wants to pin down — the free-tier limit — was the one rule
+   * that could not be tested at all. The WHERE clause is honoured through
+   * the same `matches()` the SELECT path uses, because a count that ignored
+   * the scoping would be worse than no count: a paywall check reading the
+   * whole table's size instead of the caller's would pass its test and fail
+   * in production.
+   *
+   * `COUNT(col)` skips NULLs the way Postgres does; `COUNT(*)`, which is
+   * what the builder sends unless a column is named, counts every match.
+   */
+  count(payload: AggregatePayload): { count: number } {
+    this.aggregates.push(payload);
+    const rows = this.rows(payload.table).filter((row) => matches(row, payload.where));
+    const column = payload.column ?? '*';
+    if (column === '*') return { count: rows.length };
+    return {
+      count: rows.filter((row) => row[column] !== null && row[column] !== undefined).length,
+    };
+  }
+
+  /** `POST /query/exists` — `QueryBuilder.exists()`, same WHERE handling. */
+  exists(payload: AggregatePayload): { exists: boolean } {
+    this.aggregates.push(payload);
+    return { exists: this.rows(payload.table).some((row) => matches(row, payload.where)) };
+  }
+
   private select(payload: QueryPayload): Record<string, unknown>[] {
     let rows = this.rows(payload.table).filter((row) => matches(row, payload.where));
     for (const order of [...(payload.orderBy ?? [])].reverse()) {
@@ -76,12 +128,19 @@ export class FakeStore {
 
   private insert(payload: QueryPayload): Record<string, unknown>[] {
     const incoming = Array.isArray(payload.data) ? payload.data : [payload.data ?? {}];
-    const stored = incoming.map((row) => ({ ...row }));
+    const stored = incoming.map((row) => withDefaults(row));
     this.rows(payload.table).push(...stored);
     return stored.map((row) => ({ ...row }));
   }
 
   private update(payload: QueryPayload): Record<string, unknown>[] {
+    // No `updated_at` bump here, on purpose. A column default fires on
+    // INSERT only; nothing in the shipped DDL installs an UPDATE trigger,
+    // so real Postgres leaves the old value alone too, and every module
+    // that wants a fresh one puts `updated_at: nowIso()` in its own patch
+    // (see CmsClient's update path). Bumping it here would make the fake
+    // MORE forgiving than the database and hide exactly the bug — a client
+    // that forgot to set it — a test is there to catch.
     const patch = (payload.data ?? {}) as Record<string, unknown>;
     const touched: Record<string, unknown>[] = [];
     for (const row of this.rows(payload.table)) {
@@ -99,6 +158,38 @@ export class FakeStore {
     this.tables.set(payload.table, kept);
     return removed;
   }
+}
+
+/**
+ * Fill in what a column default would have filled in.
+ *
+ * The store used to keep the row exactly as it arrived, which is wrong in a
+ * way that costs an afternoon: real tables declare `id uuid DEFAULT
+ * gen_random_uuid()` and `created_at/updated_at DEFAULT now()`, so an
+ * `insert(...).returning('*')` that trusts them came back with
+ * `id: undefined` here. The route then answered `{ item: { id: undefined } }`
+ * and the next request went to `/pantry/undefined` — a failure three frames
+ * from its cause, and one that says nothing about the code under test.
+ *
+ * The fake cannot read a schema, so this is a CONVENTION, not a simulation
+ * of DDL: only `id`, `created_at` and `updated_at` are filled, because those
+ * are the three the SDK's own module tables and every generated app declare
+ * with defaults. A table without them is unaffected; a table with a
+ * different default (a `status` that starts `'draft'`, say) still needs the
+ * value passed explicitly, exactly as it does against a fake with no
+ * defaults at all.
+ *
+ * A supplied value always wins, and `null` counts as supplied — an explicit
+ * NULL beats a column default in Postgres too, and treating it as absent
+ * would quietly turn a test's deliberate null into a uuid.
+ */
+function withDefaults(row: Record<string, unknown>): Record<string, unknown> {
+  const filled = { ...row };
+  if (filled.id === undefined) filled.id = generateId();
+  const at = nowIso();
+  if (filled.created_at === undefined) filled.created_at = at;
+  if (filled.updated_at === undefined) filled.updated_at = at;
+  return filled;
 }
 
 function matches(row: Record<string, unknown>, where?: WhereCondition[]): boolean {
@@ -163,7 +254,10 @@ export function makeFakeContext(options: FakeContextOptions = {}): {
   // A plain function rather than `jest.fn`: this module ships as
   // `@xenition/sdk/testing`, and a published helper must not require a test
   // runner to be present. Assertions read `store.payloads` instead.
-  const post = (_url: string, body: QueryPayload | { sql: string; params?: unknown[] }) => {
+  const post = (
+    url: string,
+    body: QueryPayload | AggregatePayload | { sql: string; params?: unknown[] },
+  ) => {
     if ('sql' in body) {
       if (!options.raw) {
         throw new Error(
@@ -172,7 +266,17 @@ export function makeFakeContext(options: FakeContextOptions = {}): {
       }
       return Promise.resolve({ data: options.raw(body.sql, body.params ?? [], store) });
     }
-    return Promise.resolve(store.handle(body));
+    // Count and exists are told apart by the URL, not by the body. Their
+    // payloads differ only in whether `column` is present, and leaning on
+    // that would break the day either endpoint grows a field; the endpoint
+    // is what the builder actually chose between.
+    if (url === API_ENDPOINTS.QUERY.COUNT) {
+      return Promise.resolve(store.count(body as AggregatePayload));
+    }
+    if (url === API_ENDPOINTS.QUERY.EXISTS) {
+      return Promise.resolve(store.exists(body as AggregatePayload));
+    }
+    return Promise.resolve(store.handle(body as QueryPayload));
   };
   const query = new QueryClient({ post } as unknown as HttpClient);
   return { store, ctx: { query, raw: (sql, params = []) => query.raw(sql, params) } };

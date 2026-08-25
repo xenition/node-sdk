@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { createTestClient } from '../testing';
 import { currentUserId } from './auth';
 import { defineRouter } from './define-router';
 import { buildOpenApi } from './docs';
-import { jsonNotFound } from './errors';
+import { jsonNotFound, paymentRequiredBody } from './errors';
 import { createXenitionApi } from './index';
 
 /**
@@ -80,6 +81,42 @@ describe('mounted custom routes', () => {
     expect(JSON.parse(body)).toMatchObject({ error: { code: 'INTERNAL' } });
   });
 
+  it('answers a thrown HTTPException with its own status, in JSON', async () => {
+    // The idiomatic Hono refusal, thrown from an app's own route. It used to
+    // match nothing in the shared handler and become a 500 INTERNAL: every
+    // validation error and ownership check in a generated app answered
+    // "internal error", and a paywall's 402 never reached the client.
+    const strict = defineRouter({
+      name: 'strict',
+      build(app) {
+        app.get('/pantries/:id', () => {
+          throw new HTTPException(404, { message: 'No such pantry.' });
+        });
+        app.get('/pantries/:id/plan', () => {
+          throw new HTTPException(402, {
+            res: Response.json(paymentRequiredBody({ entitlement: 'premium' }), { status: 402 }),
+          });
+        });
+      },
+    });
+    const { app } = makeApp(strict);
+
+    const missing = await app.request('/api/pantries/7');
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('content-type')).toContain('application/json');
+    await expect(missing.json()).resolves.toEqual({
+      error: { code: 'NOT_FOUND', message: 'No such pantry.' },
+    });
+
+    // A typed body attached to the exception survives the handler intact.
+    const paywalled = await app.request('/api/pantries/7/plan');
+    expect(paywalled.status).toBe(402);
+    await expect(paywalled.json()).resolves.toMatchObject({
+      error: { code: 'PAYMENT_REQUIRED' },
+      entitlement: 'premium',
+    });
+  });
+
   it('answers the JSON 404 for an unmatched path', async () => {
     const { client } = createTestClient();
     const api = createXenitionApi({ client, custom: [speeches] });
@@ -124,6 +161,10 @@ describe('mounted custom routes', () => {
 
     const denied = await app.request('/coach'.replace('/coach', '/api/coach'), auth);
     expect(denied.status).toBe(402);
+    await expect(denied.json()).resolves.toMatchObject({
+      error: { code: 'PAYMENT_REQUIRED' },
+      entitlement: 'premium',
+    });
 
     await client.modules.billing.grant({ userId: 'test-user', entitlement: 'premium' });
     expect((await app.request('/api/coach', auth)).status).toBe(200);

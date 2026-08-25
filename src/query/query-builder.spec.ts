@@ -471,3 +471,48 @@ describe('clone immutability on type switch', () => {
     expect(derived.toPayload().where).toHaveLength(2);
   });
 });
+
+/**
+ * `limit` belongs to SELECT alone. Reached by `.update({...}).first()`, which
+ * reads like "update and give me the row back" and is the obvious thing to
+ * write - it used to attach `limit: 1` to an UPDATE, and Postgres has no
+ * `UPDATE ... LIMIT`.
+ */
+describe('limit is SELECT-only', () => {
+  it('sends limit and offset on a SELECT', () => {
+    expect(builder().from('t').limit(5).offset(10).toPayload()).toMatchObject({
+      type: 'SELECT',
+      limit: 5,
+      offset: 10,
+    });
+  });
+
+  it('drops limit and offset on an UPDATE', () => {
+    const sent = builder().from('t').where('id', 'x').update({ a: 1 }).limit(1).offset(2).toPayload();
+    expect(sent.type).toBe('UPDATE');
+    expect(sent).not.toHaveProperty('limit');
+    expect(sent).not.toHaveProperty('offset');
+  });
+
+  it('drops limit on a DELETE', () => {
+    const sent = builder().from('t').where('id', 'x').delete().limit(1).toPayload();
+    expect(sent.type).toBe('DELETE');
+    expect(sent).not.toHaveProperty('limit');
+  });
+
+  it('refuses first() on a write, and names the alternative', async () => {
+    await expect(
+      builder().from('t').where('id', 'x').update({ a: 1 }).first(),
+    ).rejects.toThrow(/cannot be used on UPDATE/);
+    await expect(builder().from('t').where('id', 'x').delete().first()).rejects.toThrow(
+      /returning/,
+    );
+  });
+
+  it('still allows first() on a SELECT', () => {
+    expect(builder().from('t').where('id', 'x').limit(1).toPayload()).toMatchObject({
+      type: 'SELECT',
+      limit: 1,
+    });
+  });
+});
