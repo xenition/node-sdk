@@ -13,6 +13,12 @@ mobile app; nothing else on this list stops an app from working.
 
 ## 1. `POST /app-platform/auth/refresh` — blocks every mobile app
 
+> **CONFIRMED MISSING on `api-dev` (2026-08-25).** Verified with a real
+> service key through a real app: sign-up, sign-in, `/me`, onboarding and the
+> trial grant all work; `/auth/refresh` answers 404. So a session works until
+> the access token expires and then cannot be recovered — the user is signed
+> out with no way back.
+
 **Why it blocks.** Access tokens are short-lived. Without a refresh path, a
 user is returned to the login screen the moment theirs expires, and the app
 has no way to recover — `AuthResponse` already returns a `refreshToken` and
@@ -147,6 +153,39 @@ sessions on success.
 ```
 
 The last one is what a user reaches for after losing a phone.
+
+---
+
+## 3.5 `POST /app-platform/storage/signed-url` — **confirmed missing on api-dev**
+
+Verified against `api-dev.xenition.com/v1` on 2026-08-25 with a valid service
+key. `storage.list()` answers fine, so the storage module is deployed and the
+key is good — but every signed-URL method 404s, because they all hit this one
+path:
+
+```
+storage.createUploadUrl()  -> 404
+storage.createSignedUrl()  -> 404
+storage.download()         -> 404
+```
+
+**What it blocks:** every upload and every playback. A media app cannot get a
+recording off the device or back onto it. The SDK's whole
+"presigned PUT so bytes never touch the worker" design depends on it, and it
+is the only endpoint that failed in a 14-step end-to-end run.
+
+```jsonc
+// request
+{ "bucket": "default", "path": "recordings/<userId>/<uuid>.m4a",
+  "operation": "upload" | "download",
+  "expiresInSeconds": 3600, "contentType": "audio/m4a" }
+
+// 200
+{ "url": "https://…presigned…", "expiresAt": "2026-08-25T10:00:00.000Z" }
+```
+
+`operation` distinguishes a presigned PUT from a presigned GET; both come back
+in the same shape.
 
 ---
 

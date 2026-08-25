@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ModulesClient = void 0;
 const errors_1 = require("../core/errors");
 const query_client_1 = require("../query/query-client");
+const row_casing_1 = require("./row-casing");
 const push_client_1 = require("../push/push-client");
 const email_client_1 = require("../email/email-client");
 const cms_1 = require("./cms");
@@ -62,7 +63,10 @@ class ModulesClient {
         };
         const query = new query_client_1.QueryClient(http);
         this.ctx = {
-            query,
+            // Snake-cased on the way out: the gateway camelCases rows and the
+            // engine does not, and every module client reads snake_case. See
+            // row-casing.ts — this was silently granting expired subscriptions.
+            query: (0, row_casing_1.snakeCaseQueryClient)(query),
             raw: (sql, params = []) => query.raw(sql, params),
             push: new push_client_1.PushClient(http),
             email: new email_client_1.EmailClient(http),
