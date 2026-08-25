@@ -11,7 +11,11 @@ import { CatalogClient } from './catalog';
 import { InventoryClient } from './inventory';
 import { CartClient } from './cart';
 import { OrdersClient } from './orders';
-export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory' | 'cart' | 'orders';
+import { BillingClient } from './billing';
+import { JobsClient } from './jobs';
+import { NotificationsClient } from './notifications';
+import { QuotasClient } from './quotas';
+export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | 'media' | 'booking' | 'catalog' | 'inventory' | 'cart' | 'orders' | 'billing' | 'jobs' | 'notifications' | 'quotas';
 /**
  * `client.modules` — the module framework entry point.
  *
@@ -51,6 +55,14 @@ export declare class ModulesClient {
     use(name: ModuleName): void;
     /** Whether enable()/use() has been called for the module in this client. */
     isEnabled(name: ModuleName): boolean;
+    /** Inbox, preferences, quiet hours, scheduled sends. See modules/notifications. */
+    get notifications(): NotificationsClient;
+    /** Durable usage counters — freemium limits. See modules/quotas. */
+    get quotas(): QuotasClient;
+    /** Deferred and background work. See modules/jobs. */
+    get jobs(): JobsClient;
+    /** In-app purchases + entitlements. See modules/billing. */
+    get billing(): BillingClient;
     get cms(): CmsClient;
     get forms(): FormsClient;
     get reviews(): ReviewsClient;

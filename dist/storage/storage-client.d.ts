@@ -1,4 +1,5 @@
 import { HttpClient } from '../core/http-client';
+import { UploadBody } from '../core/multipart';
 import { ListFilesOptions, ListFilesResult, SignedUrlOptions, SignedUrlResult, UploadOptions, UploadResult } from './types';
 /**
  * R2-backed file surface for generated apps. All objects live under the
@@ -10,14 +11,40 @@ import { ListFilesOptions, ListFilesResult, SignedUrlOptions, SignedUrlResult, U
  *   client.storage.list({ prefix: 'avatars/' })
  *   client.storage.createSignedUrl('avatars/alice.png', 3600)
  *
- * Buffers are the primary upload input. Strings (filesystem paths) work
- * only in Node — in Workers the SDK has no `fs` access, so the caller
- * must read the file themselves and pass the bytes.
+ * Upload input is anything the runtime holds — Blob, File, ArrayBuffer,
+ * typed array, Buffer or string. The SDK has no `fs` access in a Worker, so
+ * a filesystem path must be read by the caller first.
  */
 export declare class StorageClient {
     private readonly http;
     constructor(http: HttpClient);
-    upload(buffer: Buffer, path: string, options?: UploadOptions): Promise<UploadResult>;
+    /**
+     * Upload bytes.
+     *
+     * Accepts whatever the runtime happens to hold: a `File` a worker just
+     * received, a `Blob`, an `ArrayBuffer` or typed array from a fetch, a
+     * Node `Buffer`, or a plain string. Previously this demanded a Buffer,
+     * which forced every one of those through a conversion the SDK can do
+     * itself — and which only worked in a Worker at all because
+     * `nodejs_compat` shims Buffer.
+     *
+     * For anything large, prefer `createUploadUrl()`: it sends the bytes
+     * straight to storage instead of through the app's worker.
+     */
+    upload(body: UploadBody, path: string, options?: UploadOptions): Promise<UploadResult>;
+    /**
+     * A presigned PUT the CLIENT uploads to directly.
+     *
+     * The path a mobile app should take for recordings, photos and video: the
+     * bytes go to storage, never through the app's worker, so a long upload
+     * costs no worker time, no CPU budget and no request-size ceiling. Follow
+     * it with a call that records where the file landed.
+     */
+    createUploadUrl(path: string, options?: {
+        bucket?: string;
+        expiresInSeconds?: number;
+        contentType?: string;
+    }): Promise<SignedUrlResult>;
     /**
      * Returns a short-lived signed URL the caller can follow to download
      * the bytes. The SDK intentionally does not proxy bytes through the

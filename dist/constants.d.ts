@@ -30,12 +30,22 @@ export declare const API_ENDPOINTS: {
         readonly OAUTH_PROVIDER_CONFIG: (provider: string) => string;
         readonly TEAMS: "/app-platform/auth/teams";
         readonly TEAM_INVITE: (teamId: string) => string;
+        readonly REFRESH: "/app-platform/auth/refresh";
+        readonly OAUTH_ID_TOKEN: (provider: string) => string;
+        readonly OTP_SEND: "/app-platform/auth/otp/send";
+        readonly OTP_VERIFY: "/app-platform/auth/otp/verify";
+        readonly CHANGE_PASSWORD: "/app-platform/auth/password";
+        readonly ACCOUNT: "/app-platform/auth/account";
+        readonly ACCOUNT_EXPORT: "/app-platform/auth/account/export";
+        readonly SESSIONS: "/app-platform/auth/sessions";
+        readonly SESSION: (id: string) => string;
     };
     readonly QUERY: {
         readonly EXECUTE: "/app-platform/query";
         readonly COUNT: "/app-platform/query/count";
         readonly EXISTS: "/app-platform/query/exists";
         readonly RAW: "/app-platform/raw";
+        readonly TRANSACTION: "/app-platform/raw/transaction";
     };
     readonly STORAGE: {
         readonly UPLOAD: "/app-platform/storage/upload";
@@ -58,6 +68,9 @@ export declare const API_ENDPOINTS: {
         readonly IMAGE: "/app-platform/ai/image";
         readonly VIDEO: "/app-platform/ai/video";
         readonly EMBEDDINGS: "/app-platform/ai/embeddings";
+        readonly TRANSCRIBE: "/app-platform/ai/transcribe";
+        readonly SPEECH: "/app-platform/ai/speech";
+        readonly CHAT_STREAM: "/app-platform/ai/chat/stream";
         readonly KEYS: "/app-platform/ai/keys";
         readonly KEY: (id: string) => string;
     };

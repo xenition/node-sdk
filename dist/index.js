@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CATALOG_MIGRATIONS = exports.catalogModule = exports.CatalogClient = exports.BOOKING_TABLES = exports.BOOKING_MIGRATIONS = exports.bookingModule = exports.BookingClient = exports.MEDIA_TABLES = exports.MEDIA_MIGRATIONS = exports.mediaModule = exports.MediaClient = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
-exports.XENITION_BASE_URL = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.ORDERS_TABLES = exports.ORDERS_MIGRATIONS = exports.ordersModule = exports.OrdersClient = exports.CART_TABLES = exports.CART_MIGRATIONS = exports.cartModule = exports.CartClient = exports.INVENTORY_TABLES = exports.INVENTORY_MIGRATIONS = exports.inventoryModule = exports.InventoryClient = exports.CATALOG_TABLES = void 0;
+exports.catalogModule = exports.CatalogClient = exports.BOOKING_TABLES = exports.BOOKING_MIGRATIONS = exports.bookingModule = exports.BookingClient = exports.MEDIA_TABLES = exports.MEDIA_MIGRATIONS = exports.mediaModule = exports.MediaClient = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.parseSseStream = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
+exports.XENITION_BASE_URL = exports.toBlob = exports.byteLengthOf = exports.buildMultipart = exports.basename = exports.REQUEST_ID_HEADER = exports.IDEMPOTENCY_HEADER = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.periodStartFor = exports.periodEndFor = exports.QUOTAS_TABLE = exports.QUOTAS_MIGRATIONS = exports.quotasModule = exports.QuotasClient = exports.NOTIFICATIONS_TABLES = exports.NOTIFICATIONS_MIGRATIONS = exports.notificationsModule = exports.NotificationsClient = exports.JOBS_TABLE = exports.JOBS_MIGRATIONS = exports.jobsModule = exports.JobsClient = exports.handleGoogleNotification = exports.handleAppleNotification = exports.GoogleStore = exports.AppleStore = exports.BILLING_TABLES = exports.BILLING_MIGRATIONS = exports.billingModule = exports.BillingClient = exports.ORDERS_TABLES = exports.ORDERS_MIGRATIONS = exports.ordersModule = exports.OrdersClient = exports.CART_TABLES = exports.CART_MIGRATIONS = exports.cartModule = exports.CartClient = exports.INVENTORY_TABLES = exports.INVENTORY_MIGRATIONS = exports.inventoryModule = exports.InventoryClient = exports.CATALOG_TABLES = exports.CATALOG_MIGRATIONS = void 0;
 var xenition_client_1 = require("./xenition-client");
 Object.defineProperty(exports, "XenitionClient", { enumerable: true, get: function () { return xenition_client_1.XenitionClient; } });
 // Auth module
@@ -24,6 +24,7 @@ Object.defineProperty(exports, "PushClient", { enumerable: true, get: function (
 var ai_1 = require("./ai");
 Object.defineProperty(exports, "AiClient", { enumerable: true, get: function () { return ai_1.AiClient; } });
 Object.defineProperty(exports, "AiKeysClient", { enumerable: true, get: function () { return ai_1.AiKeysClient; } });
+Object.defineProperty(exports, "parseSseStream", { enumerable: true, get: function () { return ai_1.parseSseStream; } });
 // Chatbot module
 var chatbot_1 = require("./chatbot");
 Object.defineProperty(exports, "ChatbotClient", { enumerable: true, get: function () { return chatbot_1.ChatbotClient; } });
@@ -116,6 +117,36 @@ Object.defineProperty(exports, "OrdersClient", { enumerable: true, get: function
 Object.defineProperty(exports, "ordersModule", { enumerable: true, get: function () { return orders_1.ordersModule; } });
 Object.defineProperty(exports, "ORDERS_MIGRATIONS", { enumerable: true, get: function () { return orders_1.ORDERS_MIGRATIONS; } });
 Object.defineProperty(exports, "ORDERS_TABLES", { enumerable: true, get: function () { return orders_1.ORDERS_TABLES; } });
+// billing module (in-app purchases + entitlements)
+var billing_1 = require("./modules/billing");
+Object.defineProperty(exports, "BillingClient", { enumerable: true, get: function () { return billing_1.BillingClient; } });
+Object.defineProperty(exports, "billingModule", { enumerable: true, get: function () { return billing_1.billingModule; } });
+Object.defineProperty(exports, "BILLING_MIGRATIONS", { enumerable: true, get: function () { return billing_1.BILLING_MIGRATIONS; } });
+Object.defineProperty(exports, "BILLING_TABLES", { enumerable: true, get: function () { return billing_1.BILLING_TABLES; } });
+Object.defineProperty(exports, "AppleStore", { enumerable: true, get: function () { return billing_1.AppleStore; } });
+Object.defineProperty(exports, "GoogleStore", { enumerable: true, get: function () { return billing_1.GoogleStore; } });
+Object.defineProperty(exports, "handleAppleNotification", { enumerable: true, get: function () { return billing_1.handleAppleNotification; } });
+Object.defineProperty(exports, "handleGoogleNotification", { enumerable: true, get: function () { return billing_1.handleGoogleNotification; } });
+// jobs module (deferred + background work)
+var jobs_1 = require("./modules/jobs");
+Object.defineProperty(exports, "JobsClient", { enumerable: true, get: function () { return jobs_1.JobsClient; } });
+Object.defineProperty(exports, "jobsModule", { enumerable: true, get: function () { return jobs_1.jobsModule; } });
+Object.defineProperty(exports, "JOBS_MIGRATIONS", { enumerable: true, get: function () { return jobs_1.JOBS_MIGRATIONS; } });
+Object.defineProperty(exports, "JOBS_TABLE", { enumerable: true, get: function () { return jobs_1.JOBS_TABLE; } });
+// notifications module (inbox, preferences, quiet hours, scheduling)
+var notifications_1 = require("./modules/notifications");
+Object.defineProperty(exports, "NotificationsClient", { enumerable: true, get: function () { return notifications_1.NotificationsClient; } });
+Object.defineProperty(exports, "notificationsModule", { enumerable: true, get: function () { return notifications_1.notificationsModule; } });
+Object.defineProperty(exports, "NOTIFICATIONS_MIGRATIONS", { enumerable: true, get: function () { return notifications_1.NOTIFICATIONS_MIGRATIONS; } });
+Object.defineProperty(exports, "NOTIFICATIONS_TABLES", { enumerable: true, get: function () { return notifications_1.NOTIFICATIONS_TABLES; } });
+// quotas module (durable freemium counters)
+var quotas_1 = require("./modules/quotas");
+Object.defineProperty(exports, "QuotasClient", { enumerable: true, get: function () { return quotas_1.QuotasClient; } });
+Object.defineProperty(exports, "quotasModule", { enumerable: true, get: function () { return quotas_1.quotasModule; } });
+Object.defineProperty(exports, "QUOTAS_MIGRATIONS", { enumerable: true, get: function () { return quotas_1.QUOTAS_MIGRATIONS; } });
+Object.defineProperty(exports, "QUOTAS_TABLE", { enumerable: true, get: function () { return quotas_1.QUOTAS_TABLE; } });
+Object.defineProperty(exports, "periodEndFor", { enumerable: true, get: function () { return quotas_1.periodEndFor; } });
+Object.defineProperty(exports, "periodStartFor", { enumerable: true, get: function () { return quotas_1.periodStartFor; } });
 // Errors
 var errors_1 = require("./core/errors");
 Object.defineProperty(exports, "XenitionError", { enumerable: true, get: function () { return errors_1.XenitionError; } });
@@ -124,6 +155,16 @@ Object.defineProperty(exports, "isNotFound", { enumerable: true, get: function (
 Object.defineProperty(exports, "isRateLimited", { enumerable: true, get: function () { return errors_1.isRateLimited; } });
 Object.defineProperty(exports, "isXenitionErrorCode", { enumerable: true, get: function () { return errors_1.isXenitionErrorCode; } });
 Object.defineProperty(exports, "XENITION_ERROR_CODES", { enumerable: true, get: function () { return errors_1.XENITION_ERROR_CODES; } });
+// HTTP layer (observability hooks, idempotency, request correlation)
+var http_client_1 = require("./core/http-client");
+Object.defineProperty(exports, "IDEMPOTENCY_HEADER", { enumerable: true, get: function () { return http_client_1.IDEMPOTENCY_HEADER; } });
+Object.defineProperty(exports, "REQUEST_ID_HEADER", { enumerable: true, get: function () { return http_client_1.REQUEST_ID_HEADER; } });
+// Multipart helpers (Workers-native uploads)
+var multipart_1 = require("./core/multipart");
+Object.defineProperty(exports, "basename", { enumerable: true, get: function () { return multipart_1.basename; } });
+Object.defineProperty(exports, "buildMultipart", { enumerable: true, get: function () { return multipart_1.buildMultipart; } });
+Object.defineProperty(exports, "byteLengthOf", { enumerable: true, get: function () { return multipart_1.byteLengthOf; } });
+Object.defineProperty(exports, "toBlob", { enumerable: true, get: function () { return multipart_1.toBlob; } });
 // Constants (exposed for tooling; generated apps don't usually import these)
 var constants_1 = require("./constants");
 Object.defineProperty(exports, "XENITION_BASE_URL", { enumerable: true, get: function () { return constants_1.XENITION_BASE_URL; } });

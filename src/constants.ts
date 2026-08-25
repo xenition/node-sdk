@@ -32,12 +32,25 @@ export const API_ENDPOINTS = {
     OAUTH_PROVIDER_CONFIG:  (provider: string) => `/app-platform/auth/oauth/${provider}/config`,
     TEAMS:                  '/app-platform/auth/teams',
     TEAM_INVITE:            (teamId: string) => `/app-platform/auth/teams/${teamId}/invite`,
+    // ── Mobile surface. See docs/PLATFORM-ENDPOINTS.md — these are the
+    // endpoints the gateway must implement for a mobile app to work;
+    // the SDK half is complete and calls them.
+    REFRESH:                '/app-platform/auth/refresh',
+    OAUTH_ID_TOKEN:         (provider: string) => `/app-platform/auth/oauth/${provider}/id-token`,
+    OTP_SEND:               '/app-platform/auth/otp/send',
+    OTP_VERIFY:             '/app-platform/auth/otp/verify',
+    CHANGE_PASSWORD:        '/app-platform/auth/password',
+    ACCOUNT:                '/app-platform/auth/account',
+    ACCOUNT_EXPORT:         '/app-platform/auth/account/export',
+    SESSIONS:               '/app-platform/auth/sessions',
+    SESSION:                (id: string) => `/app-platform/auth/sessions/${id}`,
   },
   QUERY: {
     EXECUTE: '/app-platform/query',
     COUNT:   '/app-platform/query/count',
     EXISTS:  '/app-platform/query/exists',
     RAW:     '/app-platform/raw',
+    TRANSACTION: '/app-platform/raw/transaction',
   },
   STORAGE: {
     UPLOAD:     '/app-platform/storage/upload',
@@ -61,6 +74,10 @@ export const API_ENDPOINTS = {
     IMAGE:      '/app-platform/ai/image',
     VIDEO:      '/app-platform/ai/video',
     EMBEDDINGS: '/app-platform/ai/embeddings',
+    // Mobile/media surface — see docs/PLATFORM-ENDPOINTS.md.
+    TRANSCRIBE: '/app-platform/ai/transcribe',
+    SPEECH:     '/app-platform/ai/speech',
+    CHAT_STREAM:'/app-platform/ai/chat/stream',
     KEYS:       '/app-platform/ai/keys',
     KEY:        (id: string) => `/app-platform/ai/keys/${id}`,
   },

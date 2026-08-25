@@ -1,4 +1,4 @@
-export { AiClient, AiKeysClient } from './ai-client';
+export { AiClient, AiKeysClient, parseSseStream } from './ai-client';
 export type {
   AiProvider,
   ChatMessage,
@@ -16,4 +16,14 @@ export type {
   GenerateEmbeddingsOptions,
   CreateAiKeyInput,
   UpdateAiKeyInput,
+} from './types';
+export type {
+  ChatDelta,
+  ResponseFormat,
+  SpeechFormat,
+  SpeechOptions,
+  SpeechOutput,
+  TranscribeOptions,
+  TranscribeOutput,
+  TranscribedWord,
 } from './types';

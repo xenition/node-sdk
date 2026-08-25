@@ -134,4 +134,69 @@ export interface ResetPasswordInput {
     token: string;
     newPassword: string;
 }
+/** Native sign-in: the id token the platform SDK produced on the device. */
+export interface IdTokenSignInInput {
+    provider: OAuthProvider;
+    /** The `idToken` from Google Sign-In / Sign in with Apple, ON THE DEVICE. */
+    idToken: string;
+    /**
+     * The nonce the app generated for this sign-in. Apple echoes it inside
+     * the token; the server compares them to stop a token captured from
+     * another session being replayed here.
+     */
+    nonce?: string;
+    /** Apple only surfaces the name on the FIRST authorization, ever. */
+    name?: string;
+}
+export type OtpChannel = 'email' | 'sms';
+/** What the code is for. Servers scope codes so a login code cannot reset a password. */
+export type OtpPurpose = 'signin' | 'verify_email' | 'verify_phone' | 'reset_password';
+export interface SendOtpInput {
+    email?: string;
+    phone?: string;
+    purpose?: OtpPurpose;
+}
+export interface SendOtpResult {
+    sent: true;
+    channel: OtpChannel;
+    /** When the code stops working. */
+    expiresAt: string;
+    /** Seconds before another code may be requested. */
+    retryAfterSeconds?: number;
+}
+export interface VerifyOtpInput {
+    email?: string;
+    phone?: string;
+    code: string;
+    purpose?: OtpPurpose;
+}
+export interface ChangePasswordInput {
+    currentPassword: string;
+    newPassword: string;
+}
+/**
+ * Everything the platform holds about one user, for the export both the
+ * App Store and GDPR expect an app to be able to produce.
+ */
+export interface UserDataExport {
+    user: User;
+    sessions?: Session[];
+    /** Per-table rows the platform is willing to include. */
+    data?: Record<string, unknown[]>;
+    generatedAt: string;
+}
+export interface DeleteAccountInput {
+    /** Some flows require the password again before destroying an account. */
+    password?: string;
+    reason?: string;
+}
+export interface DeleteAccountResult {
+    deleted: true;
+    /**
+     * Set when the platform soft-deletes with a grace period, so the app can
+     * say "your account will be removed on the 3rd" instead of implying the
+     * data is already gone.
+     */
+    purgeAt?: string | null;
+}
 //# sourceMappingURL=types.d.ts.map

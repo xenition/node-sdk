@@ -3,10 +3,29 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HttpClient = void 0;
+exports.HttpClient = exports.IDEMPOTENCY_HEADER = exports.REQUEST_ID_HEADER = void 0;
 const axios_1 = __importDefault(require("axios"));
 const constants_1 = require("../constants");
 const errors_1 = require("./errors");
+/** Correlates one logical call across the SDK, the gateway and its logs. */
+exports.REQUEST_ID_HEADER = 'x-request-id';
+/** Lets the platform collapse a retried write into one effect. */
+exports.IDEMPOTENCY_HEADER = 'idempotency-key';
+/**
+ * Move `idempotencyKey` out of the SDK's options and into the header the
+ * platform reads, so nothing downstream has to know both spellings.
+ */
+function withIdempotency(config) {
+    if (!config)
+        return {};
+    const { idempotencyKey, ...rest } = config;
+    if (!idempotencyKey)
+        return rest;
+    return {
+        ...rest,
+        headers: { ...rest.headers, [exports.IDEMPOTENCY_HEADER]: idempotencyKey },
+    };
+}
 /**
  * Thin axios wrapper used by every SDK module.
  *
@@ -24,6 +43,11 @@ const errors_1 = require("./errors");
 class HttpClient {
     constructor(apiKey, options = {}) {
         this.retries = options.retries ?? 2;
+        this.hooks = {
+            onRequest: options.onRequest,
+            onResponse: options.onResponse,
+            onError: options.onError,
+        };
         this.axios = axios_1.default.create({
             baseURL: options.baseUrl || constants_1.XENITION_BASE_URL,
             timeout: options.timeout ?? 30000,
@@ -46,19 +70,19 @@ class HttpClient {
         return this.axios.defaults.baseURL || constants_1.XENITION_BASE_URL;
     }
     get(url, config) {
-        return this.request({ ...config, method: 'GET', url });
+        return this.request({ ...withIdempotency(config), method: 'GET', url });
     }
     post(url, body, config) {
-        return this.request({ ...config, method: 'POST', url, data: body });
+        return this.request({ ...withIdempotency(config), method: 'POST', url, data: body });
     }
     patch(url, body, config) {
-        return this.request({ ...config, method: 'PATCH', url, data: body });
+        return this.request({ ...withIdempotency(config), method: 'PATCH', url, data: body });
     }
     put(url, body, config) {
-        return this.request({ ...config, method: 'PUT', url, data: body });
+        return this.request({ ...withIdempotency(config), method: 'PUT', url, data: body });
     }
     del(url, config) {
-        return this.request({ ...config, method: 'DELETE', url });
+        return this.request({ ...withIdempotency(config), method: 'DELETE', url });
     }
     /**
      * Multipart form upload. Pass a form-data instance (Node) or a Web
@@ -70,41 +94,132 @@ class HttpClient {
         const maybeHeaders = typeof form.getHeaders === 'function'
             ? form.getHeaders()
             : undefined;
+        const lifted = withIdempotency(config);
         const merged = {
-            ...config,
+            ...lifted,
             method: 'POST',
             url,
             data: form,
             headers: {
                 ...(maybeHeaders ?? {}),
-                ...(config?.headers ?? {}),
+                ...(lifted.headers ?? {}),
                 // Override the default application/json so the boundary sticks.
                 'Content-Type': maybeHeaders?.['content-type'] ?? 'multipart/form-data',
             },
         };
         return this.request(merged);
     }
+    /**
+     * POST and hand back the raw `Response`, body unread.
+     *
+     * The one call that deliberately bypasses axios and the envelope. Both
+     * exist to give callers a finished value, which is exactly wrong for a
+     * stream: by the time axios resolves, the body it was supposed to deliver
+     * incrementally has already been buffered.
+     *
+     * The caller owns the body and must consume or cancel it. Errors are still
+     * normalized, so a failed stream throws the same `XenitionError` shape as
+     * everything else rather than a bare Response.
+     */
+    async stream(url, body, config = {}) {
+        const fetchImpl = globalThis.fetch;
+        if (typeof fetchImpl !== 'function') {
+            throw new errors_1.XenitionError('NETWORK_ERROR', 'HttpClient.stream: no global fetch available in this runtime.');
+        }
+        const headers = {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+            [exports.REQUEST_ID_HEADER]: this.newRequestId(),
+            ...this.axios.defaults.headers.common,
+            ...(config.headers ?? {}),
+        };
+        const apiKey = this.axios.defaults.headers['x-api-key'];
+        if (typeof apiKey === 'string')
+            headers['x-api-key'] = apiKey;
+        const response = await fetchImpl(`${this.baseUrl}${url}`, {
+            method: 'POST',
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        if (!response.ok) {
+            const detail = await response.text().catch(() => '');
+            throw new errors_1.XenitionError(this.classifyStatus(response.status), detail ? detail.slice(0, 300) : `Request failed with ${response.status}`, { status: response.status });
+        }
+        return response;
+    }
     // ────────── Internals ────────────────────────────────────────────────────
     async request(config) {
-        const retriable = (config.method ?? 'GET').toUpperCase() === 'GET';
-        let lastErr;
+        const method = (config.method ?? 'GET').toUpperCase();
+        const url = config.url ?? '';
+        const headers = (config.headers ?? {});
+        const requestId = String(headers[exports.REQUEST_ID_HEADER] ?? this.newRequestId());
+        const idempotencyKey = headers[exports.IDEMPOTENCY_HEADER];
+        const merged = {
+            ...config,
+            headers: { ...headers, [exports.REQUEST_ID_HEADER]: requestId },
+        };
+        // A GET is retriable because it changes nothing. A write is retriable
+        // ONLY when it carries an idempotency key: without one, a retry after a
+        // timeout can apply the same change twice — and a timeout is exactly the
+        // case where the first attempt may well have succeeded.
+        const retriable = method === 'GET' || typeof idempotencyKey === 'string';
         const maxAttempts = retriable ? 1 + this.retries : 1;
+        let lastErr;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const startedAt = Date.now();
+            this.observe('onRequest', { method, url, requestId, attempt });
             try {
-                const response = await this.axios.request(config);
+                const response = await this.axios.request(merged);
+                this.observe('onResponse', {
+                    method,
+                    url,
+                    requestId,
+                    attempt,
+                    status: response.status,
+                    durationMs: Date.now() - startedAt,
+                });
                 return this.unwrapEnvelope(response.data);
             }
             catch (err) {
                 lastErr = err;
                 const xenitionErr = this.normalizeError(err);
-                if (!this.shouldRetry(xenitionErr) || attempt === maxAttempts - 1) {
+                const willRetry = this.shouldRetry(xenitionErr) && attempt < maxAttempts - 1;
+                this.observe('onError', {
+                    method,
+                    url,
+                    requestId,
+                    attempt,
+                    durationMs: Date.now() - startedAt,
+                    error: xenitionErr,
+                    willRetry,
+                });
+                if (!willRetry)
                     throw xenitionErr;
-                }
                 await this.sleep(Math.min(100 * Math.pow(2, attempt), 2000));
             }
         }
         // Unreachable; TypeScript wants it.
         throw this.normalizeError(lastErr);
+    }
+    /**
+     * Hooks are observability, so a throwing hook must never become the
+     * request's failure — that would make adding logging a way to break
+     * production.
+     */
+    observe(hook, event) {
+        const handler = this.hooks[hook];
+        if (!handler)
+            return;
+        try {
+            handler(event);
+        }
+        catch {
+            /* ignored on purpose */
+        }
+    }
+    newRequestId() {
+        const webCrypto = globalThis.crypto;
+        return webCrypto?.randomUUID ? webCrypto.randomUUID() : `req_${Date.now().toString(36)}`;
     }
     /**
      * Server returns either a raw JSON object or the envelope:

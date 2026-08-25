@@ -45,7 +45,7 @@ function checkoutRouter(options = {}) {
     // so 'webhook' etc. can never be captured as a cart token. ──
     app.post('/checkout/webhook', async (c) => {
         if (commerceMode(c) !== 'stripe')
-            return forbidden(c, 'Webhooks are only handled in stripe mode.');
+            return (0, errors_1.forbidden)(c, 'Webhooks are only handled in stripe mode.');
         const secret = (0, client_1.readEnvVar)(c, 'STRIPE_WEBHOOK_SECRET');
         if (!secret) {
             throw new client_1.XenitionApiConfigError('Stripe webhooks require the STRIPE_WEBHOOK_SECRET secret.');
@@ -81,7 +81,7 @@ function checkoutRouter(options = {}) {
     }
     app.post('/checkout/mock/complete', async (c) => {
         if (commerceMode(c) === 'stripe') {
-            return forbidden(c, 'Mock completion is disabled when COMMERCE_MODE=stripe.');
+            return (0, errors_1.forbidden)(c, 'Mock completion is disabled when COMMERCE_MODE=stripe.');
         }
         const body = await readObjectBody(c);
         if (!body || typeof body.orderId !== 'string' || body.orderId === '') {
@@ -209,9 +209,6 @@ function timingSafeEqual(a, b) {
 /** 'stripe' when COMMERCE_MODE=stripe, else 'mock' (the safe default). */
 function commerceMode(c) {
     return ((0, client_1.readEnvVar)(c, 'COMMERCE_MODE') ?? '').toLowerCase() === 'stripe' ? 'stripe' : 'mock';
-}
-function forbidden(c, message) {
-    return c.json({ error: { code: 'FORBIDDEN', message } }, 403);
 }
 /** A JSON object body, or undefined for anything else. */
 async function readObjectBody(c) {

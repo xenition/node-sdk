@@ -19,6 +19,16 @@ export type {
   Team,
   TeamInvitationInput,
   ResetPasswordInput,
+  ChangePasswordInput,
+  DeleteAccountInput,
+  DeleteAccountResult,
+  IdTokenSignInInput,
+  OtpChannel,
+  OtpPurpose,
+  SendOtpInput,
+  SendOtpResult,
+  UserDataExport,
+  VerifyOtpInput,
 } from './auth/types';
 
 // Query module
@@ -64,7 +74,7 @@ export type {
 } from './push';
 
 // AI module
-export { AiClient, AiKeysClient } from './ai';
+export { AiClient, AiKeysClient, parseSseStream } from './ai';
 export type {
   AiProvider,
   AiUsage,
@@ -82,6 +92,14 @@ export type {
   GenerateEmbeddingsOptions,
   CreateAiKeyInput,
   UpdateAiKeyInput,
+  ChatDelta,
+  ResponseFormat,
+  SpeechFormat,
+  SpeechOptions,
+  SpeechOutput,
+  TranscribeOptions,
+  TranscribeOutput,
+  TranscribedWord,
 } from './ai';
 
 // Chatbot module
@@ -332,6 +350,88 @@ export type {
   ListOrdersOptions,
 } from './modules/orders';
 
+// billing module (in-app purchases + entitlements)
+export {
+  BillingClient,
+  billingModule,
+  BILLING_MIGRATIONS,
+  BILLING_TABLES,
+  AppleStore,
+  GoogleStore,
+  handleAppleNotification,
+  handleGoogleNotification,
+} from './modules/billing';
+export type {
+  AppleConfig,
+  AppleTransaction,
+  GoogleConfig,
+  NotificationResult,
+} from './modules/billing';
+export type {
+  BillingEvent,
+  BillingPlatform,
+  BillingProduct,
+  DefineProductInput,
+  Entitlement,
+  EntitlementCheck,
+  EntitlementSource,
+  EntitlementStatus,
+  GrantInput,
+  ProductKind,
+  Purchase,
+  PurchaseStatus,
+  RecordPurchaseInput,
+  StartTrialInput,
+  // Aliased — the catalog module already exports a list-products option type.
+  ListProductsOptions as ListBillingProductsOptions,
+  ListPurchasesOptions,
+} from './modules/billing';
+
+// jobs module (deferred + background work)
+export { JobsClient, jobsModule, JOBS_MIGRATIONS, JOBS_TABLE } from './modules/jobs';
+export type {
+  ClaimOptions,
+  EnqueueOptions,
+  FailOptions,
+  Job,
+  JobHandler,
+  JobStatus,
+  WorkSummary,
+  ListJobsOptions as ListJobsQueryOptions,
+} from './modules/jobs';
+
+// notifications module (inbox, preferences, quiet hours, scheduling)
+export {
+  NotificationsClient,
+  notificationsModule,
+  NOTIFICATIONS_MIGRATIONS,
+  NOTIFICATIONS_TABLES,
+} from './modules/notifications';
+export type {
+  ListNotificationsResult,
+  NotificationChannel,
+  NotificationPreference,
+  NotificationRecord,
+  NotifyInput,
+  NotifyResult,
+  PreferencePatch,
+  ScheduleInput,
+  ScheduledNotification,
+  ScheduledStatus,
+  ListNotificationsOptions as ListInboxOptions,
+} from './modules/notifications';
+
+// quotas module (durable freemium counters)
+export {
+  QuotasClient,
+  quotasModule,
+  QUOTAS_MIGRATIONS,
+  QUOTAS_TABLE,
+  periodEndFor,
+  periodStartFor,
+} from './modules/quotas';
+export type { QuotaPeriod, QuotaState, ConsumeOptions as ConsumeQuotaOptions } from './modules/quotas';
+
 // Errors
 export {
   XenitionError,
@@ -342,6 +442,20 @@ export {
   XENITION_ERROR_CODES,
 } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
+
+// HTTP layer (observability hooks, idempotency, request correlation)
+export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';
+export type {
+  HttpClientOptions,
+  RequestErrorEvent,
+  RequestEvent,
+  RequestOptions,
+  ResponseEvent,
+} from './core/http-client';
+
+// Multipart helpers (Workers-native uploads)
+export { basename, buildMultipart, byteLengthOf, toBlob } from './core/multipart';
+export type { UploadBody } from './core/multipart';
 
 // Constants (exposed for tooling; generated apps don't usually import these)
 export { XENITION_BASE_URL } from './constants';

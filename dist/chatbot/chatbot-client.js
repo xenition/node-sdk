@@ -1,10 +1,7 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatbotClient = void 0;
-const form_data_1 = __importDefault(require("form-data"));
+const multipart_1 = require("../core/multipart");
 const constants_1 = require("../constants");
 /**
  * Customer-support chatbot with RAG.
@@ -17,7 +14,7 @@ const constants_1 = require("../constants");
  *   await client.chatbot.updateConfig({ welcomeMessage: 'Hi there!' })
  *   await client.chatbot.uploadDocument(pdfBuffer, { title: 'Help Center' })
  *
- * Uploads accept PDF bytes (Buffer), a URL, or raw text. The server
+ * Uploads accept PDF bytes (Blob/File/ArrayBuffer/Buffer), a URL, or raw text. The server
  * chunks + embeds in the background via BullMQ — document `status`
  * moves `pending → processing → ready`.
  */
@@ -47,17 +44,16 @@ class ChatbotClient {
      * Upload a PDF by bytes. For URL / text ingestion, use the dedicated
      * methods below.
      */
-    async uploadDocument(pdfBuffer, options = {}) {
-        if (!Buffer.isBuffer(pdfBuffer)) {
-            throw new TypeError('ChatbotClient.uploadDocument: expected a Buffer');
+    async uploadDocument(file, options = {}) {
+        if (file === undefined || file === null) {
+            throw new TypeError('ChatbotClient.uploadDocument: expected file content (Blob, File, ArrayBuffer, ' +
+                'TypedArray, Buffer or string).');
         }
-        const form = new form_data_1.default();
-        form.append('file', pdfBuffer, {
+        const form = (0, multipart_1.buildMultipart)({
+            body: file,
             filename: options.title ? `${options.title}.pdf` : 'document.pdf',
             contentType: options.mimeType || 'application/pdf',
-        });
-        if (options.title)
-            form.append('title', options.title);
+        }, { title: options.title });
         return this.http.postForm(constants_1.API_ENDPOINTS.CHATBOT.DOCUMENTS, form);
     }
     uploadDocumentFromUrl(title, url) {
