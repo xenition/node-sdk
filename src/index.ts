@@ -433,6 +433,10 @@ export {
 } from './modules/quotas';
 export type { QuotaPeriod, QuotaState, ConsumeOptions as ConsumeQuotaOptions } from './modules/quotas';
 
+// Row casing — the gateway camelCases rows, the engine does not. Apps that
+// read snake_case off a row need this at their own query seam too.
+export { snakeKey, snakeRow, snakeRows, snakeCaseQueryClient } from './modules/row-casing';
+
 // Errors
 export {
   XenitionError,
