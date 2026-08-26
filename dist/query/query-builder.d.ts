@@ -1,19 +1,5 @@
 import { HttpClient } from '../core/http-client';
 import { OrderDirection, QueryPayload, QueryResult, WhereOperator } from './types';
-/**
- * Chainable SQL builder. Mirrors the @fluxez/node-sdk QueryBuilder surface
- * method-for-method — swapping SDK imports in an existing app is all that
- * should be needed. Behavioral differences:
- *
- *  - Every terminal method hits a single `POST /app-platform/query` (or the
- *    `/count`, `/exists`, `/raw` siblings) so the backend sees the full IR
- *    in one request. Fluxez fanned out across /query-builder/{select,insert,…}.
- *  - `.clone()` is called on every type-switching call (`from`, `insert`,
- *    `update`, `delete`) so builders stay immutable between type changes.
- *    Non-type-switching calls mutate in place for ergonomics.
- *  - Thenable: `await client.query.from('x').where(...)` works without a
- *    trailing `.execute()`.
- */
 export declare class QueryBuilder<T = Record<string, unknown>> {
     private readonly http;
     private queryType;

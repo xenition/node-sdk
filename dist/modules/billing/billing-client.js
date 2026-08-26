@@ -404,7 +404,10 @@ class BillingClient {
         const existing = await this.findEntitlement(userId, entitlement);
         if (existing) {
             (0, util_1.fail)(context, `user already has a "${entitlement}" entitlement (source: ${existing.source}) — ` +
-                'a trial can only be started once');
+                'a trial can only be started once', 
+            // State, not bad input: the caller sent a valid request that the
+            // account's existing entitlement refuses.
+            'CONFLICT');
         }
         const expiresAt = new Date(Date.now() + days * MS_PER_DAY).toISOString();
         return this.upsertEntitlement({

@@ -1,3 +1,4 @@
+import { XenitionErrorCode } from '../core/errors';
 /**
  * Shared internals for the content modules — id/timestamp generation,
  * slugs, and small validation helpers that produce consistent
@@ -8,7 +9,17 @@ export declare function generateId(): string;
 export declare function nowIso(): string;
 /** kebab-case slug from free text; never returns an empty string. */
 export declare function slugify(text: string): string;
-export declare function fail(context: string, message: string): never;
+/**
+ * Reject a call with a message the caller can act on.
+ *
+ * Throws a `XenitionError`, not a bare `Error`: an app catching module
+ * failures had no `code` to branch on, so every one of them surfaced as
+ * UNKNOWN and could only be told apart by matching the message text.
+ * `VALIDATION_ERROR` is the default because most of these are bad input;
+ * pass `'CONFLICT'` for "this already exists" cases so a caller can
+ * distinguish "you sent something wrong" from "the state says no".
+ */
+export declare function fail(context: string, message: string, code?: XenitionErrorCode): never;
 export declare function isPlainObject(value: unknown): value is Record<string, unknown>;
 export declare function requireNonEmptyString(context: string, field: string, value: unknown): string;
 export declare function optionalString(context: string, field: string, value: unknown, fallback: string): string;

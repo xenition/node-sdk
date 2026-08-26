@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QueryBuilder = void 0;
+const errors_1 = require("../core/errors");
 const constants_1 = require("../constants");
 /**
  * Chainable SQL builder. Mirrors the @fluxez/node-sdk QueryBuilder surface
@@ -16,6 +17,31 @@ const constants_1 = require("../constants");
  *  - Thenable: `await client.query.from('x').where(...)` works without a
  *    trailing `.execute()`.
  */
+/**
+ * Refuse a filter value JSON cannot carry.
+ *
+ * `JSON.stringify(NaN)` is `null`, and an `undefined` property vanishes
+ * from the payload entirely. So `where('price', '>=', Number(userInput))`
+ * with a non-numeric input used to reach the server as `price >= NULL`,
+ * which matches no rows. The caller then sees an empty list and reads it
+ * as "no results" rather than "the filter was broken" — a wrong answer
+ * wearing the costume of a valid one, which is worse than an error.
+ *
+ * `null` stays legal on purpose: `where('deleted_at', null)` is a real
+ * IS NULL filter that callers depend on.
+ */
+function assertFilterable(column, operator, value) {
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+        throw new errors_1.XenitionError('VALIDATION_ERROR', `QueryBuilder.where("${column}", "${operator}", ${String(value)}): ` +
+            `${String(value)} cannot be sent as a filter — it becomes NULL in JSON and the ` +
+            'query would silently match nothing. Check the value before filtering on it.');
+    }
+    if (value === undefined) {
+        throw new errors_1.XenitionError('VALIDATION_ERROR', `QueryBuilder.where("${column}", "${operator}", undefined): undefined is dropped from ` +
+            'the request, so the server would receive a filter with no value. Pass null for an ' +
+            'IS NULL check, or skip the filter entirely.');
+    }
+}
 class QueryBuilder {
     constructor(http) {
         this.http = http;
@@ -263,6 +289,7 @@ class QueryBuilder {
             operator = opOrValue;
             actual = value;
         }
+        assertFilterable(column, operator, actual);
         this.whereConditions.push({ column, operator, value: actual, type });
         return this;
     }

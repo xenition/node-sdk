@@ -21,6 +21,20 @@ const constants_1 = require("../constants");
  * apiKey, displayName })`. If a key is set for a provider, xenition uses
  * it instead of the platform key (and stops billing ai_credits).
  */
+/**
+ * The one thing an empty AI response almost always means.
+ *
+ * When an app has no AI provider key the gateway still answers 200, with
+ * an empty array (and `usedOwnKey: false`). Passing that back as success
+ * is the worst kind of failure: nothing throws, and the problem reappears
+ * far away as an empty search result or a blank image, with nothing
+ * pointing back at the missing key.
+ */
+function noProviderKey(method, what) {
+    return new errors_1.XenitionError('VALIDATION_ERROR', `AiClient.${method}: the platform ${what}. This app has no AI provider key ` +
+        'configured, so AI calls return empty results instead of failing. Add one in ' +
+        'the Xenition dashboard under Manage -> AI.');
+}
 class AiClient {
     constructor(http) {
         this.http = http;
@@ -39,10 +53,14 @@ class AiClient {
         });
     }
     async generateImage(prompt, options = {}) {
-        return this.http.post(constants_1.API_ENDPOINTS.AI.IMAGE, {
+        const result = await this.http.post(constants_1.API_ENDPOINTS.AI.IMAGE, {
             prompt,
             ...options,
         });
+        if ((result?.images?.length ?? 0) === 0) {
+            throw noProviderKey('generateImage', 'returned no images');
+        }
+        return result;
     }
     async generateVideo(prompt, options = {}) {
         return this.http.post(constants_1.API_ENDPOINTS.AI.VIDEO, {
@@ -51,11 +69,16 @@ class AiClient {
         });
     }
     async generateEmbeddings(input, options = {}) {
-        const body = {
-            input: Array.isArray(input) ? input : [input],
-            ...options,
-        };
-        return this.http.post(constants_1.API_ENDPOINTS.AI.EMBEDDINGS, body);
+        const inputs = Array.isArray(input) ? input : [input];
+        const result = await this.http.post(constants_1.API_ENDPOINTS.AI.EMBEDDINGS, { input: inputs, ...options });
+        // With no AI provider key configured the gateway answers 200 with an
+        // empty array. Returning that as success hands the caller a vector
+        // set with nothing in it, and the failure only surfaces much later as
+        // a similarity search that matches nothing.
+        if (inputs.length > 0 && (result?.embeddings?.length ?? 0) === 0) {
+            throw noProviderKey('generateEmbeddings', 'returned no vectors');
+        }
+        return result;
     }
     /**
      * Chat, but the reply comes back parsed and shape-checked.

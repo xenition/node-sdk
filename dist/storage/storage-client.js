@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StorageClient = void 0;
 const multipart_1 = require("../core/multipart");
+const errors_1 = require("../core/errors");
 const constants_1 = require("../constants");
 const DEFAULT_BUCKET = 'default';
 /**
@@ -60,13 +61,30 @@ class StorageClient {
      * it with a call that records where the file landed.
      */
     async createUploadUrl(path, options = {}) {
-        return this.http.post(constants_1.API_ENDPOINTS.STORAGE.SIGNED_URL, {
-            bucket: options.bucket || DEFAULT_BUCKET,
-            path,
-            operation: 'upload',
-            expiresInSeconds: options.expiresInSeconds ?? 3600,
-            contentType: options.contentType,
-        });
+        try {
+            return await this.http.post(constants_1.API_ENDPOINTS.STORAGE.SIGNED_URL, {
+                bucket: options.bucket || DEFAULT_BUCKET,
+                path,
+                operation: 'upload',
+                expiresInSeconds: options.expiresInSeconds ?? 3600,
+                contentType: options.contentType,
+            });
+        }
+        catch (err) {
+            // The gateway currently ignores `operation` and looks the path up as
+            // if this were a download, so it answers "file not found" — for the
+            // one call whose whole purpose is a file that does not exist yet.
+            // Passing that through sends the caller hunting for a missing file
+            // instead of telling them presigned upload is not usable.
+            if (err instanceof errors_1.XenitionError && err.code === 'NOT_FOUND') {
+                throw new errors_1.XenitionError('NOT_FOUND', `StorageClient.createUploadUrl("${path}"): the gateway answered "file not found". ` +
+                    'It is ignoring operation:"upload" on /app-platform/storage/signed-url and ' +
+                    'resolving the path as a download, so no upload URL can be issued for a new ' +
+                    'file. Use upload() to send the bytes through your worker until the gateway ' +
+                    'honours the operation field. See docs/PLATFORM-ENDPOINTS.md.', { status: err.status, details: err.details });
+            }
+            throw err;
+        }
     }
     /**
      * Returns a short-lived signed URL the caller can follow to download

@@ -93,11 +93,23 @@ export class AuthClient {
 
   // ────────── Account lifecycle ────────────────────────────────────────────
 
-  register(input: RegisterInput): Promise<AuthResponse> {
+  async register(input: RegisterInput): Promise<AuthResponse> {
+    const context = 'AuthClient.register';
+    requireField(context, 'email', input?.email);
+    requireField(context, 'password', input?.password);
     return this.http.post<AuthResponse>(API_ENDPOINTS.AUTH.REGISTER, input);
   }
 
-  login(input: LoginInput): Promise<AuthResponse> {
+  /**
+   * A missing field is checked here rather than at the server, because the
+   * server answers a blank login with "Invalid email or password" — which
+   * sends the caller looking for a credentials problem when the real fault
+   * is an undefined variable that never reached the request.
+   */
+  async login(input: LoginInput): Promise<AuthResponse> {
+    const context = 'AuthClient.login';
+    requireField(context, 'email', input?.email);
+    requireField(context, 'password', input?.password);
     return this.http.post<AuthResponse>(API_ENDPOINTS.AUTH.LOGIN, input);
   }
 
@@ -340,24 +352,29 @@ export class AuthClient {
 
   // ────────── Password reset + email verification ──────────────────────────
 
-  requestPasswordReset(
+  async requestPasswordReset(
     email: string,
     redirectUrl: string,
   ): Promise<{ requested: true }> {
+    requireField('AuthClient.requestPasswordReset', 'email', email);
     return this.http.post<{ requested: true }>(
       API_ENDPOINTS.AUTH.PASSWORD_RESET_REQUEST,
       { email, redirectUrl },
     );
   }
 
-  resetPassword(input: ResetPasswordInput): Promise<{ reset: true }> {
+  async resetPassword(input: ResetPasswordInput): Promise<{ reset: true }> {
+    const context = 'AuthClient.resetPassword';
+    requireField(context, 'token', input?.token);
+    requireField(context, 'newPassword', input?.newPassword);
     return this.http.post<{ reset: true }>(
       API_ENDPOINTS.AUTH.PASSWORD_RESET_CONFIRM,
       input,
     );
   }
 
-  verifyEmail(token: string): Promise<{ verified: true }> {
+  async verifyEmail(token: string): Promise<{ verified: true }> {
+    requireField('AuthClient.verifyEmail', 'token', token);
     return this.http.post<{ verified: true }>(
       API_ENDPOINTS.AUTH.VERIFY_EMAIL,
       { token },

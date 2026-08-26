@@ -1,3 +1,5 @@
+import { XenitionError, XenitionErrorCode } from '../core/errors';
+
 /**
  * Shared internals for the content modules — id/timestamp generation,
  * slugs, and small validation helpers that produce consistent
@@ -28,8 +30,22 @@ export function slugify(text: string): string {
   return slug || 'untitled';
 }
 
-export function fail(context: string, message: string): never {
-  throw new Error(`${context}: ${message}`);
+/**
+ * Reject a call with a message the caller can act on.
+ *
+ * Throws a `XenitionError`, not a bare `Error`: an app catching module
+ * failures had no `code` to branch on, so every one of them surfaced as
+ * UNKNOWN and could only be told apart by matching the message text.
+ * `VALIDATION_ERROR` is the default because most of these are bad input;
+ * pass `'CONFLICT'` for "this already exists" cases so a caller can
+ * distinguish "you sent something wrong" from "the state says no".
+ */
+export function fail(
+  context: string,
+  message: string,
+  code: XenitionErrorCode = 'VALIDATION_ERROR',
+): never {
+  throw new XenitionError(code, `${context}: ${message}`);
 }
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {

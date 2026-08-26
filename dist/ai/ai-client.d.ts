@@ -1,21 +1,5 @@
 import { HttpClient } from '../core/http-client';
 import { AiKeyRecord, ChatDelta, ChatMessage, ChatOptions, ChatOutput, CreateAiKeyInput, GenerateEmbeddingsOptions, GenerateEmbeddingsOutput, GenerateImageOptions, GenerateImageOutput, GenerateTextOptions, GenerateTextOutput, GenerateVideoOptions, GenerateVideoOutput, SpeechOptions, SpeechOutput, TranscribeOptions, TranscribeOutput, UpdateAiKeyInput } from './types';
-/**
- * AI surface for generated apps. One SDK, many providers — xenition routes
- * each call to the right backend (OpenRouter / OpenAI / Runware / fal / …)
- * based on `options.provider` or a sensible default per kind.
- *
- *   // text / chat / embeddings default to OpenRouter
- *   const { text } = await client.ai.generateText('Summarize this post');
- *
- *   // images default to Runware; video → fal
- *   const { images } = await client.ai.generateImage('a red fox in snow');
- *   const { videos } = await client.ai.generateVideo('a red fox running');
- *
- * BYOK: sellers bring their own key via `client.ai.keys.create({ provider,
- * apiKey, displayName })`. If a key is set for a provider, xenition uses
- * it instead of the platform key (and stops billing ai_credits).
- */
 export declare class AiClient {
     private readonly http;
     readonly keys: AiKeysClient;

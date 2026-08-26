@@ -251,3 +251,42 @@ describe('chatJson', () => {
     expect(parseJsonReply('{"a":1}')).toEqual({ a: 1 });
   });
 });
+
+describe('AiClient — empty results mean no provider key', () => {
+  /**
+   * Found in the lab: with no AI key configured, api-dev answers 200 with
+   * { embeddings: [], usedOwnKey: false } and { images: [] }. The lab
+   * reported both as WORKS, so an entire category looked verified when
+   * the model had never run.
+   */
+  const clientWith = (payload: unknown) =>
+    new AiClient({ post: jest.fn().mockResolvedValue(payload) } as never);
+
+  it('generateEmbeddings throws instead of returning zero vectors', async () => {
+    const ai = clientWith({ embeddings: [], model: 'text-embedding-3-small', usedOwnKey: false });
+    await expect(ai.generateEmbeddings('hello')).rejects.toThrow(/no AI provider key/);
+  });
+
+  it('generateImage throws instead of returning zero images', async () => {
+    const ai = clientWith({ images: [], model: 'dall-e-3', usedOwnKey: false });
+    await expect(ai.generateImage('a red fox')).rejects.toThrow(/no AI provider key/);
+  });
+
+  it('a real embedding response passes through untouched', async () => {
+    const payload = { embeddings: [[0.1, 0.2]], model: 'm', dimension: 2 };
+    const ai = clientWith(payload);
+    await expect(ai.generateEmbeddings('hello')).resolves.toEqual(payload);
+  });
+
+  it('a real image response passes through untouched', async () => {
+    const payload = { images: [{ url: 'https://x/y.png' }], model: 'dall-e-3' };
+    const ai = clientWith(payload);
+    await expect(ai.generateImage('a red fox')).resolves.toEqual(payload);
+  });
+
+  it('an empty input list is not treated as a missing key', async () => {
+    const payload = { embeddings: [], model: 'm' };
+    const ai = clientWith(payload);
+    await expect(ai.generateEmbeddings([])).resolves.toEqual(payload);
+  });
+});

@@ -1,5 +1,6 @@
 import { HttpClient } from '../core/http-client';
 import { basename, buildMultipart, UploadBody } from '../core/multipart';
+import { XenitionError } from '../core/errors';
 import { API_ENDPOINTS } from '../constants';
 import {
   ListFilesOptions,
@@ -81,13 +82,33 @@ export class StorageClient {
     path: string,
     options: { bucket?: string; expiresInSeconds?: number; contentType?: string } = {},
   ): Promise<SignedUrlResult> {
-    return this.http.post<SignedUrlResult>(API_ENDPOINTS.STORAGE.SIGNED_URL, {
-      bucket: options.bucket || DEFAULT_BUCKET,
-      path,
-      operation: 'upload' as const,
-      expiresInSeconds: options.expiresInSeconds ?? 3600,
-      contentType: options.contentType,
-    });
+    try {
+      return await this.http.post<SignedUrlResult>(API_ENDPOINTS.STORAGE.SIGNED_URL, {
+        bucket: options.bucket || DEFAULT_BUCKET,
+        path,
+        operation: 'upload' as const,
+        expiresInSeconds: options.expiresInSeconds ?? 3600,
+        contentType: options.contentType,
+      });
+    } catch (err) {
+      // The gateway currently ignores `operation` and looks the path up as
+      // if this were a download, so it answers "file not found" — for the
+      // one call whose whole purpose is a file that does not exist yet.
+      // Passing that through sends the caller hunting for a missing file
+      // instead of telling them presigned upload is not usable.
+      if (err instanceof XenitionError && err.code === 'NOT_FOUND') {
+        throw new XenitionError(
+          'NOT_FOUND',
+          `StorageClient.createUploadUrl("${path}"): the gateway answered "file not found". ` +
+            'It is ignoring operation:"upload" on /app-platform/storage/signed-url and ' +
+            'resolving the path as a download, so no upload URL can be issued for a new ' +
+            'file. Use upload() to send the bytes through your worker until the gateway ' +
+            'honours the operation field. See docs/PLATFORM-ENDPOINTS.md.',
+          { status: err.status, details: err.details },
+        );
+      }
+      throw err;
+    }
   }
 
   /**

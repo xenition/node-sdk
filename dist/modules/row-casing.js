@@ -77,6 +77,16 @@ function snakeCaseQueryClient(query) {
         },
     });
 }
+/**
+ * Duck-typed so a cloned builder is recognised without importing the class
+ * for an instanceof check the bundler would have to keep alive.
+ */
+function isBuilder(value) {
+    if (!value || typeof value !== 'object')
+        return false;
+    const candidate = value;
+    return typeof candidate.rows === 'function' && typeof candidate.toPayload === 'function';
+}
 function wrapBuilder(builder) {
     return new Proxy(builder, {
         get(target, prop, receiver) {
@@ -89,6 +99,14 @@ function wrapBuilder(builder) {
                 // normalization survives `.where(...).orderBy(...).rows()`.
                 if (result === target)
                     return receiver;
+                // ...but insert(), update() and delete() return a CLONE rather than
+                // `this`, so identity is not enough. Without this the chain escapes
+                // the proxy at the first write call and `.returning('*').rows()`
+                // comes back camelCased while a SELECT on the same table comes back
+                // snake_cased — the exact split this wrapper exists to prevent.
+                if (isBuilder(result) && result !== receiver) {
+                    return wrapBuilder(result);
+                }
                 if (typeof prop === 'string' && ROW_RETURNING.has(prop) && isPromise(result)) {
                     return result.then(normalizeResult);
                 }

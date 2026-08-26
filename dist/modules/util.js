@@ -1,9 +1,4 @@
 "use strict";
-/**
- * Shared internals for the content modules — id/timestamp generation,
- * slugs, and small validation helpers that produce consistent
- * `"<Client>.<method>: ..."` error messages.
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateId = generateId;
 exports.nowIso = nowIso;
@@ -16,6 +11,12 @@ exports.optionalBoolean = optionalBoolean;
 exports.optionalNumber = optionalNumber;
 exports.optionalPlainObject = optionalPlainObject;
 exports.toNumber = toNumber;
+const errors_1 = require("../core/errors");
+/**
+ * Shared internals for the content modules — id/timestamp generation,
+ * slugs, and small validation helpers that produce consistent
+ * `"<Client>.<method>: ..."` error messages.
+ */
 /** UUID v4 via WebCrypto (Node 18+ exposes it globally) or Node crypto. */
 function generateId() {
     const webCrypto = globalThis.crypto;
@@ -38,8 +39,18 @@ function slugify(text) {
         .replace(/^-+|-+$/g, '');
     return slug || 'untitled';
 }
-function fail(context, message) {
-    throw new Error(`${context}: ${message}`);
+/**
+ * Reject a call with a message the caller can act on.
+ *
+ * Throws a `XenitionError`, not a bare `Error`: an app catching module
+ * failures had no `code` to branch on, so every one of them surfaced as
+ * UNKNOWN and could only be told apart by matching the message text.
+ * `VALIDATION_ERROR` is the default because most of these are bad input;
+ * pass `'CONFLICT'` for "this already exists" cases so a caller can
+ * distinguish "you sent something wrong" from "the state says no".
+ */
+function fail(context, message, code = 'VALIDATION_ERROR') {
+    throw new errors_1.XenitionError(code, `${context}: ${message}`);
 }
 function isPlainObject(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);

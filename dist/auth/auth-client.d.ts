@@ -4,6 +4,12 @@ export declare class AuthClient {
     private readonly http;
     constructor(http: HttpClient);
     register(input: RegisterInput): Promise<AuthResponse>;
+    /**
+     * A missing field is checked here rather than at the server, because the
+     * server answers a blank login with "Invalid email or password" — which
+     * sends the caller looking for a credentials problem when the real fault
+     * is an undefined variable that never reached the request.
+     */
     login(input: LoginInput): Promise<AuthResponse>;
     logout(accessToken?: string): Promise<{
         ok: true;
