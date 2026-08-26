@@ -516,3 +516,55 @@ describe('limit is SELECT-only', () => {
     });
   });
 });
+
+describe('QueryBuilder — filter values JSON cannot carry', () => {
+  /**
+   * Found by running the lab against api-dev: `?minPrice=abc` produced
+   * Number('abc') = NaN, which serialised to null and made the query
+   * match nothing. An empty list reads as "no results", so the broken
+   * filter was invisible.
+   */
+  const q = () => builder().from('lab__items');
+
+  it('refuses NaN rather than sending null', () => {
+    expect(() => q().where('price_cents', '>=', NaN)).toThrow(/cannot be sent as a filter/);
+    expect(() => q().where('price_cents', '>=', Number('abc'))).toThrow(/NaN/);
+  });
+
+  it('refuses Infinity', () => {
+    expect(() => q().where('price_cents', '<', Infinity)).toThrow(/cannot be sent as a filter/);
+    expect(() => q().where('price_cents', '>', -Infinity)).toThrow(/Infinity/);
+  });
+
+  it('refuses undefined in the two-argument form, which would vanish from the payload', () => {
+    expect(() => q().where('price_cents', undefined as never)).toThrow(/undefined is dropped/);
+  });
+
+  it('cannot catch undefined as the third argument — the overload hides it', () => {
+    // where(col, op, value) and where(col, value) are the same signature.
+    // pushWhere decides which one it got by testing `value !== undefined`,
+    // so a third argument of undefined is indistinguishable from the
+    // two-argument form and '>=' is read as the value. Documented rather
+    // than fixed: telling them apart would mean changing the public
+    // overload every caller already uses.
+    expect(() => q().where('price_cents', '>=', undefined as never)).not.toThrow();
+    expect(q().where('price_cents', '>=', undefined as never).toPayload().where).toEqual([
+      { column: 'price_cents', operator: '=', value: '>=', type: 'AND' },
+    ]);
+  });
+
+  it('still allows null — that is a real IS NULL filter', () => {
+    expect(() => q().where('deleted_at', null)).not.toThrow();
+  });
+
+  it('still allows ordinary values', () => {
+    expect(() => q().where('price_cents', '>=', 0)).not.toThrow();
+    expect(() => q().where('title', 'Blue widget')).not.toThrow();
+    expect(() => q().where('active', true)).not.toThrow();
+  });
+
+  it('guards the shorthand helpers too', () => {
+    expect(() => q().gte('price_cents', NaN)).toThrow(/cannot be sent as a filter/);
+    expect(() => q().lt('price_cents', NaN)).toThrow(/cannot be sent as a filter/);
+  });
+});

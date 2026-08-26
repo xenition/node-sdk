@@ -209,3 +209,40 @@ describe('AuthClient mobile surface', () => {
     });
   });
 });
+
+describe('AuthClient — required fields are checked before the request', () => {
+  /**
+   * The server answers a blank login with "Invalid email or password",
+   * which reads as a credentials problem. It is usually an undefined
+   * variable that never reached the request, so these fail locally with
+   * the field name instead.
+   */
+  const noCall = () => {
+    throw new Error('should not have reached the network');
+  };
+
+  it('login refuses a missing email or password without calling the server', async () => {
+    const auth = new AuthClient({ post: noCall } as never);
+    await expect(auth.login({ password: 'x' } as never)).rejects.toThrow(/"email" is required/);
+    await expect(auth.login({ email: 'a@b.com' } as never)).rejects.toThrow(/"password" is required/);
+    await expect(auth.login({} as never)).rejects.toThrow(/AuthClient.login/);
+  });
+
+  it('register refuses a missing email or password', async () => {
+    const auth = new AuthClient({ post: noCall } as never);
+    await expect(auth.register({ password: 'x' } as never)).rejects.toThrow(/"email" is required/);
+    await expect(auth.register({ email: 'a@b.com' } as never)).rejects.toThrow(/"password" is required/);
+  });
+
+  it('the reset flow refuses blanks', async () => {
+    const auth = new AuthClient({ post: noCall } as never);
+    await expect(auth.requestPasswordReset('', 'https://x')).rejects.toThrow(/"email" is required/);
+    await expect(auth.resetPassword({ token: '', newPassword: 'x' })).rejects.toThrow(/"token" is required/);
+    await expect(auth.verifyEmail('')).rejects.toThrow(/"token" is required/);
+  });
+
+  it('a whitespace-only value counts as missing', async () => {
+    const auth = new AuthClient({ post: noCall } as never);
+    await expect(auth.login({ email: '   ', password: 'x' })).rejects.toThrow(/"email" is required/);
+  });
+});

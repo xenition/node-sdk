@@ -459,6 +459,9 @@ export class BillingClient {
         context,
         `user already has a "${entitlement}" entitlement (source: ${existing.source}) — ` +
           'a trial can only be started once',
+        // State, not bad input: the caller sent a valid request that the
+        // account's existing entitlement refuses.
+        'CONFLICT',
       );
     }
 

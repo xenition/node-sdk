@@ -107,3 +107,61 @@ describe('snakeCaseQueryClient', () => {
     await expect(query.from('t').first()).resolves.toBeNull();
   });
 });
+
+describe('snakeCaseQueryClient — writes are normalized too', () => {
+  /**
+   * insert(), update() and delete() return a CLONE of the builder rather
+   * than `this`, so the proxy's identity check missed them and the chain
+   * escaped normalization at the first write call. Live against api-dev
+   * that showed up as a SELECT returning `price_cents` while the INSERT
+   * that created the row returned `priceCents` — the same split this
+   * wrapper exists to prevent, and the one that once let an expired
+   * subscription read as active.
+   */
+  const camelRow = { id: '1', priceCents: 250, createdAt: 'now' };
+
+  const fakeQuery = (rows: unknown) => {
+    const builder: Record<string, unknown> = {};
+    const chain = () => builder;
+    // Mirrors the real shape: where/returning return `this`; the writes clone.
+    builder.where = chain;
+    builder.returning = chain;
+    builder.limit = chain;
+    builder.toPayload = () => ({});
+    builder.rows = async () => rows;
+    builder.insert = () => ({ ...builder, rows: async () => rows });
+    builder.update = () => ({ ...builder, rows: async () => rows });
+    builder.delete = () => ({ ...builder, rows: async () => rows });
+    return { from: () => builder } as never;
+  };
+
+  it('normalizes rows returned by insert().returning().rows()', async () => {
+    const db = snakeCaseQueryClient(fakeQuery([camelRow]));
+    const out = (await db.from('t').insert({}).returning('*').rows()) as Record<string, unknown>[];
+    expect(Object.keys(out[0]!).sort()).toEqual(['created_at', 'id', 'price_cents']);
+  });
+
+  it('normalizes rows returned by update().returning().rows()', async () => {
+    const db = snakeCaseQueryClient(fakeQuery([camelRow]));
+    const out = (await db.from('t').where('id', '1').update({}).returning('*').rows()) as Record<
+      string,
+      unknown
+    >[];
+    expect(Object.keys(out[0]!).sort()).toEqual(['created_at', 'id', 'price_cents']);
+  });
+
+  it('normalizes rows returned by delete().returning().rows()', async () => {
+    const db = snakeCaseQueryClient(fakeQuery([camelRow]));
+    const out = (await db.from('t').where('id', '1').delete().returning('*').rows()) as Record<
+      string,
+      unknown
+    >[];
+    expect(Object.keys(out[0]!).sort()).toEqual(['created_at', 'id', 'price_cents']);
+  });
+
+  it('still normalizes a plain select', async () => {
+    const db = snakeCaseQueryClient(fakeQuery([camelRow]));
+    const out = (await db.from('t').limit(1).rows()) as Record<string, unknown>[];
+    expect(Object.keys(out[0]!).sort()).toEqual(['created_at', 'id', 'price_cents']);
+  });
+});

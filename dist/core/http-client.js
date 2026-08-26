@@ -7,6 +7,7 @@ exports.HttpClient = exports.IDEMPOTENCY_HEADER = exports.REQUEST_ID_HEADER = vo
 const axios_1 = __importDefault(require("axios"));
 const constants_1 = require("../constants");
 const errors_1 = require("./errors");
+const error_envelope_1 = require("./error-envelope");
 /** Correlates one logical call across the SDK, the gateway and its logs. */
 exports.REQUEST_ID_HEADER = 'x-request-id';
 /** Lets the platform collapse a retried write into one effect. */
@@ -143,7 +144,18 @@ class HttpClient {
         });
         if (!response.ok) {
             const detail = await response.text().catch(() => '');
-            throw new errors_1.XenitionError(this.classifyStatus(response.status), detail ? detail.slice(0, 300) : `Request failed with ${response.status}`, { status: response.status });
+            // The body is usually JSON even on the streaming route, so prefer the
+            // sentence inside it over dumping the raw envelope at the caller.
+            let parsed;
+            try {
+                parsed = detail ? JSON.parse(detail) : undefined;
+            }
+            catch {
+                parsed = undefined;
+            }
+            const message = (0, error_envelope_1.messageFromEnvelope)(parsed) ??
+                (detail ? detail.slice(0, 300) : `Request failed with ${response.status}`);
+            throw new errors_1.XenitionError(this.classifyStatus(response.status, (0, error_envelope_1.codeFromEnvelope)(parsed)), message, { status: response.status, details: parsed ?? detail });
         }
         return response;
     }
@@ -234,12 +246,12 @@ class HttpClient {
                 // No HTTP status here (2xx body with success:false), so unknown
                 // server codes fall back to 'UNKNOWN'. The raw code survives in
                 // `details` (the whole error object) either way.
-                const rawCode = env.error?.code;
+                const rawCode = (0, error_envelope_1.codeFromEnvelope)(env);
                 const code = (0, errors_1.isXenitionErrorCode)(rawCode)
                     ? rawCode
                     : 'UNKNOWN';
-                const message = env.error?.message ?? 'Request failed';
-                throw new errors_1.XenitionError(code, message, { details: env.error });
+                const message = (0, error_envelope_1.messageFromEnvelope)(env) ?? 'Request failed';
+                throw new errors_1.XenitionError(code, message, { details: env.error ?? env });
             }
             return env.data;
         }
@@ -252,10 +264,12 @@ class HttpClient {
             const axErr = err;
             const status = axErr.response?.status ?? null;
             const envelope = axErr.response?.data;
-            const code = this.classifyStatus(status, envelope?.error?.code);
-            const message = envelope?.error?.message ??
-                axErr.message ??
-                'Request failed';
+            const code = this.classifyStatus(status, (0, error_envelope_1.codeFromEnvelope)(envelope));
+            // The server's own sentence, whichever envelope it arrived in.
+            // Falling back to axios's message means surfacing "Request failed
+            // with status code 409" to a sign-up screen, which tells the user
+            // nothing and hides the sentence the server did send.
+            const message = (0, error_envelope_1.messageFromEnvelope)(envelope) ?? axErr.message ?? 'Request failed';
             return new errors_1.XenitionError(code, message, { status, details: envelope });
         }
         if (err instanceof Error) {

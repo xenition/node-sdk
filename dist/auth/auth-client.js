@@ -57,10 +57,22 @@ class AuthClient {
         this.http = http;
     }
     // ────────── Account lifecycle ────────────────────────────────────────────
-    register(input) {
+    async register(input) {
+        const context = 'AuthClient.register';
+        requireField(context, 'email', input?.email);
+        requireField(context, 'password', input?.password);
         return this.http.post(constants_1.API_ENDPOINTS.AUTH.REGISTER, input);
     }
-    login(input) {
+    /**
+     * A missing field is checked here rather than at the server, because the
+     * server answers a blank login with "Invalid email or password" — which
+     * sends the caller looking for a credentials problem when the real fault
+     * is an undefined variable that never reached the request.
+     */
+    async login(input) {
+        const context = 'AuthClient.login';
+        requireField(context, 'email', input?.email);
+        requireField(context, 'password', input?.password);
         return this.http.post(constants_1.API_ENDPOINTS.AUTH.LOGIN, input);
     }
     logout(accessToken) {
@@ -237,13 +249,18 @@ class AuthClient {
         });
     }
     // ────────── Password reset + email verification ──────────────────────────
-    requestPasswordReset(email, redirectUrl) {
+    async requestPasswordReset(email, redirectUrl) {
+        requireField('AuthClient.requestPasswordReset', 'email', email);
         return this.http.post(constants_1.API_ENDPOINTS.AUTH.PASSWORD_RESET_REQUEST, { email, redirectUrl });
     }
-    resetPassword(input) {
+    async resetPassword(input) {
+        const context = 'AuthClient.resetPassword';
+        requireField(context, 'token', input?.token);
+        requireField(context, 'newPassword', input?.newPassword);
         return this.http.post(constants_1.API_ENDPOINTS.AUTH.PASSWORD_RESET_CONFIRM, input);
     }
-    verifyEmail(token) {
+    async verifyEmail(token) {
+        requireField('AuthClient.verifyEmail', 'token', token);
         return this.http.post(constants_1.API_ENDPOINTS.AUTH.VERIFY_EMAIL, { token });
     }
     // ────────── OAuth ────────────────────────────────────────────────────────

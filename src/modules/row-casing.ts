@@ -79,6 +79,16 @@ export function snakeCaseQueryClient(query: QueryClient): QueryClient {
   });
 }
 
+/**
+ * Duck-typed so a cloned builder is recognised without importing the class
+ * for an instanceof check the bundler would have to keep alive.
+ */
+function isBuilder(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.rows === 'function' && typeof candidate.toPayload === 'function';
+}
+
 function wrapBuilder<T extends Record<string, unknown>>(
   builder: QueryBuilder<T>,
 ): QueryBuilder<T> {
@@ -93,6 +103,15 @@ function wrapBuilder<T extends Record<string, unknown>>(
         // Chainable methods return the builder itself; keep it wrapped so the
         // normalization survives `.where(...).orderBy(...).rows()`.
         if (result === target) return receiver;
+
+        // ...but insert(), update() and delete() return a CLONE rather than
+        // `this`, so identity is not enough. Without this the chain escapes
+        // the proxy at the first write call and `.returning('*').rows()`
+        // comes back camelCased while a SELECT on the same table comes back
+        // snake_cased — the exact split this wrapper exists to prevent.
+        if (isBuilder(result) && result !== receiver) {
+          return wrapBuilder(result as QueryBuilder<T>);
+        }
 
         if (typeof prop === 'string' && ROW_RETURNING.has(prop) && isPromise(result)) {
           return result.then(normalizeResult);
