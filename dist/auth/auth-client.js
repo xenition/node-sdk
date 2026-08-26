@@ -243,10 +243,26 @@ class AuthClient {
             params: options,
         });
     }
-    searchUsers(query, options = {}) {
-        return this.http.get(constants_1.API_ENDPOINTS.AUTH.SEARCH_USERS, {
-            params: { q: query, ...options },
-        });
+    async searchUsers(query, options = {}) {
+        try {
+            return await this.http.get(constants_1.API_ENDPOINTS.AUTH.SEARCH_USERS, {
+                params: { q: query, ...options },
+            });
+        }
+        catch (err) {
+            // A search that finds nothing returns an empty page — it never 404s.
+            // A 404 here means the gateway matched /auth/users/:id first and read
+            // the literal "search" as a user id, so it answers "user not found".
+            // Passing that through tells the caller their search TERM was not
+            // found, which is a different and much more misleading claim.
+            if (err instanceof errors_1.XenitionError && err.code === 'NOT_FOUND') {
+                throw new errors_1.XenitionError('NOT_FOUND', 'AuthClient.searchUsers: the gateway answered "user not found" for the search ' +
+                    'endpoint itself. /app-platform/auth/users/search is being shadowed by ' +
+                    '/app-platform/auth/users/:id, which matches "search" as an id. This is a route ' +
+                    'ordering bug on the server, not an empty result — your query was never run.', { status: err.status, details: err.details });
+            }
+            throw err;
+        }
     }
     // ────────── Password reset + email verification ──────────────────────────
     async requestPasswordReset(email, redirectUrl) {

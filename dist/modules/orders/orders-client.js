@@ -108,6 +108,28 @@ class OrdersClient {
             .rows();
         if (itemRows.length === 0)
             (0, util_1.fail)(context, `cart "${token}" is empty`);
+        // Claim the cart before writing the order.
+        //
+        // Nothing used to read the cart's status, so the same token could be
+        // checked out repeatedly: a double-clicked "Place order", or a retry
+        // after a timeout that actually succeeded, produced a second real
+        // order for the same basket. That is a customer charged twice.
+        //
+        // A conditional UPDATE ... WHERE status = 'open' is a compare-and-set
+        // the database settles, so two concurrent checkouts cannot both win.
+        // If the order fails to write after the claim, the cart is released
+        // again below — a briefly-locked cart is recoverable, a duplicate
+        // order is not.
+        const claimed = await this.ctx.query
+            .from(cart_1.CART_TABLES.CARTS)
+            .where('token', token)
+            .where('status', 'open')
+            .update({ status: 'converted' })
+            .returning('id')
+            .rows();
+        if (claimed.length === 0) {
+            (0, util_1.fail)(context, `cart "${token}" has already been checked out — create a new cart for a new order`, 'CONFLICT');
+        }
         const orderId = (0, util_1.generateId)();
         const items = itemRows.map((r) => ({
             id: (0, util_1.generateId)(),
@@ -119,20 +141,37 @@ class OrdersClient {
             unit_price_cents: (0, util_1.toNumber)(r.unit_price_cents ?? r.unitPriceCents) ?? 0,
         }));
         const subtotalCents = items.reduce((sum, i) => sum + i.unit_price_cents * i.quantity, 0);
-        const order = await this.insertWithUniqueNumber(context, {
-            id: orderId,
-            cart_token: token,
-            email,
-            currency,
-            subtotal_cents: subtotalCents,
-            total_cents: subtotalCents, // v0: no tax/shipping.
-            data,
-        });
-        await this.ctx.query
-            .from(exports.ORDERS_TABLES.ITEMS)
-            .insert(items.map((i) => this.itemRow(i)))
-            .execute();
-        return { ...order, items };
+        try {
+            const order = await this.insertWithUniqueNumber(context, {
+                id: orderId,
+                cart_token: token,
+                email,
+                currency,
+                subtotal_cents: subtotalCents,
+                total_cents: subtotalCents, // v0: no tax/shipping.
+                data,
+            });
+            await this.ctx.query
+                .from(exports.ORDERS_TABLES.ITEMS)
+                .insert(items.map((i) => this.itemRow(i)))
+                .execute();
+            return { ...order, items };
+        }
+        catch (err) {
+            // No order exists, so the claim must not outlive the attempt —
+            // otherwise a transient failure would strand the shopper's basket.
+            await this.ctx.query
+                .from(cart_1.CART_TABLES.CARTS)
+                .where('token', token)
+                .update({ status: 'open' })
+                .execute()
+                .catch(() => {
+                // Releasing is best-effort. If it fails the cart stays locked,
+                // which is recoverable by starting a new one; masking the
+                // original error here would not be.
+            });
+            throw err;
+        }
     }
     /** Fetch an order + its items by id. Null if unknown. */
     async get(id) {

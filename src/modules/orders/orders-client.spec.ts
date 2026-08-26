@@ -32,6 +32,7 @@ describe('createFromCart', () => {
     post
       .mockResolvedValueOnce({ data: [CART_ROW] }) // cart lookup
       .mockResolvedValueOnce({ data: CART_ITEMS }) // cart items
+      .mockResolvedValueOnce({ data: [{ id: 'cart_1' }] }) // claim the cart
       .mockResolvedValueOnce({ data: [] }) // order insert
       .mockResolvedValueOnce({ data: [] }); // items insert
     const order = await orders.createFromCart('tok', { email: 'ada@example.com' });
@@ -46,7 +47,7 @@ describe('createFromCart', () => {
       expect.objectContaining({ variant_id: 'v1', quantity: 2, unit_price_cents: 2500, title: 'Tee' }),
     );
 
-    const orderInsert = payloadOf(post, 2);
+    const orderInsert = payloadOf(post, 3);
     expect(orderInsert.type).toBe('INSERT');
     expect(orderInsert.table).toBe(ORDERS_TABLES.ORDERS);
     expect(orderInsert.data).not.toHaveProperty('created_at');
@@ -63,7 +64,7 @@ describe('createFromCart', () => {
       }),
     );
 
-    const itemsInsert = payloadOf(post, 3);
+    const itemsInsert = payloadOf(post, 4);
     expect(itemsInsert.type).toBe('INSERT');
     expect(itemsInsert.table).toBe(ORDERS_TABLES.ITEMS);
     const rows = itemsInsert.data as Record<string, unknown>[];
@@ -80,16 +81,17 @@ describe('createFromCart', () => {
     post
       .mockResolvedValueOnce({ data: [CART_ROW] }) // cart
       .mockResolvedValueOnce({ data: CART_ITEMS }) // items
+      .mockResolvedValueOnce({ data: [{ id: 'cart_1' }] }) // claim the cart
       .mockRejectedValueOnce(new Error('duplicate key value violates unique constraint "orders__orders_number_key"'))
       .mockResolvedValueOnce({ data: [] }) // order insert (2nd number)
       .mockResolvedValueOnce({ data: [] }); // items insert
     const order = await orders.createFromCart('tok', { email: 'ada@example.com' });
     expect(order.number).toMatch(NUMBER_RE);
-    // First number attempt (call 2) and the retry (call 3) both target orders.
-    expect(payloadOf(post, 2).table).toBe(ORDERS_TABLES.ORDERS);
+    // First number attempt (call 3) and the retry (call 4) both target orders.
     expect(payloadOf(post, 3).table).toBe(ORDERS_TABLES.ORDERS);
-    const n1 = (payloadOf(post, 2).data as { number: string }).number;
-    const n2 = (payloadOf(post, 3).data as { number: string }).number;
+    expect(payloadOf(post, 4).table).toBe(ORDERS_TABLES.ORDERS);
+    const n1 = (payloadOf(post, 3).data as { number: string }).number;
+    const n2 = (payloadOf(post, 4).data as { number: string }).number;
     expect(n1).not.toBe(n2); // a fresh number on retry
   });
 
@@ -276,6 +278,7 @@ describe('order number uniqueness', () => {
       post
         .mockResolvedValueOnce({ data: [CART_ROW] })
         .mockResolvedValueOnce({ data: [CART_ITEMS[0]] })
+        .mockResolvedValueOnce({ data: [{ id: 'cart_1' }] }) // claim the cart
         .mockResolvedValueOnce({ data: [] })
         .mockResolvedValueOnce({ data: [] });
       const order = await orders.createFromCart('tok', { email: 'a@b.co' });
@@ -312,5 +315,74 @@ describe('orders module lifecycle', () => {
     await modules.enable('orders');
     expect(modules.orders).toBeInstanceOf(OrdersClient);
     expect(modules.orders).toBe(modules.orders); // cached
+  });
+});
+
+describe('createFromCart — a cart can only be checked out once', () => {
+  /**
+   * Found live against api-dev: the same cart token produced two real
+   * orders (XN-3CP8DY and XN-V2MKFB) for one basket, and kept producing
+   * more. The cart's status column and its CHECK constraint existed from
+   * the start, but nothing read them. A double-clicked "Place order", or
+   * a retry after a timeout that had actually succeeded, charged the
+   * customer twice.
+   */
+  it('claims the cart with a conditional update before writing the order', async () => {
+    const { post, orders } = makeOrders();
+    post
+      .mockResolvedValueOnce({ data: [CART_ROW] })
+      .mockResolvedValueOnce({ data: CART_ITEMS })
+      .mockResolvedValueOnce({ data: [{ id: 'cart_1' }] })
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [] });
+    await orders.createFromCart('tok', { email: 'ada@example.com' });
+
+    const claim = payloadOf(post, 2);
+    expect(claim.type).toBe('UPDATE');
+    expect(claim.data).toEqual({ status: 'converted' });
+    // The status predicate is what makes this a compare-and-set rather
+    // than a blind write two concurrent checkouts could both perform.
+    expect(claim.where).toEqual([
+      { column: 'token', operator: '=', value: 'tok', type: 'AND' },
+      { column: 'status', operator: '=', value: 'open', type: 'AND' },
+    ]);
+  });
+
+  it('refuses a second checkout of the same cart', async () => {
+    const { post, orders } = makeOrders();
+    post
+      .mockResolvedValueOnce({ data: [CART_ROW] })
+      .mockResolvedValueOnce({ data: CART_ITEMS })
+      .mockResolvedValueOnce({ data: [] }); // claim lost — already converted
+    await expect(orders.createFromCart('tok', { email: 'ada@example.com' })).rejects.toThrow(
+      /already been checked out/,
+    );
+  });
+
+  it('reports the refusal as CONFLICT, not a validation error', async () => {
+    const { post, orders } = makeOrders();
+    post
+      .mockResolvedValueOnce({ data: [CART_ROW] })
+      .mockResolvedValueOnce({ data: CART_ITEMS })
+      .mockResolvedValueOnce({ data: [] });
+    await expect(orders.createFromCart('tok', { email: 'ada@example.com' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+  });
+
+  it('releases the cart when the order fails to write', async () => {
+    // A claim that outlived a failed attempt would strand the shopper's
+    // basket with no order to show for it.
+    const { post, orders } = makeOrders();
+    post
+      .mockResolvedValueOnce({ data: [CART_ROW] })
+      .mockResolvedValueOnce({ data: CART_ITEMS })
+      .mockResolvedValueOnce({ data: [{ id: 'cart_1' }] })
+      .mockRejectedValue(new Error('database is down'));
+    await expect(orders.createFromCart('tok', { email: 'ada@example.com' })).rejects.toThrow();
+
+    const release = payloadOf(post, post.mock.calls.length - 1);
+    expect(release.type).toBe('UPDATE');
+    expect(release.data).toEqual({ status: 'open' });
   });
 });

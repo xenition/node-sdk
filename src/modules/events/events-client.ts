@@ -10,6 +10,7 @@ import {
   requireNonEmptyString,
   slugify,
   toNumber,
+  notFoundHint,
 } from '../util';
 import {
   CreateEventInput,
@@ -311,7 +312,7 @@ export class EventsClient {
         .where('id', slugOrId)
         .first<EventRecord>();
     }
-    if (!event) fail(context, `unknown event "${slugOrId}"`);
+    if (!event) fail(context, notFoundHint('event', slugOrId));
     return event;
   }
 

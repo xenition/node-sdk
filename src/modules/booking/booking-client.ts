@@ -11,6 +11,7 @@ import {
   requireNonEmptyString,
   slugify,
   toNumber,
+  notFoundHint,
 } from '../util';
 import { localParts, offsetMsAt, zonedWallToUtcMs, assertValidTimeZone } from './time';
 import {
@@ -301,7 +302,7 @@ export class BookingClient {
       fail(context, `search window must be at most ${MAX_SEARCH_WINDOW_DAYS} days`);
     }
     const resource = await this.getResource(slug);
-    if (!resource) fail(context, `unknown resource "${slug}"`);
+    if (!resource) fail(context, notFoundHint('resource', slug));
     if (resource.status !== 'active' || resource.availability.length === 0) return [];
 
     const { confirmed, blackouts } = await this.loadWindow(resource.id, fromMs, toMs);
@@ -327,7 +328,7 @@ export class BookingClient {
     const data = optionalPlainObject(context, 'data', input.data, {});
 
     const resource = await this.getResource(slug);
-    if (!resource) fail(context, `unknown resource "${slug}"`);
+    if (!resource) fail(context, notFoundHint('resource', slug));
     if (resource.status !== 'active') this.slotUnavailable(context, 'resource is not active');
 
     const slotMs = resource.slot_minutes * MS_PER_MINUTE;

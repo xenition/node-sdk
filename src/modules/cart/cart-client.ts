@@ -108,6 +108,7 @@ export class CartClient {
     requireNonEmptyString(context, 'variantId', variantId);
     const quantity = this.validateQty(context, 'quantity', qty, 1);
     const cart = await this.getOrCreate(token);
+    this.assertOpen(context, cart);
 
     const variant = await this.ctx.query
       .from(CATALOG_TABLES.VARIANTS)
@@ -182,6 +183,7 @@ export class CartClient {
     const quantity = this.validateQty(context, 'quantity', qty, 0);
     const cart = await this.findCart(token);
     if (!cart) fail(context, `unknown cart "${token}"`);
+    this.assertOpen(context, cart);
     if (quantity === 0) {
       await this.deleteItem(cart.id, itemId);
       return;
@@ -201,6 +203,7 @@ export class CartClient {
     requireNonEmptyString(context, 'itemId', itemId);
     const cart = await this.findCart(token);
     if (!cart) fail(context, `unknown cart "${token}"`);
+    this.assertOpen(context, cart);
     await this.deleteItem(cart.id, itemId);
   }
 
@@ -230,6 +233,7 @@ export class CartClient {
     requireNonEmptyString(context, 'token', token);
     const cart = await this.findCart(token);
     if (!cart) return;
+    this.assertOpen(context, cart);
     await this.ctx.query.from(CART_TABLES.ITEMS).delete().where('cart_id', cart.id).execute();
   }
 
@@ -245,6 +249,29 @@ export class CartClient {
   }
 
   // ───────── internals ─────────
+
+  /**
+   * Refuse to change a cart that has already been checked out.
+   *
+   * The status column and its CHECK constraint existed from the start, but
+   * nothing ever read them — so items could still be added to, or removed
+   * from, a basket that had already become an order, and what the shopper
+   * saw in their cart stopped matching what they had bought.
+   *
+   * Takes the cart the caller already loaded rather than re-reading it:
+   * every mutator here fetches the cart anyway, and a second round trip
+   * per item added is not worth paying for a check the first one can make.
+   */
+  private assertOpen(context: string, cart: CartRecord): void {
+    if (cart.status === 'converted') {
+      fail(
+        context,
+        `cart "${cart.token}" has already been checked out and cannot be changed — ` +
+          'start a new cart',
+        'CONFLICT',
+      );
+    }
+  }
 
   private async findCart(token: string): Promise<CartRecord | null> {
     const row = await this.ctx.query

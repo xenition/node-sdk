@@ -246,3 +246,38 @@ describe('AuthClient — required fields are checked before the request', () => 
     await expect(auth.login({ email: '   ', password: 'x' })).rejects.toThrow(/"email" is required/);
   });
 });
+
+describe('searchUsers — a 404 from a search endpoint', () => {
+  /**
+   * Probed against api-dev: GET /app-platform/auth/users/search answers
+   * 404 "user not found", echoing the path back. The gateway matched
+   * /auth/users/:id first and read the literal "search" as a user id.
+   *
+   * Passing that message through tells the caller their search TERM was
+   * not found — a different and far more misleading claim than "the
+   * search never ran".
+   */
+  it('explains that the route is shadowed, not that nothing matched', async () => {
+    const get = jest.fn().mockRejectedValue(
+      new XenitionError('NOT_FOUND', 'user not found', { status: 404 }),
+    );
+    const auth = new AuthClient({ get } as never);
+    await expect(auth.searchUsers('demo')).rejects.toThrow(/being shadowed/);
+    await expect(auth.searchUsers('demo')).rejects.toThrow(/your query was never run/);
+  });
+
+  it('leaves other failures alone', async () => {
+    const get = jest.fn().mockRejectedValue(
+      new XenitionError('AUTH_FORBIDDEN', 'anon keys may not list users', { status: 403 }),
+    );
+    const auth = new AuthClient({ get } as never);
+    await expect(auth.searchUsers('demo')).rejects.toThrow('anon keys may not list users');
+  });
+
+  it('passes a real page straight through', async () => {
+    const page = { users: [{ id: 'u1' }], total: 1 };
+    const get = jest.fn().mockResolvedValue(page);
+    const auth = new AuthClient({ get } as never);
+    await expect(auth.searchUsers('demo')).resolves.toEqual(page);
+  });
+});
