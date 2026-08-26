@@ -1,6 +1,7 @@
 import { HttpClient } from '../core/http-client';
 import { XenitionError } from '../core/errors';
 import { QueryClient } from '../query/query-client';
+import { snakeCaseQueryClient } from './row-casing';
 import { PushClient } from '../push/push-client';
 import { EmailClient } from '../email/email-client';
 import { MigrationsClient } from '../migrations/migrations-client';
@@ -84,7 +85,10 @@ export class ModulesClient {
   ) {
     const query = new QueryClient(http);
     this.ctx = {
-      query,
+      // Snake-cased on the way out: the gateway camelCases rows and the
+      // engine does not, and every module client reads snake_case. See
+      // row-casing.ts — this was silently granting expired subscriptions.
+      query: snakeCaseQueryClient(query),
       raw: (sql, params = []) => query.raw(sql, params),
       push: new PushClient(http),
       email: new EmailClient(http),

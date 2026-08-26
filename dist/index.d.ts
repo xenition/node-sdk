@@ -59,6 +59,7 @@ export { NotificationsClient, notificationsModule, NOTIFICATIONS_MIGRATIONS, NOT
 export type { ListNotificationsResult, NotificationChannel, NotificationPreference, NotificationRecord, NotifyInput, NotifyResult, PreferencePatch, ScheduleInput, ScheduledNotification, ScheduledStatus, ListNotificationsOptions as ListInboxOptions, } from './modules/notifications';
 export { QuotasClient, quotasModule, QUOTAS_MIGRATIONS, QUOTAS_TABLE, periodEndFor, periodStartFor, } from './modules/quotas';
 export type { QuotaPeriod, QuotaState, ConsumeOptions as ConsumeQuotaOptions } from './modules/quotas';
+export { snakeKey, snakeRow, snakeRows, snakeCaseQueryClient } from './modules/row-casing';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
 export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';
