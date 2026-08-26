@@ -287,3 +287,55 @@ describe('cart module lifecycle', () => {
     expect(modules.cart).toBe(modules.cart); // cached
   });
 });
+
+describe('a converted cart cannot be changed', () => {
+  /**
+   * The cart's status was written but never read, so items could be added
+   * to or removed from a basket that had already become an order — and
+   * what the shopper saw stopped matching what they had bought.
+   *
+   * The check reuses the cart each mutator already loads; it must not cost
+   * an extra round trip per item.
+   */
+  const CONVERTED = { id: 'cart_1', token: 'tok', currency: 'USD', status: 'converted' };
+
+  it('addItem refuses', async () => {
+    const { post, cart } = makeCart();
+    post.mockResolvedValueOnce({ data: [CONVERTED] });
+    await expect(cart.addItem('tok', 'v1', 1)).rejects.toThrow(/already been checked out/);
+  });
+
+  it('updateItem, removeItem and clear refuse', async () => {
+    for (const run of [
+      (c: CartClient) => c.updateItem('tok', 'ci1', 3),
+      (c: CartClient) => c.removeItem('tok', 'ci1'),
+      (c: CartClient) => c.clear('tok'),
+    ]) {
+      const { post, cart } = makeCart();
+      post.mockResolvedValueOnce({ data: [CONVERTED] });
+      await expect(run(cart)).rejects.toThrow(/already been checked out/);
+    }
+  });
+
+  it('refuses with CONFLICT', async () => {
+    const { post, cart } = makeCart();
+    post.mockResolvedValueOnce({ data: [CONVERTED] });
+    await expect(cart.addItem('tok', 'v1', 1)).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('costs no extra query — the check reuses the cart already loaded', async () => {
+    const { post, cart } = makeCart();
+    post.mockResolvedValueOnce({ data: [CONVERTED] });
+    await expect(cart.clear('tok')).rejects.toThrow();
+    // One lookup, then the refusal. No second read to learn the status.
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('an open cart is still mutable', async () => {
+    const { post, cart } = makeCart();
+    post
+      .mockResolvedValueOnce({ data: [{ ...CONVERTED, status: 'open' }] })
+      .mockResolvedValueOnce({ data: [] });
+    await expect(cart.clear('tok')).resolves.toBeUndefined();
+  });
+});

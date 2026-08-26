@@ -270,7 +270,7 @@ class BookingClient {
         }
         const resource = await this.getResource(slug);
         if (!resource)
-            (0, util_1.fail)(context, `unknown resource "${slug}"`);
+            (0, util_1.fail)(context, (0, util_1.notFoundHint)('resource', slug));
         if (resource.status !== 'active' || resource.availability.length === 0)
             return [];
         const { confirmed, blackouts } = await this.loadWindow(resource.id, fromMs, toMs);
@@ -294,7 +294,7 @@ class BookingClient {
         const data = (0, util_1.optionalPlainObject)(context, 'data', input.data, {});
         const resource = await this.getResource(slug);
         if (!resource)
-            (0, util_1.fail)(context, `unknown resource "${slug}"`);
+            (0, util_1.fail)(context, (0, util_1.notFoundHint)('resource', slug));
         if (resource.status !== 'active')
             this.slotUnavailable(context, 'resource is not active');
         const slotMs = resource.slot_minutes * MS_PER_MINUTE;

@@ -108,6 +108,7 @@ class CartClient {
         (0, util_1.requireNonEmptyString)(context, 'variantId', variantId);
         const quantity = this.validateQty(context, 'quantity', qty, 1);
         const cart = await this.getOrCreate(token);
+        this.assertOpen(context, cart);
         const variant = await this.ctx.query
             .from(catalog_1.CATALOG_TABLES.VARIANTS)
             .where('id', variantId)
@@ -180,6 +181,7 @@ class CartClient {
         const cart = await this.findCart(token);
         if (!cart)
             (0, util_1.fail)(context, `unknown cart "${token}"`);
+        this.assertOpen(context, cart);
         if (quantity === 0) {
             await this.deleteItem(cart.id, itemId);
             return;
@@ -199,6 +201,7 @@ class CartClient {
         const cart = await this.findCart(token);
         if (!cart)
             (0, util_1.fail)(context, `unknown cart "${token}"`);
+        this.assertOpen(context, cart);
         await this.deleteItem(cart.id, itemId);
     }
     /**
@@ -228,6 +231,7 @@ class CartClient {
         const cart = await this.findCart(token);
         if (!cart)
             return;
+        this.assertOpen(context, cart);
         await this.ctx.query.from(exports.CART_TABLES.ITEMS).delete().where('cart_id', cart.id).execute();
     }
     /** Flip the cart to 'converted' (called once its order is paid). */
@@ -241,6 +245,24 @@ class CartClient {
             .execute();
     }
     // ───────── internals ─────────
+    /**
+     * Refuse to change a cart that has already been checked out.
+     *
+     * The status column and its CHECK constraint existed from the start, but
+     * nothing ever read them — so items could still be added to, or removed
+     * from, a basket that had already become an order, and what the shopper
+     * saw in their cart stopped matching what they had bought.
+     *
+     * Takes the cart the caller already loaded rather than re-reading it:
+     * every mutator here fetches the cart anyway, and a second round trip
+     * per item added is not worth paying for a check the first one can make.
+     */
+    assertOpen(context, cart) {
+        if (cart.status === 'converted') {
+            (0, util_1.fail)(context, `cart "${cart.token}" has already been checked out and cannot be changed — ` +
+                'start a new cart', 'CONFLICT');
+        }
+    }
     async findCart(token) {
         const row = await this.ctx.query
             .from(exports.CART_TABLES.CARTS)

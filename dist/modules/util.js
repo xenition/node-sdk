@@ -11,6 +11,7 @@ exports.optionalBoolean = optionalBoolean;
 exports.optionalNumber = optionalNumber;
 exports.optionalPlainObject = optionalPlainObject;
 exports.toNumber = toNumber;
+exports.notFoundHint = notFoundHint;
 const errors_1 = require("../core/errors");
 /**
  * Shared internals for the content modules — id/timestamp generation,
@@ -99,5 +100,26 @@ function toNumber(value) {
         return Number.isFinite(n) ? n : null;
     }
     return null;
+}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * Explain a slug lookup that was handed an id.
+ *
+ * Several modules read by slug (`getProduct`, `searchSlots`, `getAlbum`)
+ * while their siblings write by id (`updateProduct`, `addItem`). Nothing
+ * at the call site says which a method wants, and both are strings, so
+ * TypeScript cannot help. Passing the wrong one produced a bare
+ * `unknown resource "<uuid>"` — which reads as "that row is gone" and
+ * sends the caller looking for missing data that is sitting right there.
+ *
+ * Appends the explanation only when the value actually looks like a UUID,
+ * so a genuinely missing slug still gets the plain message.
+ */
+function notFoundHint(kind, value) {
+    const base = `unknown ${kind} "${value}"`;
+    return UUID_RE.test(value)
+        ? `${base} — this looks like an id, but this method takes a slug. ` +
+            `Pass the ${kind}'s slug, not its id.`
+        : base;
 }
 //# sourceMappingURL=util.js.map

@@ -271,7 +271,7 @@ class EventsClient {
                 .first();
         }
         if (!event)
-            (0, util_1.fail)(context, `unknown event "${slugOrId}"`);
+            (0, util_1.fail)(context, (0, util_1.notFoundHint)('event', slugOrId));
         return event;
     }
     /**

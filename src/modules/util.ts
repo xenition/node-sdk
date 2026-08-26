@@ -114,3 +114,26 @@ export function toNumber(value: unknown): number | null {
   }
   return null;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Explain a slug lookup that was handed an id.
+ *
+ * Several modules read by slug (`getProduct`, `searchSlots`, `getAlbum`)
+ * while their siblings write by id (`updateProduct`, `addItem`). Nothing
+ * at the call site says which a method wants, and both are strings, so
+ * TypeScript cannot help. Passing the wrong one produced a bare
+ * `unknown resource "<uuid>"` — which reads as "that row is gone" and
+ * sends the caller looking for missing data that is sitting right there.
+ *
+ * Appends the explanation only when the value actually looks like a UUID,
+ * so a genuinely missing slug still gets the plain message.
+ */
+export function notFoundHint(kind: string, value: string): string {
+  const base = `unknown ${kind} "${value}"`;
+  return UUID_RE.test(value)
+    ? `${base} — this looks like an id, but this method takes a slug. ` +
+        `Pass the ${kind}'s slug, not its id.`
+    : base;
+}
