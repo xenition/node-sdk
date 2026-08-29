@@ -165,6 +165,64 @@ export type { RealtimeMessage, RealtimeHandler, Subscription } from './realtime'
 export { MigrationsClient, MIGRATIONS_LEDGER_TABLE } from './migrations';
 export type { Migration, MigrationLedgerRow, ApplyResult } from './migrations';
 
+// Session lifecycle. The store is an interface with an in-memory default on
+// purpose: the caller supplies the platform binding (AsyncStorage,
+// expo-secure-store, localStorage), so no React Native or browser import
+// enters an SDK that also has to run in a Worker.
+export {
+  MemorySessionStore,
+  createKeyValueSessionStore,
+  toStoredSession,
+  toExpiryMs,
+  isStoredSession,
+  DEFAULT_SESSION_KEY,
+} from './auth/session-store';
+export type { SessionStore, StoredSession, KeyValueStorage } from './auth/session-store';
+export {
+  SessionManager,
+  DEFAULT_REFRESH_MARGIN_MS,
+  MIN_REFRESH_DELAY_MS,
+  MIN_USABLE_LIFETIME_MS,
+} from './auth/session-manager';
+export type {
+  SessionManagerOptions,
+  AuthChangeEvent,
+  AuthStateListener,
+} from './auth/session-manager';
+
+// Schema codegen. Imported for its own sake by tooling only — `cli.ts`
+// reaches XenitionClient and fs through a lazy require, so pulling this in
+// costs an app neither axios nor a Node builtin.
+export {
+  introspectSchema,
+  emitDatabaseTypes,
+  mapPgType,
+  quoteIdentifier,
+  readRowField,
+  runCodegenCli,
+  parseArgs,
+  INTROSPECTION_SQL,
+  DEFAULT_SCHEMA,
+  PG_TYPE_MAP,
+  JSON_TYPE_NAME,
+  JSON_TYPE_DECLARATION,
+  CLI_NAME,
+  DEFAULT_OUTPUT_PATH,
+  USAGE,
+} from './codegen';
+export type {
+  IntrospectOptions,
+  EmitOptions,
+  MappedType,
+  ColumnInfo,
+  TableInfo,
+  IntrospectedSchema,
+  RawCapableClient,
+  RawResult,
+  CodegenCliDeps,
+  CodegenRunResult,
+} from './codegen';
+
 // Module framework (content modules v0)
 export { defineModule, ModulesClient } from './modules';
 export type { ModuleContext, ModuleDefinition, ModuleName } from './modules';
@@ -449,7 +507,19 @@ export {
 export type { XenitionErrorCode } from './core/errors';
 
 // HTTP layer (observability hooks, idempotency, request correlation)
-export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';
+export {
+  IDEMPOTENCY_HEADER,
+  REQUEST_ID_HEADER,
+  // Without this a caller cannot tell "the user navigated away" from "the
+  // request failed", which is the one failure a UI should say nothing about.
+  // The predicate is what the doc comment tells people to depend on, and it
+  // was unreachable: `exports` publishes no subpath that reaches this file.
+  isCancelledError,
+  MAX_RETRY_WAIT_MS,
+  CIRCUIT_FAILURE_THRESHOLD,
+  CIRCUIT_COOL_OFF_MS,
+} from './core/http-client';
+export type { CircuitBreakerOptions } from './core/http-client';
 export type {
   HttpClientOptions,
   RequestErrorEvent,

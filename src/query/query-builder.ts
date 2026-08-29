@@ -26,6 +26,9 @@ import {
  *    Non-type-switching calls mutate in place for ergonomics.
  *  - Thenable: `await client.query.from('x').where(...)` works without a
  *    trailing `.execute()`.
+ *  - `.stream()` is an addition, not part of the mirrored surface: it pages
+ *    a SELECT for the caller so nobody has to hand-write the offset loop.
+ *    Read its note before using it on a table under concurrent writes.
  */
 /**
  * Refuse a filter value JSON cannot carry.
@@ -57,6 +60,72 @@ function assertFilterable(column: string, operator: string, value: unknown): voi
         'IS NULL check, or skip the filter entirely.',
     );
   }
+}
+
+/**
+ * Refuse a paging number the query cannot honour.
+ *
+ * Same disappearing act as `assertFilterable`, with a louder consequence.
+ * `.limit(Number(req.query.limit))` on a non-numeric input is `NaN`, and
+ * `JSON.stringify(NaN)` is `null` — so the limit does not arrive and the
+ * server returns **the whole table**. A paging bug becomes a full table
+ * read on a public endpoint. A vanished `offset` is quieter and worse to
+ * debug: every page comes back as page one, and nothing errors.
+ *
+ * Negative and fractional values do reach the server and it does refuse
+ * them, but as `LIMIT must not be negative (SQLSTATE 2201W)` or a flat
+ * `invalid query payload` — neither names the call that was wrong. Refusing
+ * here costs no round trip and says which one to fix.
+ */
+function assertRowCount(method: string, n: number): void {
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    // Name the actual consequence per clause. "Runs unbounded" is true of a
+    // dropped LIMIT and wrong about a dropped OFFSET, and a message that
+    // describes the wrong symptom sends the reader looking in the wrong place.
+    const consequence =
+      method === 'offset'
+        ? 'the clause is dropped and every page comes back as the first one'
+        : 'the clause is dropped and the query runs unbounded — the whole table comes back';
+    throw new XenitionError(
+      'VALIDATION_ERROR',
+      `QueryBuilder.${method}(${String(n)}): ${String(n)} cannot be sent — it becomes NULL ` +
+        `in JSON, so ${consequence}. Check the value before paging on it.`,
+    );
+  }
+  if (!Number.isInteger(n)) {
+    throw new XenitionError(
+      'VALIDATION_ERROR',
+      `QueryBuilder.${method}(${n}): must be a whole number of rows.`,
+    );
+  }
+  if (n < 0) {
+    throw new XenitionError(
+      'VALIDATION_ERROR',
+      `QueryBuilder.${method}(${n}): must not be negative.`,
+    );
+  }
+}
+
+/**
+ * How many rows one `stream()` request asks for.
+ *
+ * The two costs pull against each other: every page is a round trip, and
+ * every page is held whole in memory while it is yielded. A page of 20 —
+ * the `paginate()` default, which is sized for a screen rather than for a
+ * scan — turns a 100k-row table into 5,000 requests, and the round trips
+ * dominate the wall clock entirely. 500 makes the same scan 200 requests
+ * while keeping an ordinary page well inside a normal JSON response.
+ *
+ * Override it per call with `stream({ pageSize })`: down for rows that are
+ * unusually wide (a JSON blob or a base64 column per row, where 500 at once
+ * is a large buffer), up for narrow rows being scanned in bulk.
+ */
+const DEFAULT_STREAM_PAGE_SIZE = 500;
+
+/** Options for {@link QueryBuilder.stream}. */
+export interface StreamOptions {
+  /** Rows per underlying request. Defaults to 500; see the constant's note. */
+  pageSize?: number;
 }
 
 export class QueryBuilder<T = Record<string, unknown>> {
@@ -250,9 +319,20 @@ export class QueryBuilder<T = Record<string, unknown>> {
     return this;
   }
 
-  limit(n: number): this { this.limitValue = n; return this; }
-  offset(n: number): this { this.offsetValue = n; return this; }
+  limit(n: number): this { assertRowCount('limit', n); this.limitValue = n; return this; }
+  offset(n: number): this { assertRowCount('offset', n); this.offsetValue = n; return this; }
   paginate(page: number, perPage: number = 20): this {
+    // Validated before the arithmetic, not after: `paginate(NaN, 20)` would
+    // otherwise report a NaN offset, which points at a call the caller
+    // never made.
+    assertRowCount('paginate', perPage);
+    if (typeof page !== 'number' || !Number.isInteger(page) || page < 1) {
+      throw new XenitionError(
+        'VALIDATION_ERROR',
+        `QueryBuilder.paginate(${String(page)}): page is 1-based, so it must be a whole ` +
+          'number of 1 or more.',
+      );
+    }
     this.limitValue = perPage;
     this.offsetValue = (page - 1) * perPage;
     return this;
@@ -344,6 +424,131 @@ export class QueryBuilder<T = Record<string, unknown>> {
     this.selectColumns = [column];
     const row = await this.first<Record<string, V>>();
     return row ? (row[column] ?? null) : null;
+  }
+
+  /**
+   * Every matching row, one at a time, paging underneath.
+   *
+   *     for await (const row of client.query.from('items').where('active', true).stream()) {
+   *       …
+   *     }
+   *
+   * This exists because the hand-written paging loop is where the bugs were.
+   * The two that kept recurring: bumping `offset` before checking for a short
+   * page, which spends a pointless request per scan and, when the last page is
+   * exactly full, reads one page past the data; and stopping only on an
+   * **empty** page, which never terminates against a server that clamps a
+   * too-large `limit` down to its own maximum. This method stops on the first
+   * page shorter than the one it asked for, so a page that already proves it
+   * is the last costs no extra request.
+   *
+   * A `limit()` set before the call is a ceiling on the whole stream, not on
+   * each page: `.limit(30).stream({ pageSize: 10 })` makes three requests and
+   * yields thirty rows. An `offset()` set before the call is where the scan
+   * starts. `limit(0)` yields nothing and issues no request at all.
+   *
+   * ## Paging is by OFFSET, and here is what that costs
+   *
+   * A stream is many separate reads, not one snapshot. Under concurrent
+   * writes, offset paging silently skips and repeats: a row inserted before
+   * the current window shifts everything after it forward, so one row is
+   * yielded twice; a delete shifts backward, so one row is never yielded at
+   * all. Nothing errors — every row you get is a real row that existed when it
+   * was read, but the set as a whole is not a consistent view of any single
+   * instant. On an append-only or quiet table that is nothing; on a hot queue
+   * table it is real.
+   *
+   * The keyset cursor used elsewhere in this SDK (`InboxPage.nextCursor` — the
+   * `createdAt` of the last row seen) does not generalise to this builder, and
+   * guessing at one here would be worse than the drift it fixes:
+   *
+   *  - Keyset needs an ordering that is unique and total, and the builder
+   *    cannot know whether it has one. `orderBy('created_at')` on two rows
+   *    written in the same millisecond makes a `>` cursor skip a row and a
+   *    `>=` cursor return the same page forever — the non-termination this
+   *    method exists to remove, reintroduced by the fix for it.
+   *  - The cursor condition would have to be appended to `whereConditions`,
+   *    which is a flat list with no grouping. Appending `AND id > $cursor` to
+   *    `a = 1 OR b = 2` binds to the `b = 2` alone, so the stream would return
+   *    rows the caller's filter never asked for.
+   *
+   * If a scan must not skip or repeat, page it by a unique key yourself —
+   * `.where('id', '>', lastId).orderBy('id').limit(n)`, the same shape the
+   * inbox cursor uses — or take the whole thing inside one server-side
+   * transaction. This method trades that guarantee for not having to.
+   */
+  stream<R = T>(options: StreamOptions = {}): AsyncIterableIterator<R> {
+    // Validated here rather than inside the generator body: a generator does
+    // not run a line of itself until the first `next()`, so a misuse would
+    // otherwise surface at the `for await` instead of at the `.stream()` that
+    // is actually wrong — and would be missed entirely by code that builds the
+    // iterator and never iterates it.
+    if (this.queryType !== 'SELECT') {
+      throw new XenitionError(
+        'VALIDATION_ERROR',
+        `QueryBuilder.stream(): cannot be used on ${this.queryType}. Streaming pages with ` +
+          'LIMIT/OFFSET, which Postgres has for SELECT only. To walk the rows a write ' +
+          `touched, use .returning('*') then .rows().`,
+      );
+    }
+    const pageSize = options.pageSize ?? DEFAULT_STREAM_PAGE_SIZE;
+    assertRowCount('stream', pageSize);
+    if (pageSize < 1) {
+      // `assertRowCount` lets 0 through because `LIMIT 0` is a legal count-only
+      // probe. It is not legal here: a page of no rows makes no progress, so
+      // the offset never advances and the loop asks the same question forever.
+      throw new XenitionError(
+        'VALIDATION_ERROR',
+        'QueryBuilder.stream({ pageSize: 0 }): a page of zero rows never advances the ' +
+          'offset, so the stream would request forever and yield nothing. Ask for at ' +
+          'least one row per page.',
+      );
+    }
+    // Snapshot now. `first()` sets `limitValue` on the live builder, which is
+    // why `qb.first()` quietly leaves a `limit: 1` behind on a builder the
+    // caller meant to reuse; streaming must not repeat that. Every page is
+    // executed against a private copy, so the caller's builder is byte-for-byte
+    // what it was before the call and later edits to it cannot change a stream
+    // that is already running.
+    return this.pageThrough<R>(this.clone(), pageSize);
+  }
+
+  private async *pageThrough<R>(
+    source: QueryBuilder<T>,
+    pageSize: number,
+  ): AsyncIterableIterator<R> {
+    const ceiling = source.limitValue; // undefined = read until the table ends
+    let offset = source.offsetValue ?? 0;
+    let yielded = 0;
+
+    for (;;) {
+      // Never ask for more than the caller's remaining budget, so the last page
+      // of a `.limit(25).stream({ pageSize: 10 })` requests 5 rows rather than
+      // fetching 10 and discarding half of them.
+      const wanted = ceiling === undefined ? pageSize : Math.min(pageSize, ceiling - yielded);
+      if (wanted <= 0) return;
+
+      const page = source.clone();
+      page.limitValue = wanted;
+      page.offsetValue = offset;
+      const rows = (await page.execute<R>()).data ?? [];
+
+      for (const row of rows) {
+        yield row;
+        yielded += 1;
+        // The ceiling is enforced against rows actually yielded, not against
+        // what was requested: a server that ignores or clamps `limit` and hands
+        // back a longer page must not push the stream past the caller's limit.
+        if (ceiling !== undefined && yielded >= ceiling) return;
+      }
+
+      // A page shorter than the one requested is itself the proof that there is
+      // nothing after it, so stop without paying for a request to confirm it.
+      // An exactly-full last page cannot prove that, and does cost one final
+      // empty request — the honest price of not knowing the total.
+      if (rows.length < wanted) return;
+      offset += rows.length;
+    }
   }
 
   // Promise-like (`await qb` works without an explicit terminal).

@@ -1,4 +1,5 @@
 export { StorageClient } from './storage-client';
+export type { UploadProgress, UploadCallOptions } from './storage-client';
 export type {
   UploadOptions,
   UploadResult,

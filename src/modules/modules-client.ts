@@ -6,6 +6,7 @@ import { PushClient } from '../push/push-client';
 import { EmailClient } from '../email/email-client';
 import { MigrationsClient } from '../migrations/migrations-client';
 import { ModuleContext, ModuleDefinition } from './core';
+import { withBatching } from './batch';
 import { CmsClient, cmsModule } from './cms';
 import { FormsClient, formsModule } from './forms';
 import { ReviewsClient, reviewsModule } from './reviews';
@@ -58,7 +59,7 @@ export type ModuleName =
  * fix in the message — nothing is lazily migrated behind your back.
  */
 export class ModulesClient {
-  private readonly ctx: ModuleContext;
+  private ctx: ModuleContext;
   private readonly enabled = new Set<ModuleName>();
   private readonly instances = new Map<ModuleName, unknown>();
   private readonly definitions: Record<ModuleName, ModuleDefinition<unknown>> = {
@@ -93,6 +94,38 @@ export class ModulesClient {
       push: new PushClient(http),
       email: new EmailClient(http),
     };
+  }
+
+  /**
+   * Opt this client's modules into per-tick query batching.
+   *
+   * Off unless you call this. With it on, module lookups written against
+   * `loadOneBy` coalesce into one `whereIn` per table+column per tick, so a
+   * list view that resolves 50 authors makes 1 request instead of 50.
+   * Everything else — filters, ordering, writes, raw SQL — is untouched.
+   *
+   *   client.modules.enableBatching();
+   *   await client.modules.enable('cms');
+   *
+   * Must be called BEFORE the first module accessor, and says so rather
+   * than half-applying: a module client captures the context at
+   * construction, so flipping the switch afterwards would batch the
+   * modules touched later and leave the ones already built unbatched —
+   * a difference nobody would think to look for while debugging.
+   *
+   * Safe to call twice; the second call is a no-op.
+   */
+  enableBatching(): void {
+    if (this.ctx.batch) return;
+    if (this.instances.size > 0) {
+      throw new Error(
+        'ModulesClient.enableBatching(): module clients have already been built ' +
+          `(${[...this.instances.keys()].join(', ')}) and captured the unbatched context. ` +
+          'Call enableBatching() before the first `client.modules.<name>` access — ' +
+          'typically right after constructing the client, before enable()/use().',
+      );
+    }
+    this.ctx = withBatching(this.ctx);
   }
 
   /**

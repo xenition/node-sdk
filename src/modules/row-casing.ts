@@ -1,6 +1,9 @@
-import { QueryClient } from '../query/query-client';
-import { QueryBuilder } from '../query/query-builder';
-import { QueryResult } from '../query/types';
+// Type-only on purpose. `query-client.ts` now imports `snakeRows` from this
+// file for its `raw()` path, so a value import here would close a require()
+// cycle between the two modules; `import type` cannot.
+import type { QueryClient } from '../query/query-client';
+import type { QueryBuilder } from '../query/query-builder';
+import type { QueryResult } from '../query/types';
 
 /**
  * Make module clients immune to which runtime answered.
@@ -27,9 +30,17 @@ import { QueryResult } from '../query/types';
  * every row a module reads is normalized to snake_case here — the shape the
  * module clients were written against, and the shape the SQL actually uses.
  *
- * Only module clients are wrapped. `client.query` stays exactly as the
- * platform returned it, because apps and the hono routers already depend on
- * that (the routers camelCase deliberately, on purpose, as their contract).
+ * Only module clients are wrapped by `snakeCaseQueryClient`.
+ * `client.query.from(...)` stays exactly as the platform returned it,
+ * because apps and the hono routers already depend on that (the routers
+ * camelCase deliberately, on purpose, as their contract).
+ *
+ * The HELPERS below reach further than the wrapper does. `client.raw()` and
+ * `client.search.unifiedSearch()` call `snakeRow`/`snakeRows` directly,
+ * because the gateway camelCases those two responses while it returns
+ * `.from(...)` rows verbatim — so the same row arrived in two different
+ * shapes depending only on which read path an app happened to use. The doc
+ * comments on those two methods carry the detail.
  */
 
 /** `expiresAt` → `expires_at`. Leaves an already-snake key alone. */
@@ -62,6 +73,37 @@ export function snakeRows<T extends Record<string, unknown>>(rows: T[]): T[] {
 
 /** The terminal methods that hand rows back to a caller. */
 const ROW_RETURNING = new Set(['rows', 'first', 'execute', 'run', 'exec', 'get', 'all', 'fetch', 'toArray', 'one', 'find', 'findFirst', 'single']);
+
+/**
+ * Terminals that hand rows back one at a time instead of in a promise.
+ *
+ * `stream()` returns an async iterator, so it never matched the promise
+ * branch below and escaped the wrapper entirely: the same wrapped builder
+ * gave snake_cased rows from `.rows()` and camelCased rows from `.stream()`
+ * — a split inside a single object whose whole purpose is not to have one.
+ * Found by paging a real table through both, not by reading this file.
+ */
+const ROW_STREAMING = new Set(['stream']);
+
+/** Normalize each row on its way out of an async iterator. */
+async function* normalizeStream(
+  source: AsyncIterable<unknown>,
+): AsyncIterableIterator<unknown> {
+  for await (const row of source) {
+    yield row && typeof row === 'object' && !Array.isArray(row)
+      ? snakeRow(row as Record<string, unknown>)
+      : row;
+  }
+}
+
+/** True for something that can be consumed with `for await`. */
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function'
+  );
+}
 
 /**
  * A QueryClient whose rows always arrive snake_cased.
@@ -115,6 +157,9 @@ function wrapBuilder<T extends Record<string, unknown>>(
 
         if (typeof prop === 'string' && ROW_RETURNING.has(prop) && isPromise(result)) {
           return result.then(normalizeResult);
+        }
+        if (typeof prop === 'string' && ROW_STREAMING.has(prop) && isAsyncIterable(result)) {
+          return normalizeStream(result);
         }
         return result;
       };

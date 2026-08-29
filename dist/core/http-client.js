@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HttpClient = exports.IDEMPOTENCY_HEADER = exports.REQUEST_ID_HEADER = void 0;
+exports.HttpClient = exports.isCancelledError = exports.CIRCUIT_COOL_OFF_MS = exports.CIRCUIT_FAILURE_THRESHOLD = exports.MAX_RETRY_WAIT_MS = exports.IDEMPOTENCY_HEADER = exports.REQUEST_ID_HEADER = void 0;
 const axios_1 = __importDefault(require("axios"));
 const constants_1 = require("../constants");
 const errors_1 = require("./errors");
@@ -12,6 +12,54 @@ const error_envelope_1 = require("./error-envelope");
 exports.REQUEST_ID_HEADER = 'x-request-id';
 /** Lets the platform collapse a retried write into one effect. */
 exports.IDEMPOTENCY_HEADER = 'idempotency-key';
+/**
+ * The longest a `Retry-After` will be honoured inside a single call. Past
+ * this the error is surfaced instead: a caller can queue the work, show a
+ * message or give up, and none of those are possible while the SDK is
+ * silently asleep holding the request open.
+ */
+exports.MAX_RETRY_WAIT_MS = 10000;
+/**
+ * How many consecutive unreachable attempts open the circuit.
+ *
+ * Five, because with the default two retries a single call can already
+ * contribute three failed dials: a threshold of five means no one unlucky
+ * call can open the circuit on its own — it takes a second call still
+ * failing — while an outage costs at most five hanging dials instead of
+ * every call in the app paying the full timeout budget.
+ */
+exports.CIRCUIT_FAILURE_THRESHOLD = 5;
+/**
+ * How long the circuit stays open before a single trial request is allowed
+ * through.
+ *
+ * Ten seconds, the same ceiling as MAX_RETRY_WAIT_MS: that constant already
+ * declares the longest this SDK is willing to make a caller wait without
+ * telling them anything, and failing fast for longer than that trades one
+ * kind of invisible wait for another. It is also roughly a gateway redeploy
+ * or cold start, so recovery is noticed on the order of a deploy rather
+ * than minutes after it.
+ */
+exports.CIRCUIT_COOL_OFF_MS = 10000;
+/**
+ * True for the error a cancelled request rejects with.
+ *
+ * Cancellation is usually the one failure a UI should say NOTHING about:
+ * the user navigated away, so a toast reading "request failed" is noise
+ * about something they did on purpose. This is the check that lets a catch
+ * block far from the AbortController tell that case apart.
+ *
+ * The error carries the `CANCELLED` code, and this predicate accepts EITHER
+ * that code or the `details.cancelled` marker. Both, because the marker also
+ * catches a cancellation raised through an AbortController handle this SDK
+ * was never given — and because an older build that predates the code still
+ * satisfies the predicate, so callers who followed this advice do not have
+ * to care which version they are on.
+ */
+const isCancelledError = (err) => err instanceof errors_1.XenitionError &&
+    (err.code === 'CANCELLED' ||
+        err.details?.cancelled === true);
+exports.isCancelledError = isCancelledError;
 /**
  * Move `idempotencyKey` out of the SDK's options and into the header the
  * platform reads, so nothing downstream has to know both spellings.
@@ -28,6 +76,81 @@ function withIdempotency(config) {
     };
 }
 /**
+ * Consecutive-failure circuit breaker, one per HttpClient.
+ *
+ * The state it tracks is deliberately small: a run of failures, and the
+ * moment the circuit opened. Anything richer (rolling windows, failure
+ * rates) needs a clock and a history to be worth having, and this runs in
+ * a Worker that may be torn down between two requests.
+ *
+ * "Failure" here means the gateway could not be reached or answered 5xx.
+ * A 4xx is not a failure of the gateway, it is an answer from it, so it
+ * resets the run — a live gateway is exactly what the counter is looking
+ * for evidence of.
+ */
+class CircuitBreaker {
+    constructor(failureThreshold, coolOffMs) {
+        this.failureThreshold = failureThreshold;
+        this.coolOffMs = coolOffMs;
+        this.consecutiveFailures = 0;
+        this.openedAt = null;
+        /**
+         * Set while the one half-open trial request is in flight, so a burst of
+         * concurrent calls does not all become trials the moment the cool-off
+         * expires — which is the stampede the breaker exists to prevent.
+         */
+        this.trialInFlight = false;
+    }
+    /** Decide, and claim the trial slot if this attempt gets it. */
+    admit() {
+        if (this.openedAt === null)
+            return 'closed';
+        if (Date.now() - this.openedAt < this.coolOffMs)
+            return 'blocked';
+        if (this.trialInFlight)
+            return 'blocked';
+        this.trialInFlight = true;
+        return 'trial';
+    }
+    /** True when the NEXT attempt would be refused — peeked, not claimed. */
+    isBlocking() {
+        if (this.openedAt === null)
+            return false;
+        return this.trialInFlight || Date.now() - this.openedAt < this.coolOffMs;
+    }
+    /** The gateway answered, with anything at all. It is alive. */
+    recordReachable() {
+        this.consecutiveFailures = 0;
+        this.openedAt = null;
+        this.trialInFlight = false;
+    }
+    /** No answer, or a 5xx. */
+    recordUnreachable() {
+        this.trialInFlight = false;
+        this.consecutiveFailures += 1;
+        // A failed trial restarts the cool-off rather than adding to it: the
+        // gateway is still down, and the next probe should be one window away
+        // from this one, not from the original outage.
+        if (this.openedAt !== null || this.consecutiveFailures >= this.failureThreshold) {
+            this.openedAt = Date.now();
+        }
+    }
+    /**
+     * The attempt was cancelled, so it proved nothing either way. The trial
+     * slot must still be handed back — a cancelled probe that kept the slot
+     * would leave the circuit blocked with nobody left to test recovery.
+     */
+    releaseTrial() {
+        this.trialInFlight = false;
+    }
+    /** Milliseconds until the next trial is allowed. Zero when closed. */
+    msUntilTrial() {
+        if (this.openedAt === null)
+            return 0;
+        return Math.max(0, this.coolOffMs - (Date.now() - this.openedAt));
+    }
+}
+/**
  * Thin axios wrapper used by every SDK module.
  *
  *   - Attaches `x-api-key` on every request (the key the client was
@@ -37,6 +160,9 @@ function withIdempotency(config) {
  *     on `success: false`).
  *   - Retries idempotent requests on transient failures (network /
  *     5xx) with capped exponential backoff.
+ *   - Optionally opens a circuit breaker after a run of unreachable
+ *     attempts, so an outage costs a handful of timeouts instead of one
+ *     per call.
  *
  * SDK modules never touch axios directly — they use `get/post/patch/del`
  * on this class so error + envelope handling stays in one place.
@@ -44,6 +170,7 @@ function withIdempotency(config) {
 class HttpClient {
     constructor(apiKey, options = {}) {
         this.retries = options.retries ?? 2;
+        this.breaker = this.buildBreaker(options.circuitBreaker);
         this.hooks = {
             onRequest: options.onRequest,
             onResponse: options.onResponse,
@@ -137,11 +264,25 @@ class HttpClient {
         const apiKey = this.axios.defaults.headers['x-api-key'];
         if (typeof apiKey === 'string')
             headers['x-api-key'] = apiKey;
-        const response = await fetchImpl(`${this.baseUrl}${url}`, {
-            method: 'POST',
-            headers,
-            body: body === undefined ? undefined : JSON.stringify(body),
-        });
+        // The signal is forwarded rather than ignored because a stream is the
+        // call a caller is MOST likely to abandon — a user who stops a
+        // half-generated answer — and accepting `signal` on RequestOptions and
+        // then dropping it here would hold the model's output open with nobody
+        // reading it.
+        let response;
+        try {
+            response = await fetchImpl(`${this.baseUrl}${url}`, {
+                method: 'POST',
+                headers,
+                body: body === undefined ? undefined : JSON.stringify(body),
+                signal: config.signal,
+            });
+        }
+        catch (err) {
+            if (this.wasCancelled(config.signal, err))
+                throw this.cancellationError('POST', url);
+            throw this.normalizeError(err);
+        }
         if (!response.ok) {
             const detail = await response.text().catch(() => '');
             // The body is usually JSON even on the streaming route, so prefer the
@@ -177,11 +318,40 @@ class HttpClient {
         const retriable = method === 'GET' || typeof idempotencyKey === 'string';
         const maxAttempts = retriable ? 1 + this.retries : 1;
         let lastErr;
+        // A signal that is already aborted when the call is made — the common
+        // shape of "the component unmounted before the effect ran" — must not
+        // reach the network at all. Axios would dial and then cancel, which
+        // costs a connection and, for a write, may still apply the change.
+        if (config.signal?.aborted)
+            throw this.cancellationError(method, url);
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const admission = this.breaker?.admit() ?? 'closed';
+            if (admission === 'blocked') {
+                // Deliberately no onRequest event: nothing was requested. The
+                // onError event still fires, because a fail-fast IS the outage as
+                // far as the caller's logs are concerned.
+                const openErr = this.circuitOpenError(method, url);
+                this.observe('onError', {
+                    method,
+                    url,
+                    requestId,
+                    attempt,
+                    durationMs: 0,
+                    error: openErr,
+                    willRetry: false,
+                });
+                throw openErr;
+            }
             const startedAt = Date.now();
+            let answered = false;
             this.observe('onRequest', { method, url, requestId, attempt });
             try {
                 const response = await this.axios.request(merged);
+                // Recorded before the envelope is unwrapped: `{success: false}`
+                // arrives over a working connection from a gateway that is plainly
+                // up, and it must not be mistaken for the gateway being down.
+                answered = true;
+                this.breaker?.recordReachable();
                 this.observe('onResponse', {
                     method,
                     url,
@@ -194,8 +364,30 @@ class HttpClient {
             }
             catch (err) {
                 lastErr = err;
-                const xenitionErr = this.normalizeError(err);
-                const willRetry = this.shouldRetry(xenitionErr) && attempt < maxAttempts - 1;
+                const cancelled = this.wasCancelled(config.signal, err);
+                const xenitionErr = cancelled
+                    ? this.cancellationError(method, url)
+                    : this.normalizeError(err);
+                if (!answered)
+                    this.recordAttemptOutcome(cancelled, xenitionErr);
+                // A 429 says when it will serve again. If that is further off than we
+                // are willing to hold a request open, fail now and let the caller
+                // decide — sleeping for two minutes inside one call is worse than an
+                // error, because the caller cannot see it happening.
+                const retryAfterMs = this.retryAfterMs(err);
+                const waitsTooLong = retryAfterMs !== null && retryAfterMs > exports.MAX_RETRY_WAIT_MS;
+                const willRetry = 
+                // Cancellation first, and unconditionally: the caller has said they
+                // no longer want the result, so dialling again on their behalf is
+                // the one thing they explicitly asked us not to do.
+                !cancelled &&
+                    this.shouldRetry(xenitionErr) &&
+                    attempt < maxAttempts - 1 &&
+                    !waitsTooLong &&
+                    // If the failure just recorded opened the circuit, the remaining
+                    // attempts of THIS call would only spend the caller's time dialling
+                    // a gateway we have already concluded is down.
+                    !(this.breaker?.isBlocking() ?? false);
                 this.observe('onError', {
                     method,
                     url,
@@ -207,7 +399,7 @@ class HttpClient {
                 });
                 if (!willRetry)
                     throw xenitionErr;
-                await this.sleep(Math.min(100 * Math.pow(2, attempt), 2000));
+                await this.sleep(retryAfterMs ?? this.jitteredBackoffMs(attempt));
             }
         }
         // Unreachable; TypeScript wants it.
@@ -228,6 +420,76 @@ class HttpClient {
         catch {
             /* ignored on purpose */
         }
+    }
+    buildBreaker(option) {
+        if (!option)
+            return null;
+        const tuning = option === true ? {} : option;
+        return new CircuitBreaker(tuning.failureThreshold ?? exports.CIRCUIT_FAILURE_THRESHOLD, tuning.coolOffMs ?? exports.CIRCUIT_COOL_OFF_MS);
+    }
+    /**
+     * Teach the breaker what this attempt proved about the gateway.
+     *
+     * Only two things count as the gateway being down: nothing came back at
+     * all (`status === null` — a socket error, a DNS failure, our own
+     * timeout), or it came back a 5xx. Every other status is an answer, and
+     * an answer means it is up — including a 429, where it is not only up
+     * but actively telling us so.
+     */
+    recordAttemptOutcome(cancelled, err) {
+        if (!this.breaker)
+            return;
+        if (cancelled) {
+            this.breaker.releaseTrial();
+            return;
+        }
+        if (err.status === null || err.status >= 500)
+            this.breaker.recordUnreachable();
+        else
+            this.breaker.recordReachable();
+    }
+    /**
+     * Whether this failure is the caller's own abort rather than a fault.
+     *
+     * The signal is checked first because it is the one source that cannot
+     * lie: whatever shape the runtime's rejection took — axios's
+     * `CanceledError`, a DOM `AbortError`, a bare `ERR_CANCELED` — if the
+     * caller's signal is aborted then the request ended because they said so.
+     * The name/code checks catch a signal aborted through a different handle
+     * than the one we were given.
+     */
+    wasCancelled(signal, err) {
+        if (signal?.aborted)
+            return true;
+        const { name, code } = (err ?? {});
+        return code === 'ERR_CANCELED' || name === 'CanceledError' || name === 'AbortError';
+    }
+    /**
+     * `UNKNOWN` is not a great fit and is chosen knowingly: no member of
+     * `XenitionErrorCode` means "the caller stopped this", and that union
+     * lives in errors.ts. Rather than borrow `TIMEOUT` or `NETWORK_ERROR` —
+     * both of which would tell an on-call engineer the network misbehaved
+     * when nothing did, and both of which a caller's own retry wrapper would
+     * happily retry — the honest fallback carries a marker in `details` that
+     * `isCancelledError` reads.
+     */
+    cancellationError(method, url) {
+        // `details.cancelled` stays alongside the code. `isCancelledError` reads
+        // the marker, so a cancellation this SDK did not mint — one raised
+        // through an AbortController handle we were never given — is still
+        // recognised by the same predicate callers already use.
+        return new errors_1.XenitionError('CANCELLED', `${method} ${url} was cancelled by the caller.`, { details: { cancelled: true } });
+    }
+    /**
+     * `NETWORK_ERROR` on purpose: this is the error the caller would have got
+     * from the dial we skipped, so an app that already handles an unreachable
+     * gateway handles this too, and nobody has to learn a new code to cope
+     * with an outage being detected faster.
+     */
+    circuitOpenError(method, url) {
+        const waitMs = this.breaker?.msUntilTrial() ?? 0;
+        return new errors_1.XenitionError('NETWORK_ERROR', `${method} ${url} failed fast: the gateway has been failing, so the SDK ` +
+            `stopped dialling it. It will try again in ${Math.ceil(waitMs / 1000)}s.`);
     }
     newRequestId() {
         const webCrypto = globalThis.crypto;
@@ -303,10 +565,49 @@ class HttpClient {
             return 'SERVER_ERROR';
         return 'UNKNOWN';
     }
+    /**
+     * `RATE_LIMITED` is here on purpose. A 429 is the most retriable failure
+     * there is — the server is not broken, it is asking us to come back — and
+     * it is the one an app hits in normal operation rather than in an outage.
+     * Retrying it is still gated on the request being idempotent, so a
+     * non-keyed POST throttled at the door is surfaced, not replayed.
+     */
     shouldRetry(err) {
         return (err.code === 'NETWORK_ERROR' ||
             err.code === 'TIMEOUT' ||
+            err.code === 'RATE_LIMITED' ||
             err.code === 'SERVER_ERROR');
+    }
+    /**
+     * `Retry-After`, in milliseconds, or null when the response did not carry
+     * one. Both forms of the header are legal: delay-seconds, and an HTTP date.
+     */
+    retryAfterMs(err) {
+        const headers = err?.response
+            ?.headers;
+        const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
+        if (raw === undefined || raw === null)
+            return null;
+        const seconds = Number(raw);
+        if (Number.isFinite(seconds))
+            return Math.max(0, seconds * 1000);
+        const when = Date.parse(String(raw));
+        if (Number.isNaN(when))
+            return null;
+        return Math.max(0, when - Date.now());
+    }
+    /**
+     * Exponential backoff with **full jitter** — a random wait between zero and
+     * the curve, not the curve itself.
+     *
+     * Without jitter, every client that failed in the same second retries in
+     * the same second, and the blip they were all waiting out becomes a
+     * thundering herd the moment the server comes back. Spreading the retries
+     * is what lets it recover.
+     */
+    jitteredBackoffMs(attempt) {
+        const ceiling = Math.min(100 * Math.pow(2, attempt), 2000);
+        return Math.round(Math.random() * ceiling);
     }
     sleep(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
