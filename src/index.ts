@@ -507,7 +507,19 @@ export {
 export type { XenitionErrorCode } from './core/errors';
 
 // HTTP layer (observability hooks, idempotency, request correlation)
-export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';
+export {
+  IDEMPOTENCY_HEADER,
+  REQUEST_ID_HEADER,
+  // Without this a caller cannot tell "the user navigated away" from "the
+  // request failed", which is the one failure a UI should say nothing about.
+  // The predicate is what the doc comment tells people to depend on, and it
+  // was unreachable: `exports` publishes no subpath that reaches this file.
+  isCancelledError,
+  MAX_RETRY_WAIT_MS,
+  CIRCUIT_FAILURE_THRESHOLD,
+  CIRCUIT_COOL_OFF_MS,
+} from './core/http-client';
+export type { CircuitBreakerOptions } from './core/http-client';
 export type {
   HttpClientOptions,
   RequestErrorEvent,

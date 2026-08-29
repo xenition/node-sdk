@@ -29,8 +29,42 @@ export const INTROSPECTION_SQL = `SELECT table_name,
  WHERE table_schema = $1
  ORDER BY table_name, ordinal_position`;
 
-/** The Postgres schema read when the caller names none. */
+/**
+ * The schema read when the caller names none.
+ *
+ * NOT `public`. An app's tables live in a per-app schema — `app_app_today`,
+ * say — and `current_schema()` is what the service key is already pointed
+ * at. Defaulting to `public` produced the worst possible outcome: 133
+ * platform control-plane tables, a clean-compiling `Database` type, and not
+ * one of the app's own tables in it. Nothing errored, because `public`
+ * genuinely exists and genuinely has tables — it just is not yours.
+ *
+ * Resolved per connection rather than hardcoded, so a key pointed somewhere
+ * else keeps working.
+ */
+export const CURRENT_SCHEMA_SQL = 'SELECT current_schema() AS schema';
+
+/**
+ * Kept for callers that want the literal, and for the case where
+ * `current_schema()` cannot be read.
+ */
 export const DEFAULT_SCHEMA = 'public';
+
+/** Ask the connection which schema it is pointed at. */
+export async function resolveDefaultSchema(client: RawCapableClient): Promise<string> {
+  try {
+    const result = await client.raw<Record<string, unknown>>(CURRENT_SCHEMA_SQL, []);
+    // Same three envelope shapes `rowsOf` already tolerates — a probe that
+    // understood fewer shapes than the real query would fail on exactly the
+    // gateways this is meant to work against.
+    const found = readRowField(rowsOf(result)[0] ?? {}, 'schema');
+    return typeof found === 'string' && found.trim() !== '' ? found : DEFAULT_SCHEMA;
+  } catch {
+    // A gateway that refuses the probe should not stop a caller who named
+    // the schema themselves; fall back rather than fail the whole run.
+    return DEFAULT_SCHEMA;
+  }
+}
 
 export interface IntrospectOptions {
   /** Postgres schema to read. Default `public`. */
@@ -61,7 +95,7 @@ export async function introspectSchema(
       `${context}: pass a client with a raw() method (XenitionClient, or client.query).`,
     );
   }
-  const schema = options.schema ?? DEFAULT_SCHEMA;
+  const schema = options.schema ?? (await resolveDefaultSchema(client));
   if (typeof schema !== 'string' || schema.trim() === '') {
     throw new XenitionError('VALIDATION_ERROR', `${context}: "schema" must be a non-empty string.`);
   }

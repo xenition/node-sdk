@@ -15,8 +15,27 @@ import { IntrospectedSchema, RawCapableClient } from './types';
  * concatenates user input into SQL is a generator that can drop a table.
  */
 export declare const INTROSPECTION_SQL = "SELECT table_name,\n       column_name,\n       ordinal_position,\n       data_type,\n       udt_name,\n       is_nullable,\n       column_default,\n       is_identity,\n       is_generated\n  FROM information_schema.columns\n WHERE table_schema = $1\n ORDER BY table_name, ordinal_position";
-/** The Postgres schema read when the caller names none. */
+/**
+ * The schema read when the caller names none.
+ *
+ * NOT `public`. An app's tables live in a per-app schema — `app_app_today`,
+ * say — and `current_schema()` is what the service key is already pointed
+ * at. Defaulting to `public` produced the worst possible outcome: 133
+ * platform control-plane tables, a clean-compiling `Database` type, and not
+ * one of the app's own tables in it. Nothing errored, because `public`
+ * genuinely exists and genuinely has tables — it just is not yours.
+ *
+ * Resolved per connection rather than hardcoded, so a key pointed somewhere
+ * else keeps working.
+ */
+export declare const CURRENT_SCHEMA_SQL = "SELECT current_schema() AS schema";
+/**
+ * Kept for callers that want the literal, and for the case where
+ * `current_schema()` cannot be read.
+ */
 export declare const DEFAULT_SCHEMA = "public";
+/** Ask the connection which schema it is pointed at. */
+export declare function resolveDefaultSchema(client: RawCapableClient): Promise<string>;
 export interface IntrospectOptions {
     /** Postgres schema to read. Default `public`. */
     schema?: string;

@@ -70,11 +70,50 @@ describe('the introspection query', () => {
     expect(calls[0]?.sql).not.toContain('DROP TABLE');
   });
 
-  it('reads the public schema when the caller names none', async () => {
-    const { client, calls } = fakeClient([snakeRow()]);
+  it('asks the connection which schema it is on when the caller names none', async () => {
+    // Defaulting to `public` generated 133 platform control-plane tables and
+    // not one of the app's own, silently — `public` exists and has tables,
+    // it just is not yours. An app's tables live in a per-app schema, and
+    // the key is already pointed at it.
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const client: RawCapableClient = {
+      async raw<T>(sql: string, params: unknown[] = []): Promise<RawResult<T>> {
+        calls.push({ sql, params });
+        const rows = sql.includes('current_schema')
+          ? [{ schema: 'app_app_today' }]
+          : [snakeRow()];
+        return { data: rows as unknown as T[] };
+      },
+    };
+
     const schema = await introspectSchema(client);
-    expect(calls[0]?.params).toEqual([DEFAULT_SCHEMA]);
-    expect(schema.schema).toBe('public');
+
+    expect(calls[0]?.sql).toContain('current_schema');
+    expect(calls[1]?.params).toEqual(['app_app_today']);
+    expect(schema.schema).toBe('app_app_today');
+  });
+
+  it('does not probe at all when the caller named a schema', async () => {
+    const { client, calls } = fakeClient([snakeRow()]);
+    await introspectSchema(client, { schema: 'shop' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.params).toEqual(['shop']);
+  });
+
+  it('falls back to public when the connection will not say', async () => {
+    // A gateway that refuses the probe should not stop a run; the caller can
+    // still name the schema themselves.
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const client: RawCapableClient = {
+      async raw<T>(sql: string, params: unknown[] = []): Promise<RawResult<T>> {
+        calls.push({ sql, params });
+        if (sql.includes('current_schema')) throw new Error('refused');
+        return { data: [snakeRow()] as unknown as T[] };
+      },
+    };
+
+    const schema = await introspectSchema(client);
+    expect(schema.schema).toBe(DEFAULT_SCHEMA);
   });
 });
 

@@ -68,7 +68,8 @@ export type { QuotaPeriod, QuotaState, ConsumeOptions as ConsumeQuotaOptions } f
 export { snakeKey, snakeRow, snakeRows, snakeCaseQueryClient } from './modules/row-casing';
 export { XenitionError, isAuthError, isNotFound, isRateLimited, isXenitionErrorCode, XENITION_ERROR_CODES, } from './core/errors';
 export type { XenitionErrorCode } from './core/errors';
-export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER } from './core/http-client';
+export { IDEMPOTENCY_HEADER, REQUEST_ID_HEADER, isCancelledError, MAX_RETRY_WAIT_MS, CIRCUIT_FAILURE_THRESHOLD, CIRCUIT_COOL_OFF_MS, } from './core/http-client';
+export type { CircuitBreakerOptions } from './core/http-client';
 export type { HttpClientOptions, RequestErrorEvent, RequestEvent, RequestOptions, ResponseEvent, } from './core/http-client';
 export { basename, buildMultipart, byteLengthOf, toBlob } from './core/multipart';
 export type { UploadBody } from './core/multipart';

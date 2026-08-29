@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_SCHEMA = exports.INTROSPECTION_SQL = void 0;
+exports.DEFAULT_SCHEMA = exports.CURRENT_SCHEMA_SQL = exports.INTROSPECTION_SQL = void 0;
+exports.resolveDefaultSchema = resolveDefaultSchema;
 exports.introspectSchema = introspectSchema;
 exports.readRowField = readRowField;
 exports.toCamelCase = toCamelCase;
@@ -32,8 +33,41 @@ exports.INTROSPECTION_SQL = `SELECT table_name,
   FROM information_schema.columns
  WHERE table_schema = $1
  ORDER BY table_name, ordinal_position`;
-/** The Postgres schema read when the caller names none. */
+/**
+ * The schema read when the caller names none.
+ *
+ * NOT `public`. An app's tables live in a per-app schema — `app_app_today`,
+ * say — and `current_schema()` is what the service key is already pointed
+ * at. Defaulting to `public` produced the worst possible outcome: 133
+ * platform control-plane tables, a clean-compiling `Database` type, and not
+ * one of the app's own tables in it. Nothing errored, because `public`
+ * genuinely exists and genuinely has tables — it just is not yours.
+ *
+ * Resolved per connection rather than hardcoded, so a key pointed somewhere
+ * else keeps working.
+ */
+exports.CURRENT_SCHEMA_SQL = 'SELECT current_schema() AS schema';
+/**
+ * Kept for callers that want the literal, and for the case where
+ * `current_schema()` cannot be read.
+ */
 exports.DEFAULT_SCHEMA = 'public';
+/** Ask the connection which schema it is pointed at. */
+async function resolveDefaultSchema(client) {
+    try {
+        const result = await client.raw(exports.CURRENT_SCHEMA_SQL, []);
+        // Same three envelope shapes `rowsOf` already tolerates — a probe that
+        // understood fewer shapes than the real query would fail on exactly the
+        // gateways this is meant to work against.
+        const found = readRowField(rowsOf(result)[0] ?? {}, 'schema');
+        return typeof found === 'string' && found.trim() !== '' ? found : exports.DEFAULT_SCHEMA;
+    }
+    catch {
+        // A gateway that refuses the probe should not stop a caller who named
+        // the schema themselves; fall back rather than fail the whole run.
+        return exports.DEFAULT_SCHEMA;
+    }
+}
 /**
  * Read every table and column in one schema through an injected
  * raw-capable client.
@@ -52,7 +86,7 @@ async function introspectSchema(client, options = {}) {
     if (!client || typeof client.raw !== 'function') {
         throw new errors_1.XenitionError('VALIDATION_ERROR', `${context}: pass a client with a raw() method (XenitionClient, or client.query).`);
     }
-    const schema = options.schema ?? exports.DEFAULT_SCHEMA;
+    const schema = options.schema ?? (await resolveDefaultSchema(client));
     if (typeof schema !== 'string' || schema.trim() === '') {
         throw new errors_1.XenitionError('VALIDATION_ERROR', `${context}: "schema" must be a non-empty string.`);
     }
