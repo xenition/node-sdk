@@ -35,6 +35,9 @@ class StorageClient {
      *
      * For anything large, prefer `createUploadUrl()`: it sends the bytes
      * straight to storage instead of through the app's worker.
+     *
+     * Pass `onProgress` to drive a progress bar — read its doc first, it does
+     * not fire in every runtime.
      */
     async upload(body, path, options = {}) {
         if (body === undefined || body === null) {
@@ -50,7 +53,53 @@ class StorageClient {
             bucket: options.bucket || DEFAULT_BUCKET,
             metadata: options.metadata ? JSON.stringify(options.metadata) : undefined,
         });
-        return this.http.postForm(constants_1.API_ENDPOINTS.STORAGE.UPLOAD, form);
+        return this.http.postForm(constants_1.API_ENDPOINTS.STORAGE.UPLOAD, form, this.uploadConfig(body, options));
+    }
+    /**
+     * The per-request config for one upload: cancellation, and a progress
+     * adapter attached only when someone asked for progress — handing axios a
+     * callback nobody reads makes it compute progress on every chunk for
+     * nothing.
+     */
+    uploadConfig(body, options) {
+        const { onProgress, signal } = options;
+        if (!onProgress && !signal)
+            return undefined;
+        // Measured once, not per event: `byteLengthOf` walks the body, and the
+        // answer cannot change while the upload is in flight.
+        const knownLength = onProgress ? (0, multipart_1.byteLengthOf)(body) : null;
+        return {
+            signal,
+            onUploadProgress: onProgress
+                ? (event) => this.report(onProgress, event, knownLength)
+                : undefined,
+        };
+    }
+    /**
+     * Normalize one axios progress event into `UploadProgress`.
+     *
+     * `event.total` is missing whenever the transport could not work out a
+     * content length, so we fall back to the size of the bytes we were handed
+     * — the one number we know without asking anyone. That total omits the
+     * multipart framing (a few hundred bytes of boundaries and headers), so
+     * `loaded` can overshoot it near the end; the fraction is clamped rather
+     * than allowed to report 103% at a progress bar.
+     */
+    report(onProgress, event, knownLength) {
+        const total = typeof event.total === 'number' && event.total > 0 ? event.total : knownLength;
+        const loaded = event.loaded ?? 0;
+        try {
+            onProgress({
+                loaded,
+                total,
+                fraction: total && total > 0 ? Math.min(1, loaded / total) : null,
+            });
+        }
+        catch {
+            // Advisory, like the observability hooks on HttpClient: drawing a
+            // progress bar must never become a way to fail an upload that is
+            // otherwise going through fine.
+        }
     }
     /**
      * A presigned PUT the CLIENT uploads to directly.

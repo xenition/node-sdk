@@ -93,12 +93,35 @@ export class RealtimeClient {
         transports: ['websocket'],
         reconnection: true,
       });
+      // First connect vs every one after it. socket.io reconnects on its own
+      // after a network blip, but the server holds subscriptions per
+      // CONNECTION — so a reconnected socket is subscribed to nothing. Without
+      // the replay below, a phone that loses signal for two seconds comes back
+      // with a live socket, a full handler map, and no events ever again.
+      // Nothing throws and nothing logs; the screen just stops updating.
+      let connectedOnce = false;
       socket.on('connect', () => {
         this.socket = socket;
-        resolve(socket);
+        if (!connectedOnce) {
+          connectedOnce = true;
+          // The initial subscribe is `ensureSubscribed`'s job — it emits per
+          // channel as each caller subscribes. Replaying here as well would
+          // double-subscribe every channel on the very first connect.
+          resolve(socket);
+          return;
+        }
+        for (const channel of this.handlers.keys()) {
+          socket.emit('subscribe', { channel });
+        }
       });
       socket.on('connect_error', (err) => {
+        // Once we have been connected, this is socket.io retrying in the
+        // background and it will recover on its own. Only the never-connected
+        // case is a failure to report — and that socket has to be closed, or
+        // it reconnects forever behind a promise nobody holds.
+        if (connectedOnce) return;
         this.connectPromise = null;
+        socket.disconnect();
         reject(err);
       });
       socket.on('message', (msg: RealtimeMessage) => {

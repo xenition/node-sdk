@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CatalogClient = exports.BOOKING_TABLES = exports.BOOKING_MIGRATIONS = exports.bookingModule = exports.BookingClient = exports.MEDIA_TABLES = exports.MEDIA_MIGRATIONS = exports.mediaModule = exports.MediaClient = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.parseSseStream = exports.parseJsonReply = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
-exports.basename = exports.REQUEST_ID_HEADER = exports.IDEMPOTENCY_HEADER = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.snakeCaseQueryClient = exports.snakeRows = exports.snakeRow = exports.snakeKey = exports.periodStartFor = exports.periodEndFor = exports.QUOTAS_TABLE = exports.QUOTAS_MIGRATIONS = exports.quotasModule = exports.QuotasClient = exports.NOTIFICATIONS_TABLES = exports.NOTIFICATIONS_MIGRATIONS = exports.notificationsModule = exports.NotificationsClient = exports.JOBS_TABLE = exports.JOBS_MIGRATIONS = exports.jobsModule = exports.JobsClient = exports.handleGoogleNotification = exports.handleAppleNotification = exports.GoogleStore = exports.AppleStore = exports.BILLING_TABLES = exports.BILLING_MIGRATIONS = exports.billingModule = exports.BillingClient = exports.ORDERS_TABLES = exports.ORDERS_MIGRATIONS = exports.ordersModule = exports.OrdersClient = exports.CART_TABLES = exports.CART_MIGRATIONS = exports.cartModule = exports.CartClient = exports.INVENTORY_TABLES = exports.INVENTORY_MIGRATIONS = exports.inventoryModule = exports.InventoryClient = exports.CATALOG_TABLES = exports.CATALOG_MIGRATIONS = exports.catalogModule = void 0;
-exports.XENITION_BASE_URL = exports.toBlob = exports.byteLengthOf = exports.buildMultipart = void 0;
+exports.CMS_TABLES = exports.CMS_MIGRATIONS = exports.cmsModule = exports.CmsClient = exports.ModulesClient = exports.defineModule = exports.USAGE = exports.DEFAULT_OUTPUT_PATH = exports.CLI_NAME = exports.JSON_TYPE_DECLARATION = exports.JSON_TYPE_NAME = exports.PG_TYPE_MAP = exports.DEFAULT_SCHEMA = exports.INTROSPECTION_SQL = exports.parseArgs = exports.runCodegenCli = exports.readRowField = exports.quoteIdentifier = exports.mapPgType = exports.emitDatabaseTypes = exports.introspectSchema = exports.MIN_USABLE_LIFETIME_MS = exports.MIN_REFRESH_DELAY_MS = exports.DEFAULT_REFRESH_MARGIN_MS = exports.SessionManager = exports.DEFAULT_SESSION_KEY = exports.isStoredSession = exports.toExpiryMs = exports.toStoredSession = exports.createKeyValueSessionStore = exports.MemorySessionStore = exports.MIGRATIONS_LEDGER_TABLE = exports.MigrationsClient = exports.RealtimeClient = exports.VideoConferencingClient = exports.PaymentClient = exports.SearchClient = exports.VectorClient = exports.ChatbotClient = exports.parseSseStream = exports.parseJsonReply = exports.AiKeysClient = exports.AiClient = exports.PushClient = exports.EmailClient = exports.StorageClient = exports.QueryClient = exports.QueryBuilder = exports.AuthClient = exports.XenitionClient = void 0;
+exports.jobsModule = exports.JobsClient = exports.handleGoogleNotification = exports.handleAppleNotification = exports.GoogleStore = exports.AppleStore = exports.BILLING_TABLES = exports.BILLING_MIGRATIONS = exports.billingModule = exports.BillingClient = exports.ORDERS_TABLES = exports.ORDERS_MIGRATIONS = exports.ordersModule = exports.OrdersClient = exports.CART_TABLES = exports.CART_MIGRATIONS = exports.cartModule = exports.CartClient = exports.INVENTORY_TABLES = exports.INVENTORY_MIGRATIONS = exports.inventoryModule = exports.InventoryClient = exports.CATALOG_TABLES = exports.CATALOG_MIGRATIONS = exports.catalogModule = exports.CatalogClient = exports.BOOKING_TABLES = exports.BOOKING_MIGRATIONS = exports.bookingModule = exports.BookingClient = exports.MEDIA_TABLES = exports.MEDIA_MIGRATIONS = exports.mediaModule = exports.MediaClient = exports.EVENTS_TABLES = exports.EVENTS_MIGRATIONS = exports.eventsModule = exports.EventsClient = exports.LISTINGS_TABLE = exports.LISTINGS_MIGRATIONS = exports.listingsModule = exports.ListingsClient = exports.REVIEWS_TABLE = exports.REVIEWS_MIGRATIONS = exports.reviewsModule = exports.ReviewsClient = exports.FORMS_TABLES = exports.FORMS_MIGRATIONS = exports.formsModule = exports.FormsClient = void 0;
+exports.XENITION_BASE_URL = exports.toBlob = exports.byteLengthOf = exports.buildMultipart = exports.basename = exports.REQUEST_ID_HEADER = exports.IDEMPOTENCY_HEADER = exports.XENITION_ERROR_CODES = exports.isXenitionErrorCode = exports.isRateLimited = exports.isNotFound = exports.isAuthError = exports.XenitionError = exports.snakeCaseQueryClient = exports.snakeRows = exports.snakeRow = exports.snakeKey = exports.periodStartFor = exports.periodEndFor = exports.QUOTAS_TABLE = exports.QUOTAS_MIGRATIONS = exports.quotasModule = exports.QuotasClient = exports.NOTIFICATIONS_TABLES = exports.NOTIFICATIONS_MIGRATIONS = exports.notificationsModule = exports.NotificationsClient = exports.JOBS_TABLE = exports.JOBS_MIGRATIONS = void 0;
 var xenition_client_1 = require("./xenition-client");
 Object.defineProperty(exports, "XenitionClient", { enumerable: true, get: function () { return xenition_client_1.XenitionClient; } });
 // Auth module
@@ -49,6 +49,41 @@ Object.defineProperty(exports, "RealtimeClient", { enumerable: true, get: functi
 var migrations_1 = require("./migrations");
 Object.defineProperty(exports, "MigrationsClient", { enumerable: true, get: function () { return migrations_1.MigrationsClient; } });
 Object.defineProperty(exports, "MIGRATIONS_LEDGER_TABLE", { enumerable: true, get: function () { return migrations_1.MIGRATIONS_LEDGER_TABLE; } });
+// Session lifecycle. The store is an interface with an in-memory default on
+// purpose: the caller supplies the platform binding (AsyncStorage,
+// expo-secure-store, localStorage), so no React Native or browser import
+// enters an SDK that also has to run in a Worker.
+var session_store_1 = require("./auth/session-store");
+Object.defineProperty(exports, "MemorySessionStore", { enumerable: true, get: function () { return session_store_1.MemorySessionStore; } });
+Object.defineProperty(exports, "createKeyValueSessionStore", { enumerable: true, get: function () { return session_store_1.createKeyValueSessionStore; } });
+Object.defineProperty(exports, "toStoredSession", { enumerable: true, get: function () { return session_store_1.toStoredSession; } });
+Object.defineProperty(exports, "toExpiryMs", { enumerable: true, get: function () { return session_store_1.toExpiryMs; } });
+Object.defineProperty(exports, "isStoredSession", { enumerable: true, get: function () { return session_store_1.isStoredSession; } });
+Object.defineProperty(exports, "DEFAULT_SESSION_KEY", { enumerable: true, get: function () { return session_store_1.DEFAULT_SESSION_KEY; } });
+var session_manager_1 = require("./auth/session-manager");
+Object.defineProperty(exports, "SessionManager", { enumerable: true, get: function () { return session_manager_1.SessionManager; } });
+Object.defineProperty(exports, "DEFAULT_REFRESH_MARGIN_MS", { enumerable: true, get: function () { return session_manager_1.DEFAULT_REFRESH_MARGIN_MS; } });
+Object.defineProperty(exports, "MIN_REFRESH_DELAY_MS", { enumerable: true, get: function () { return session_manager_1.MIN_REFRESH_DELAY_MS; } });
+Object.defineProperty(exports, "MIN_USABLE_LIFETIME_MS", { enumerable: true, get: function () { return session_manager_1.MIN_USABLE_LIFETIME_MS; } });
+// Schema codegen. Imported for its own sake by tooling only — `cli.ts`
+// reaches XenitionClient and fs through a lazy require, so pulling this in
+// costs an app neither axios nor a Node builtin.
+var codegen_1 = require("./codegen");
+Object.defineProperty(exports, "introspectSchema", { enumerable: true, get: function () { return codegen_1.introspectSchema; } });
+Object.defineProperty(exports, "emitDatabaseTypes", { enumerable: true, get: function () { return codegen_1.emitDatabaseTypes; } });
+Object.defineProperty(exports, "mapPgType", { enumerable: true, get: function () { return codegen_1.mapPgType; } });
+Object.defineProperty(exports, "quoteIdentifier", { enumerable: true, get: function () { return codegen_1.quoteIdentifier; } });
+Object.defineProperty(exports, "readRowField", { enumerable: true, get: function () { return codegen_1.readRowField; } });
+Object.defineProperty(exports, "runCodegenCli", { enumerable: true, get: function () { return codegen_1.runCodegenCli; } });
+Object.defineProperty(exports, "parseArgs", { enumerable: true, get: function () { return codegen_1.parseArgs; } });
+Object.defineProperty(exports, "INTROSPECTION_SQL", { enumerable: true, get: function () { return codegen_1.INTROSPECTION_SQL; } });
+Object.defineProperty(exports, "DEFAULT_SCHEMA", { enumerable: true, get: function () { return codegen_1.DEFAULT_SCHEMA; } });
+Object.defineProperty(exports, "PG_TYPE_MAP", { enumerable: true, get: function () { return codegen_1.PG_TYPE_MAP; } });
+Object.defineProperty(exports, "JSON_TYPE_NAME", { enumerable: true, get: function () { return codegen_1.JSON_TYPE_NAME; } });
+Object.defineProperty(exports, "JSON_TYPE_DECLARATION", { enumerable: true, get: function () { return codegen_1.JSON_TYPE_DECLARATION; } });
+Object.defineProperty(exports, "CLI_NAME", { enumerable: true, get: function () { return codegen_1.CLI_NAME; } });
+Object.defineProperty(exports, "DEFAULT_OUTPUT_PATH", { enumerable: true, get: function () { return codegen_1.DEFAULT_OUTPUT_PATH; } });
+Object.defineProperty(exports, "USAGE", { enumerable: true, get: function () { return codegen_1.USAGE; } });
 // Module framework (content modules v0)
 var modules_1 = require("./modules");
 Object.defineProperty(exports, "defineModule", { enumerable: true, get: function () { return modules_1.defineModule; } });

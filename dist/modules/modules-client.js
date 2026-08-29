@@ -6,6 +6,7 @@ const query_client_1 = require("../query/query-client");
 const row_casing_1 = require("./row-casing");
 const push_client_1 = require("../push/push-client");
 const email_client_1 = require("../email/email-client");
+const batch_1 = require("./batch");
 const cms_1 = require("./cms");
 const forms_1 = require("./forms");
 const reviews_1 = require("./reviews");
@@ -71,6 +72,36 @@ class ModulesClient {
             push: new push_client_1.PushClient(http),
             email: new email_client_1.EmailClient(http),
         };
+    }
+    /**
+     * Opt this client's modules into per-tick query batching.
+     *
+     * Off unless you call this. With it on, module lookups written against
+     * `loadOneBy` coalesce into one `whereIn` per table+column per tick, so a
+     * list view that resolves 50 authors makes 1 request instead of 50.
+     * Everything else — filters, ordering, writes, raw SQL — is untouched.
+     *
+     *   client.modules.enableBatching();
+     *   await client.modules.enable('cms');
+     *
+     * Must be called BEFORE the first module accessor, and says so rather
+     * than half-applying: a module client captures the context at
+     * construction, so flipping the switch afterwards would batch the
+     * modules touched later and leave the ones already built unbatched —
+     * a difference nobody would think to look for while debugging.
+     *
+     * Safe to call twice; the second call is a no-op.
+     */
+    enableBatching() {
+        if (this.ctx.batch)
+            return;
+        if (this.instances.size > 0) {
+            throw new Error('ModulesClient.enableBatching(): module clients have already been built ' +
+                `(${[...this.instances.keys()].join(', ')}) and captured the unbatched context. ` +
+                'Call enableBatching() before the first `client.modules.<name>` access — ' +
+                'typically right after constructing the client, before enable()/use().');
+        }
+        this.ctx = (0, batch_1.withBatching)(this.ctx);
     }
     /**
      * Run the module's migrations (service key) and unlock its accessor.

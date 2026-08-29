@@ -36,11 +36,31 @@ export type ModuleName = 'cms' | 'forms' | 'reviews' | 'listings' | 'events' | '
  */
 export declare class ModulesClient {
     private readonly migrationsClient;
-    private readonly ctx;
+    private ctx;
     private readonly enabled;
     private readonly instances;
     private readonly definitions;
     constructor(http: HttpClient, migrationsClient: MigrationsClient);
+    /**
+     * Opt this client's modules into per-tick query batching.
+     *
+     * Off unless you call this. With it on, module lookups written against
+     * `loadOneBy` coalesce into one `whereIn` per table+column per tick, so a
+     * list view that resolves 50 authors makes 1 request instead of 50.
+     * Everything else — filters, ordering, writes, raw SQL — is untouched.
+     *
+     *   client.modules.enableBatching();
+     *   await client.modules.enable('cms');
+     *
+     * Must be called BEFORE the first module accessor, and says so rather
+     * than half-applying: a module client captures the context at
+     * construction, so flipping the switch afterwards would batch the
+     * modules touched later and leave the ones already built unbatched —
+     * a difference nobody would think to look for while debugging.
+     *
+     * Safe to call twice; the second call is a no-op.
+     */
+    enableBatching(): void;
     /**
      * Run the module's migrations (service key) and unlock its accessor.
      * Idempotent — call it on every boot; the ledger skips applied steps.

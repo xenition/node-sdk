@@ -1,9 +1,12 @@
 {
   "name": "@xenition/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Official Node.js SDK for Xenition — auth, data, storage, chatbot, payments, push, email, AI, and more. Works in Node 18+ and Cloudflare Workers (with nodejs_compat).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "xenition-codegen": "dist/codegen/bin.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",

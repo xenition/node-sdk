@@ -1,6 +1,9 @@
-import { QueryClient } from '../query/query-client';
-import { QueryBuilder } from '../query/query-builder';
-import { QueryResult } from '../query/types';
+// Type-only on purpose. `query-client.ts` now imports `snakeRows` from this
+// file for its `raw()` path, so a value import here would close a require()
+// cycle between the two modules; `import type` cannot.
+import type { QueryClient } from '../query/query-client';
+import type { QueryBuilder } from '../query/query-builder';
+import type { QueryResult } from '../query/types';
 
 /**
  * Make module clients immune to which runtime answered.
@@ -27,9 +30,17 @@ import { QueryResult } from '../query/types';
  * every row a module reads is normalized to snake_case here — the shape the
  * module clients were written against, and the shape the SQL actually uses.
  *
- * Only module clients are wrapped. `client.query` stays exactly as the
- * platform returned it, because apps and the hono routers already depend on
- * that (the routers camelCase deliberately, on purpose, as their contract).
+ * Only module clients are wrapped by `snakeCaseQueryClient`.
+ * `client.query.from(...)` stays exactly as the platform returned it,
+ * because apps and the hono routers already depend on that (the routers
+ * camelCase deliberately, on purpose, as their contract).
+ *
+ * The HELPERS below reach further than the wrapper does. `client.raw()` and
+ * `client.search.unifiedSearch()` call `snakeRow`/`snakeRows` directly,
+ * because the gateway camelCases those two responses while it returns
+ * `.from(...)` rows verbatim — so the same row arrived in two different
+ * shapes depending only on which read path an app happened to use. The doc
+ * comments on those two methods carry the detail.
  */
 
 /** `expiresAt` → `expires_at`. Leaves an already-snake key alone. */

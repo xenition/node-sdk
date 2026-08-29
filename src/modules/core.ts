@@ -3,6 +3,7 @@ import { QueryResult } from '../query/types';
 import { Migration } from '../migrations/types';
 import type { PushClient } from '../push/push-client';
 import type { EmailClient } from '../email/email-client';
+import type { BatchScope } from './batch';
 
 /**
  * Module framework v0 — content-domain modules implemented *client-side*
@@ -41,6 +42,21 @@ export interface ModuleContext {
    */
   readonly push?: PushClient;
   readonly email?: EmailClient;
+  /**
+   * Per-tick query coalescing, present only when the app opted in with
+   * `withBatching(ctx)` / `client.modules.enableBatching()`.
+   *
+   * Optional, and absent by default, because batching changes WHEN a query
+   * leaves for the network — a lookup that used to go immediately now waits
+   * for the microtask queue to drain. That is invisible to well-written
+   * async code and it is exactly what turns "works locally" into "wrong
+   * under load" for code that accidentally depends on the old timing. So a
+   * module client reads it as a capability rather than a requirement: with
+   * a scope present `loadOneBy` coalesces, without one it issues the same
+   * single-row query it always has. See batch.ts, which also explains why
+   * the scope hangs off the CONTEXT and not off a global registry.
+   */
+  readonly batch?: BatchScope;
 }
 
 export interface ModuleDefinition<TClient> {

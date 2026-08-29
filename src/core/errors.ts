@@ -12,6 +12,14 @@ export const XENITION_ERROR_CODES = [
   'TIMEOUT',
   'SERVER_ERROR',
   'RATE_LIMITED',
+  // The caller stopped this request through an AbortSignal. Its own code
+  // rather than TIMEOUT or NETWORK_ERROR, because both of those tell an
+  // on-call engineer the network misbehaved when nothing did — and both are
+  // codes a caller's own retry wrapper will happily retry, which is exactly
+  // what cancelling was meant to prevent. Prefer `isCancelledError(err)`
+  // over comparing this string: it also recognises a cancellation raised
+  // through a handle this SDK was not given.
+  'CANCELLED',
   // Auth
   'AUTH_INVALID_CREDENTIALS',
   'AUTH_INVALID_TOKEN',

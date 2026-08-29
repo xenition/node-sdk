@@ -568,3 +568,238 @@ describe('QueryBuilder — filter values JSON cannot carry', () => {
     expect(() => q().lt('price_cents', NaN)).toThrow(/cannot be sent as a filter/);
   });
 });
+
+describe('QueryBuilder — paging numbers', () => {
+  /**
+   * The same NaN hole as above, one clause over, and worse: a limit that
+   * serialises to null is not sent, so the query runs unbounded and returns
+   * the whole table. Found by curling the lab with `?limit=abc` — 19 rows
+   * came back from a route whose default is 10, and nothing errored.
+   */
+  const q = () => builder().from('lab__items');
+
+  it('refuses a NaN limit rather than running unbounded', () => {
+    expect(() => q().limit(Number('abc'))).toThrow(/runs unbounded/);
+    expect(() => q().limit(NaN)).toThrow(/QueryBuilder\.limit/);
+  });
+
+  it('refuses a NaN offset, and names the symptom offset actually has', () => {
+    expect(() => q().offset(Number('abc'))).toThrow(/QueryBuilder\.offset/);
+    expect(() => q().offset(NaN)).toThrow(/every page comes back as the first one/);
+    expect(() => q().offset(NaN)).not.toThrow(/unbounded/);
+  });
+
+  it('refuses negative and fractional counts here, not at the database', () => {
+    // The server does refuse these — as `SQLSTATE 2201W` or `invalid query
+    // payload`, neither of which names the call at fault.
+    expect(() => q().limit(-5)).toThrow(/must not be negative/);
+    expect(() => q().offset(-1)).toThrow(/must not be negative/);
+    expect(() => q().limit(2.7)).toThrow(/whole number/);
+  });
+
+  it('allows the ordinary cases, zero included', () => {
+    expect(() => q().limit(10).offset(0)).not.toThrow();
+    expect(() => q().limit(0)).not.toThrow(); // LIMIT 0 is a legal "count only" probe
+    expect(q().limit(10).offset(20).toPayload()).toMatchObject({ limit: 10, offset: 20 });
+  });
+
+  it('guards paginate before it does the arithmetic', () => {
+    // (page - 1) * perPage would report a NaN offset — a call the caller
+    // never made — so both arguments are checked first.
+    expect(() => q().paginate(NaN)).toThrow(/QueryBuilder\.paginate/);
+    expect(() => q().paginate(1, Number('abc'))).toThrow(/QueryBuilder\.paginate/);
+    expect(() => q().paginate(0)).toThrow(/1-based/);
+    expect(q().paginate(3, 20).toPayload()).toMatchObject({ limit: 20, offset: 40 });
+  });
+});
+
+describe('QueryBuilder — stream() auto-paging', () => {
+  /**
+   * The loop `stream()` replaces is the one callers kept getting wrong: an
+   * offset bumped before the short-page check reads one page past the data,
+   * and a loop that stops only on an EMPTY page never stops at all against a
+   * server that clamps `limit`. These tests pin the request count, not just
+   * the rows, because the whole point is which requests are not made.
+   */
+  const q = () => builder().from('lab__items');
+
+  /** A server that honours limit/offset against a fixed table of `total` rows. */
+  const serve = (post: jest.Mock, total: number) =>
+    post.mockImplementation((_url: string, payload: QueryPayload) => {
+      const table = Array.from({ length: total }, (_, i) => ({ id: i }));
+      const from = payload.offset ?? 0;
+      return Promise.resolve({
+        data: table.slice(from, from + (payload.limit ?? total)),
+      });
+    });
+
+  const drain = async <R>(rows: AsyncIterable<R>): Promise<R[]> => {
+    const out: R[] = [];
+    for await (const row of rows) out.push(row);
+    return out;
+  };
+
+  /** limit/offset of each request, in order. */
+  const pagesRequested = (post: jest.Mock) =>
+    post.mock.calls.map(([, payload]) => ({
+      limit: (payload as QueryPayload).limit,
+      offset: (payload as QueryPayload).offset,
+    }));
+
+  it('yields every row across as many pages as it takes', async () => {
+    const { post, http } = makeHttp();
+    serve(post, 25);
+    const rows = await drain(builder(http).from('lab__items').stream({ pageSize: 10 }));
+    expect(rows).toHaveLength(25);
+    expect(rows[0]).toEqual({ id: 0 });
+    expect(rows[24]).toEqual({ id: 24 });
+    expect(pagesRequested(post)).toEqual([
+      { limit: 10, offset: 0 },
+      { limit: 10, offset: 10 },
+      { limit: 10, offset: 20 },
+    ]);
+  });
+
+  it('treats a short page as the end and spends no request to confirm it', async () => {
+    const { post, http } = makeHttp();
+    serve(post, 3);
+    await expect(drain(builder(http).from('t').stream({ pageSize: 10 }))).resolves.toHaveLength(3);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('costs one final empty request only when the last page is exactly full', async () => {
+    // 20 rows in pages of 10: the second page is full, and a full page cannot
+    // prove it is the last one. The alternative — assuming it is — drops rows.
+    const { post, http } = makeHttp();
+    serve(post, 20);
+    await expect(drain(builder(http).from('t').stream({ pageSize: 10 }))).resolves.toHaveLength(20);
+    expect(post).toHaveBeenCalledTimes(3);
+    expect(pagesRequested(post)[2]).toEqual({ limit: 10, offset: 20 });
+  });
+
+  it('terminates against a server that always returns a full page', async () => {
+    // The non-terminating loop: stopping only on an empty page. A server that
+    // clamps `limit` to its own maximum never sends one, so the caller's loop
+    // runs forever. The caller's limit is what ends this stream.
+    const { post, http } = makeHttp();
+    post.mockResolvedValue({ data: Array.from({ length: 50 }, (_, i) => ({ id: i })) });
+    await expect(
+      drain(builder(http).from('t').limit(120).stream({ pageSize: 50 })),
+    ).resolves.toHaveLength(120);
+    expect(post).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops at a limit() the caller already set rather than running past it', async () => {
+    const { post, http } = makeHttp();
+    serve(post, 1000);
+    const rows = await drain(builder(http).from('t').limit(25).stream({ pageSize: 10 }));
+    expect(rows).toHaveLength(25);
+    expect(rows[24]).toEqual({ id: 24 });
+    // The last page asks for the 5 rows still owed, not for a full page it
+    // would then throw half of away.
+    expect(pagesRequested(post)).toEqual([
+      { limit: 10, offset: 0 },
+      { limit: 10, offset: 10 },
+      { limit: 5, offset: 20 },
+    ]);
+  });
+
+  it('holds the caller limit even when the server returns a longer page than asked', async () => {
+    const { post, http } = makeHttp();
+    post.mockResolvedValue({ data: Array.from({ length: 50 }, (_, i) => ({ id: i })) });
+    const rows = await drain(builder(http).from('t').limit(20).stream({ pageSize: 20 }));
+    expect(rows).toHaveLength(20);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('issues no request at all for limit(0)', async () => {
+    const { post, http } = makeHttp();
+    serve(post, 100);
+    await expect(drain(builder(http).from('t').limit(0).stream())).resolves.toEqual([]);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('starts from an offset() the caller already set', async () => {
+    const { post, http } = makeHttp();
+    serve(post, 10);
+    const rows = await drain(builder(http).from('t').offset(7).stream({ pageSize: 5 }));
+    expect(rows).toEqual([{ id: 7 }, { id: 8 }, { id: 9 }]);
+    expect(pagesRequested(post)).toEqual([{ limit: 5, offset: 7 }]);
+  });
+
+  it('defaults to a page size of 500 and lets the caller override it', async () => {
+    const { post, http } = makeHttp();
+    serve(post, 1200);
+    await expect(drain(builder(http).from('t').stream())).resolves.toHaveLength(1200);
+    expect(pagesRequested(post)).toEqual([
+      { limit: 500, offset: 0 },
+      { limit: 500, offset: 500 },
+      { limit: 500, offset: 1000 },
+    ]);
+  });
+
+  it('carries the rest of the query — columns, where, order — onto every page', async () => {
+    const { post, http } = makeHttp();
+    serve(post, 12);
+    await drain(
+      builder(http)
+        .from('lab__items')
+        .select('id', 'title')
+        .where('active', true)
+        .orderBy('id')
+        .stream({ pageSize: 10 }),
+    );
+    for (const [url, payload] of post.mock.calls) {
+      expect(url).toBe(API_ENDPOINTS.QUERY.EXECUTE);
+      expect(payload).toMatchObject({
+        type: 'SELECT',
+        table: 'lab__items',
+        columns: ['id', 'title'],
+        where: [{ column: 'active', operator: '=', value: true, type: 'AND' }],
+        orderBy: [{ column: 'id', direction: 'ASC' }],
+      });
+    }
+  });
+
+  it('leaves the caller builder untouched, unlike first()', async () => {
+    // `first()` sets limit 1 on the live builder, so a reused builder silently
+    // keeps it. Streaming pages against private copies instead.
+    const { post, http } = makeHttp();
+    serve(post, 5);
+    const qb = builder(http).from('t').where('a', 1);
+    const before = qb.toPayload();
+    await drain(qb.stream({ pageSize: 2 }));
+    expect(qb.toPayload()).toEqual(before);
+    expect(qb.toPayload().limit).toBeUndefined();
+    expect(qb.toPayload().offset).toBeUndefined();
+  });
+
+  it('snapshots the builder at the stream() call, so later edits do not change the pages', async () => {
+    const { post, http } = makeHttp();
+    serve(post, 3);
+    const qb = builder(http).from('t');
+    const rows = qb.stream({ pageSize: 10 });
+    qb.where('a', 1).limit(1); // after the call, before the first iteration
+    await expect(drain(rows)).resolves.toHaveLength(3);
+    expect(post.mock.calls[0]![1]).not.toHaveProperty('where');
+  });
+
+  it('refuses to stream anything but a SELECT, at the call site rather than on first iteration', () => {
+    expect(() => q().insert({ a: 1 }).stream()).toThrow(/cannot be used on INSERT/);
+    expect(() => q().update({ a: 1 }).stream()).toThrow(/cannot be used on UPDATE/);
+    expect(() => q().delete().stream()).toThrow(/returning/);
+  });
+
+  it('refuses a page size of zero, which would request forever and yield nothing', () => {
+    // limit(0) is legal — a count-only probe — so assertRowCount allows it and
+    // stream() has to reject it separately.
+    expect(() => q().limit(0)).not.toThrow();
+    expect(() => q().stream({ pageSize: 0 })).toThrow(/never advances the offset/);
+  });
+
+  it('refuses a NaN or negative page size before it reaches the wire', () => {
+    expect(() => q().stream({ pageSize: Number('abc') })).toThrow(/QueryBuilder\.stream/);
+    expect(() => q().stream({ pageSize: -10 })).toThrow(/must not be negative/);
+    expect(() => q().stream({ pageSize: 2.5 })).toThrow(/whole number/);
+  });
+});

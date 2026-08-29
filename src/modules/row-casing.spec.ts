@@ -45,6 +45,14 @@ describe('snakeRow', () => {
     expect(snakeRow({ expires_at: 'real', expiresAt: 'dupe' })).toEqual({ expires_at: 'real' });
   });
 
+  it('is idempotent, so a row normalized twice is not mangled the second time', () => {
+    // `client.raw()` and `client.search.unifiedSearch()` now normalize before
+    // handing a row over, and a module client may normalize it again. Both
+    // rely on `snakeKey` leaving an already-snake key alone; this pins it.
+    const once = snakeRow({ expiresAt: 'x', originalTransactionId: 't' });
+    expect(snakeRow(once)).toEqual(once);
+  });
+
   it('leaves jsonb payloads untouched', () => {
     // `data`, `payload`, `feedback` and `raw` carry the APP's keys, not the
     // database's — rewriting them would corrupt what a module stored.
