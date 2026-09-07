@@ -387,6 +387,43 @@ describe('endpoints the gateway has not shipped', () => {
   });
 });
 
+describe('a rejected end-user credential is a 401, not a 502', () => {
+  /**
+   * `statusForCode` maps every `AUTH_*` error to 502, and for most routes that is
+   * right: the worker calls the gateway with its own service key, so a 401 upstream
+   * means that key is bad.
+   *
+   * These four routes break the assumption — the credential comes from the person
+   * at the keyboard. Before this, mistyping a password answered
+   * `502 Upstream request failed`, which tells the user the server is broken and
+   * gives the client nothing to branch on. Reported from a real device as "upstream
+   * failed" while signing in.
+   */
+  it.each([
+    ['login', 'login', (api: ReturnType<typeof makeApp>['api']) =>
+      api.auth.login({ email: 'a@b.co', password: 'wrong' })],
+    ['refresh', 'refresh', (api: ReturnType<typeof makeApp>['api']) =>
+      api.auth.refresh('spent')],
+    ['verifyOtp', 'verifyOtp', (api: ReturnType<typeof makeApp>['api']) =>
+      api.auth.verifyOtp({ email: 'a@b.co', code: '000000' })],
+  ])('%s surfaces a rejection as 401', async (_name, method, call) => {
+    const { api, auth } = makeApp();
+    const stub = (auth as unknown as Record<string, jest.Mock>)[method] as jest.Mock;
+    stub.mockRejectedValueOnce(new XenitionError('AUTH_INVALID_TOKEN', 'Invalid email or password'));
+    await expect(call(api)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('still answers 502 when the worker’s own key is the problem', async () => {
+    // The distinction the whole change rests on: an AUTH_* from a route that does
+    // not take a caller credential still means the service key, and still means 502.
+    const { api, auth } = makeApp();
+    auth.listSessions.mockRejectedValueOnce(
+      new XenitionError('AUTH_INVALID_TOKEN', 'service key rejected'),
+    );
+    await expect(api.auth.sessions()).rejects.toMatchObject({ status: 502 });
+  });
+});
+
 describe('rate limiting', () => {
   it('holds the credential routes to a tighter budget than the writes', async () => {
     // rateLimit: 10 is the write default; the credential routes cap at 5.

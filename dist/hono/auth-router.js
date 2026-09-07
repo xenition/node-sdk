@@ -5,9 +5,21 @@ const hono_1 = require("hono");
 const auth_1 = require("./auth");
 const client_1 = require("./client");
 const errors_1 = require("./errors");
+const errors_2 = require("../core/errors");
 const normalize_1 = require("./normalize");
 const rate_limit_1 = require("./rate-limit");
 const router_utils_1 = require("./router-utils");
+/**
+ * An end-user credential was rejected — wrong password, wrong code, spent refresh
+ * token. Carried as its own type so the router answers 401 rather than letting the
+ * shared handler read it as a service-key failure and answer 502.
+ */
+class EndUserAuthRejection extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'EndUserAuthRejection';
+    }
+}
 /**
  * Credential routes are rate limited harder than the write default (10/min).
  *
@@ -37,7 +49,11 @@ const OTP_PURPOSES = [
 function authRouter(options = {}) {
     const app = new hono_1.Hono();
     (0, router_utils_1.applyCors)(app, options.cors);
-    app.onError(errors_1.honoErrorHandler);
+    app.onError((err, c) => {
+        if (err instanceof EndUserAuthRejection)
+            return (0, errors_1.unauthorized)(c, err.message);
+        return (0, errors_1.honoErrorHandler)(err, c);
+    });
     app.notFound(errors_1.jsonNotFound);
     // `null`, not a module name: this router talks to `client.auth`, which is
     // not a data module and has no accessor to unlock.
@@ -75,6 +91,41 @@ function authRouter(options = {}) {
         app.post('/auth/oauth/:provider/callback', standard);
     }
     /* ── sign-in (public — a signed-out user has to reach these) ─────────── */
+    /**
+     * Run a call that checks an END USER's credential, surfacing a rejection as 401.
+     *
+     * `statusForCode` maps every `AUTH_*` error to 502, and for most routes that is
+     * exactly right: the worker calls the gateway with its own service key, so a 401
+     * upstream means that key is bad — an operator's problem, not the caller's.
+     *
+     * These routes break that assumption. A password, a one-time code, a refresh
+     * token and an id token are all supplied by the person at the keyboard, so a
+     * rejection is about THEM. Without this, the most ordinary event in any app —
+     * mistyping a password — answered `502 Upstream request failed`, which tells the
+     * user the server is broken and gives the client nothing to branch on. Every app
+     * on this SDK showed "something went wrong" for a typo.
+     *
+     * It also broke this SDK's OWN retry: `AuthClient` refreshes once on a 401, and a
+     * dead refresh token returned 502, so the retry never fired and the session was
+     * dropped instead of renewed.
+     *
+     * Deliberately narrow. Only the handlers that validate a caller-supplied
+     * credential use it; everywhere else `AUTH_*` still means the service key and
+     * still means 502.
+     */
+    const asEndUserAuth = async (c, call, message) => {
+        try {
+            return await call();
+        }
+        catch (err) {
+            if (err instanceof errors_2.XenitionError && err.code.startsWith('AUTH_')) {
+                // Thrown, not returned, so the handler's own `return c.json(...)` is never
+                // reached and the router's error handler renders it.
+                throw new EndUserAuthRejection(message);
+            }
+            throw err;
+        }
+    };
     app.post('/auth/register', async (c) => {
         const body = await readObjectBody(c);
         if (!body)
@@ -99,7 +150,8 @@ function authRouter(options = {}) {
         const password = stringField(body, 'password');
         if (!email || !password)
             return (0, errors_1.badRequest)(c, '"email" and "password" are required.');
-        return c.json(authResultBody(await authOf(c).login({ email, password })));
+        const result = await asEndUserAuth(c, () => authOf(c).login({ email, password }), 'That email and password do not match.');
+        return c.json(authResultBody(result));
     });
     /**
      * Public on purpose: the caller's access token has just expired, which is
@@ -110,7 +162,8 @@ function authRouter(options = {}) {
         const refreshToken = body ? stringField(body, 'refreshToken') : undefined;
         if (!refreshToken)
             return (0, errors_1.badRequest)(c, '"refreshToken" is required.');
-        return c.json(authResultBody(await authOf(c).refresh(refreshToken)));
+        const result = await asEndUserAuth(c, () => authOf(c).refresh(refreshToken), 'That session has expired. Please sign in again.');
+        return c.json(authResultBody(result));
     });
     /* ── one-time codes (public) ──────────────────────────────────────────── */
     app.post('/auth/otp/send', async (c) => {
@@ -146,12 +199,12 @@ function authRouter(options = {}) {
         const purpose = otpPurpose(body);
         if (body.purpose !== undefined && !purpose)
             return (0, errors_1.badRequest)(c, purposeMessage(body));
-        const result = await authOf(c).verifyOtp({
+        const result = await asEndUserAuth(c, () => authOf(c).verifyOtp({
             code,
             ...optionalString(body, 'email'),
             ...optionalString(body, 'phone'),
             ...(purpose ? { purpose } : {}),
-        });
+        }), 'That code is not valid or has expired.');
         return c.json(authResultBody(result));
     });
     /* ── password reset + email verification (public) ─────────────────────── */

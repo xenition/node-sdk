@@ -4,11 +4,24 @@ import type { AuthClient } from '../auth/auth-client';
 import type { AuthResponse, OAuthProvider, OtpPurpose, UserDataExport } from '../auth/types';
 import { requireAuth, requireUser } from './auth';
 import { makeClientResolver } from './client';
-import { badRequest, honoErrorHandler, jsonNotFound } from './errors';
+import { badRequest, honoErrorHandler, jsonNotFound, unauthorized } from './errors';
+import { XenitionError } from '../core/errors';
 import { normalizeRow, normalizeRows } from './normalize';
 import { rateLimiter } from './rate-limit';
 import { applyCors } from './router-utils';
 import type { XenitionRouterOptions } from './types';
+
+/**
+ * An end-user credential was rejected — wrong password, wrong code, spent refresh
+ * token. Carried as its own type so the router answers 401 rather than letting the
+ * shared handler read it as a service-key failure and answer 502.
+ */
+class EndUserAuthRejection extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EndUserAuthRejection';
+  }
+}
 
 /**
  * `/auth` — end-user accounts over HTTP, for the app's own frontend.
@@ -113,7 +126,10 @@ const OTP_PURPOSES: readonly OtpPurpose[] = [
 export function authRouter(options: AuthRouterOptions = {}): Hono {
   const app = new Hono();
   applyCors(app, options.cors);
-  app.onError(honoErrorHandler);
+  app.onError((err, c) => {
+    if (err instanceof EndUserAuthRejection) return unauthorized(c, err.message);
+    return honoErrorHandler(err, c);
+  });
   app.notFound(jsonNotFound);
 
   // `null`, not a module name: this router talks to `client.auth`, which is
@@ -157,6 +173,41 @@ export function authRouter(options: AuthRouterOptions = {}): Hono {
 
   /* ── sign-in (public — a signed-out user has to reach these) ─────────── */
 
+  /**
+   * Run a call that checks an END USER's credential, surfacing a rejection as 401.
+   *
+   * `statusForCode` maps every `AUTH_*` error to 502, and for most routes that is
+   * exactly right: the worker calls the gateway with its own service key, so a 401
+   * upstream means that key is bad — an operator's problem, not the caller's.
+   *
+   * These routes break that assumption. A password, a one-time code, a refresh
+   * token and an id token are all supplied by the person at the keyboard, so a
+   * rejection is about THEM. Without this, the most ordinary event in any app —
+   * mistyping a password — answered `502 Upstream request failed`, which tells the
+   * user the server is broken and gives the client nothing to branch on. Every app
+   * on this SDK showed "something went wrong" for a typo.
+   *
+   * It also broke this SDK's OWN retry: `AuthClient` refreshes once on a 401, and a
+   * dead refresh token returned 502, so the retry never fired and the session was
+   * dropped instead of renewed.
+   *
+   * Deliberately narrow. Only the handlers that validate a caller-supplied
+   * credential use it; everywhere else `AUTH_*` still means the service key and
+   * still means 502.
+   */
+  const asEndUserAuth = async <T>(c: Context, call: () => Promise<T>, message: string): Promise<T> => {
+    try {
+      return await call();
+    } catch (err) {
+      if (err instanceof XenitionError && err.code.startsWith('AUTH_')) {
+        // Thrown, not returned, so the handler's own `return c.json(...)` is never
+        // reached and the router's error handler renders it.
+        throw new EndUserAuthRejection(message);
+      }
+      throw err;
+    }
+  };
+
   app.post('/auth/register', async (c) => {
     const body = await readObjectBody(c);
     if (!body) return badRequest(c, 'Body must be a JSON object.');
@@ -178,7 +229,12 @@ export function authRouter(options: AuthRouterOptions = {}): Hono {
     const email = stringField(body, 'email');
     const password = stringField(body, 'password');
     if (!email || !password) return badRequest(c, '"email" and "password" are required.');
-    return c.json(authResultBody(await authOf(c).login({ email, password })));
+    const result = await asEndUserAuth(
+      c,
+      () => authOf(c).login({ email, password }),
+      'That email and password do not match.',
+    );
+    return c.json(authResultBody(result));
   });
 
   /**
@@ -189,7 +245,12 @@ export function authRouter(options: AuthRouterOptions = {}): Hono {
     const body = await readObjectBody(c);
     const refreshToken = body ? stringField(body, 'refreshToken') : undefined;
     if (!refreshToken) return badRequest(c, '"refreshToken" is required.');
-    return c.json(authResultBody(await authOf(c).refresh(refreshToken)));
+    const result = await asEndUserAuth(
+      c,
+      () => authOf(c).refresh(refreshToken),
+      'That session has expired. Please sign in again.',
+    );
+    return c.json(authResultBody(result));
   });
 
   /* ── one-time codes (public) ──────────────────────────────────────────── */
@@ -223,12 +284,17 @@ export function authRouter(options: AuthRouterOptions = {}): Hono {
     }
     const purpose = otpPurpose(body);
     if (body.purpose !== undefined && !purpose) return badRequest(c, purposeMessage(body));
-    const result = await authOf(c).verifyOtp({
-      code,
-      ...optionalString(body, 'email'),
-      ...optionalString(body, 'phone'),
-      ...(purpose ? { purpose } : {}),
-    });
+    const result = await asEndUserAuth(
+      c,
+      () =>
+        authOf(c).verifyOtp({
+          code,
+          ...optionalString(body, 'email'),
+          ...optionalString(body, 'phone'),
+          ...(purpose ? { purpose } : {}),
+        }),
+      'That code is not valid or has expired.',
+    );
     return c.json(authResultBody(result));
   });
 
