@@ -857,9 +857,18 @@ export interface ChangePasswordInput {
 }
 
 export interface ResetPasswordInput {
-  /** The token from the reset email. */
+  /** The token from the reset email, or the six-digit code from an OTP reset. */
   token: string;
   newPassword: string;
+  /**
+   * The address the code was sent to.
+   *
+   * Required for a code-based reset: the gateway keys a reset code by
+   * `(email, purpose)`, because six digits cannot identify an account on their
+   * own. Omitting it fails the confirm step with "email and token are
+   * required" regardless of what else is sent.
+   */
+  email?: string;
 }
 
 export type OAuthProvider = 'google' | 'github' | 'facebook' | 'twitter' | 'apple';
@@ -1277,7 +1286,8 @@ export interface AuthClient {
   /** Send the reset email. Answers the same whether the address exists. */
   requestPasswordReset(email: string, redirectUrl: string): Promise<{ requested: true }>;
   resetPassword(input: ResetPasswordInput): Promise<{ reset: true }>;
-  verifyEmail(token: string): Promise<{ verified: true }>;
+  /** `email` is required for a code-based verification — the code is keyed by it. */
+  verifyEmail(token: string, email?: string): Promise<{ verified: true }>;
   logout(): Promise<{ ok: true }>;
   /** The caller's active sessions — the "signed in on these devices" list. */
   sessions(): Promise<AuthSession[]>;

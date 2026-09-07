@@ -118,7 +118,15 @@ export declare class AuthClient {
     resetPassword(input: ResetPasswordInput): Promise<{
         reset: true;
     }>;
-    verifyEmail(token: string): Promise<{
+    /**
+     * Confirm an address with the code that was mailed to it.
+     *
+     * `email` for the same reason `resetPassword` needs it: the gateway keys a
+     * code by `(email, purpose)`, because six digits cannot identify an account.
+     * Sending only the token failed with "email and token are required" — this
+     * step, like the reset it mirrors, could not be completed by any caller.
+     */
+    verifyEmail(token: string, email?: string): Promise<{
         verified: true;
     }>;
     getOAuthUrl(provider: OAuthProvider, redirectUrl: string): Promise<OAuthUrlResult>;

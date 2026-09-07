@@ -169,6 +169,27 @@ describe('sign-in (public — no token attached)', () => {
     expect(await api.auth.verifyEmail('vt')).toEqual({ verified: true });
   });
 
+  /**
+   * The router rebuilds the confirm body rather than forwarding it, so a caller
+   * cannot smuggle extra fields upstream. It used to rebuild it WITHOUT the
+   * address — and the gateway keys a reset code by (email, purpose), because
+   * six digits cannot identify an account on their own.
+   *
+   * The result was a step no request could pass: send the client's shape and
+   * the gateway asked for an email, send the gateway's and the router asked for
+   * a newPassword, send both and the email was dropped anyway. Verified against
+   * a live gateway before this was changed.
+   */
+  it('reset confirm forwards the address the code is keyed by', async () => {
+    const { api, auth } = makeApp({}, null);
+    await api.auth.resetPassword({ token: '123456', newPassword: 'pw2', email: 'ada@example.com' });
+    expect(auth.resetPassword).toHaveBeenCalledWith({
+      token: '123456',
+      newPassword: 'pw2',
+      email: 'ada@example.com',
+    });
+  });
+
   it('lists social providers and starts the redirect flow', async () => {
     const { api, auth } = makeApp({}, null);
     const providers = await api.auth.socialProviders();
@@ -384,6 +405,43 @@ describe('endpoints the gateway has not shipped', () => {
       code: 'NOT_FOUND',
     });
     await expect(api.auth.deleteAccount()).resolves.toMatchObject({ deleted: true });
+  });
+});
+
+describe('a rejected end-user credential is a 401, not a 502', () => {
+  /**
+   * `statusForCode` maps every `AUTH_*` error to 502, and for most routes that is
+   * right: the worker calls the gateway with its own service key, so a 401 upstream
+   * means that key is bad.
+   *
+   * These four routes break the assumption — the credential comes from the person
+   * at the keyboard. Before this, mistyping a password answered
+   * `502 Upstream request failed`, which tells the user the server is broken and
+   * gives the client nothing to branch on. Reported from a real device as "upstream
+   * failed" while signing in.
+   */
+  it.each([
+    ['login', 'login', (api: ReturnType<typeof makeApp>['api']) =>
+      api.auth.login({ email: 'a@b.co', password: 'wrong' })],
+    ['refresh', 'refresh', (api: ReturnType<typeof makeApp>['api']) =>
+      api.auth.refresh('spent')],
+    ['verifyOtp', 'verifyOtp', (api: ReturnType<typeof makeApp>['api']) =>
+      api.auth.verifyOtp({ email: 'a@b.co', code: '000000' })],
+  ])('%s surfaces a rejection as 401', async (_name, method, call) => {
+    const { api, auth } = makeApp();
+    const stub = (auth as unknown as Record<string, jest.Mock>)[method] as jest.Mock;
+    stub.mockRejectedValueOnce(new XenitionError('AUTH_INVALID_TOKEN', 'Invalid email or password'));
+    await expect(call(api)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('still answers 502 when the worker’s own key is the problem', async () => {
+    // The distinction the whole change rests on: an AUTH_* from a route that does
+    // not take a caller credential still means the service key, and still means 502.
+    const { api, auth } = makeApp();
+    auth.listSessions.mockRejectedValueOnce(
+      new XenitionError('AUTH_INVALID_TOKEN', 'service key rejected'),
+    );
+    await expect(api.auth.sessions()).rejects.toMatchObject({ status: 502 });
   });
 });
 
