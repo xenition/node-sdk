@@ -316,15 +316,35 @@ export function authRouter(options: AuthRouterOptions = {}): Hono {
     if (!body) return badRequest(c, 'Body must be a JSON object.');
     const token = stringField(body, 'token');
     const newPassword = stringField(body, 'newPassword');
+    // Rebuilt rather than forwarded, so a caller cannot smuggle extra fields
+    // upstream — but `email` has to come with it. The gateway keys a reset code
+    // by (email, purpose) because six digits cannot identify an account, and
+    // dropping it here made the confirm step unreachable for every caller.
+    const email = stringField(body, 'email');
     if (!token || !newPassword) return badRequest(c, '"token" and "newPassword" are required.');
-    return c.json(await authOf(c).resetPassword({ token, newPassword }));
+    return c.json(
+      await asEndUserAuth(
+        c,
+        () => authOf(c).resetPassword({ token, newPassword, email }),
+        'That code is not right, or it has expired.',
+      ),
+    );
   });
 
   app.post('/auth/email/verify', async (c) => {
     const body = await readObjectBody(c);
     const token = body ? stringField(body, 'token') : undefined;
+    // Same rebuild, same omission as the reset confirm above: the address is
+    // what the code is keyed by, so dropping it made this unreachable too.
+    const email = body ? stringField(body, 'email') : undefined;
     if (!token) return badRequest(c, '"token" is required.');
-    return c.json(await authOf(c).verifyEmail(token));
+    return c.json(
+      await asEndUserAuth(
+        c,
+        () => authOf(c).verifyEmail(token, email),
+        'That code is not right, or it has expired.',
+      ),
+    );
   });
 
   /* ── OAuth ───────────────────────────────────────────────────────────── */
@@ -436,9 +456,11 @@ export function authRouter(options: AuthRouterOptions = {}): Hono {
     if (!currentPassword || !newPassword) {
       return badRequest(c, '"currentPassword" and "newPassword" are required.');
     }
-    const changed = await authOf(c).changePassword(
-      { currentPassword, newPassword },
-      requireUser(c).accessToken,
+    const changed = await asEndUserAuth(
+      c,
+      () =>
+        authOf(c).changePassword({ currentPassword, newPassword }, requireUser(c).accessToken),
+      'That current password is not right.',
     );
     return c.json(changed);
   });

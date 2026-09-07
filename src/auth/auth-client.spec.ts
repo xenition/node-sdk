@@ -241,6 +241,27 @@ describe('AuthClient — required fields are checked before the request', () => 
     await expect(auth.verifyEmail('')).rejects.toThrow(/"token" is required/);
   });
 
+  /**
+   * Probed against a live gateway: the confirm step could not succeed for ANY
+   * input. This client sent `{token, newPassword}`; the gateway reads
+   * `password` and requires `email` — which it needs because a six-digit code
+   * is keyed by (email, purpose) and cannot identify an account alone.
+   *
+   * Every combination returned 400. Sending both spellings is what makes the
+   * two halves agree without breaking either.
+   */
+  it('reset confirm sends the address and both spellings of the password', async () => {
+    const post = jest.fn().mockResolvedValue({ reset: true });
+    const auth = new AuthClient({ post } as never);
+    await auth.resetPassword({ token: '123456', newPassword: 'NewPass12345', email: 'a@b.com' });
+    expect(post).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.PASSWORD_RESET_CONFIRM, {
+      token: '123456',
+      newPassword: 'NewPass12345',
+      password: 'NewPass12345',
+      email: 'a@b.com',
+    });
+  });
+
   it('a whitespace-only value counts as missing', async () => {
     const auth = new AuthClient({ post: noCall } as never);
     await expect(auth.login({ email: '   ', password: 'x' })).rejects.toThrow(/"email" is required/);

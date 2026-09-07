@@ -133,6 +133,18 @@ export interface TeamInvitationInput {
 export interface ResetPasswordInput {
     token: string;
     newPassword: string;
+    /**
+     * The address the code was sent to.
+     *
+     * The gateway keys a reset code by `(email, purpose)` — a six-digit code is
+     * not globally unique, so it cannot identify an account on its own. Without
+     * this the confirm call fails with "email and token are required" no matter
+     * what else is sent.
+     *
+     * Optional only because a future link-style token could carry the identity
+     * itself; every code-based reset must pass it.
+     */
+    email?: string;
 }
 /** Native sign-in: the id token the platform SDK produced on the device. */
 export interface IdTokenSignInInput {

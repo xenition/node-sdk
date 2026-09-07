@@ -273,11 +273,28 @@ class AuthClient {
         const context = 'AuthClient.resetPassword';
         requireField(context, 'token', input?.token);
         requireField(context, 'newPassword', input?.newPassword);
-        return this.http.post(constants_1.API_ENDPOINTS.AUTH.PASSWORD_RESET_CONFIRM, input);
+        /*
+          `password` as well as `newPassword`, and `email` alongside the token.
+    
+          The gateway reads `password` and requires `email`; this client has always
+          sent `newPassword` and nothing else, so the confirm step could not
+          succeed for any input — the two halves never agreed on a single field.
+          Sending both spellings fixes it without a breaking change to either side,
+          and lets the gateway drop the alias whenever it likes.
+        */
+        return this.http.post(constants_1.API_ENDPOINTS.AUTH.PASSWORD_RESET_CONFIRM, { ...input, password: input.newPassword });
     }
-    async verifyEmail(token) {
+    /**
+     * Confirm an address with the code that was mailed to it.
+     *
+     * `email` for the same reason `resetPassword` needs it: the gateway keys a
+     * code by `(email, purpose)`, because six digits cannot identify an account.
+     * Sending only the token failed with "email and token are required" — this
+     * step, like the reset it mirrors, could not be completed by any caller.
+     */
+    async verifyEmail(token, email) {
         requireField('AuthClient.verifyEmail', 'token', token);
-        return this.http.post(constants_1.API_ENDPOINTS.AUTH.VERIFY_EMAIL, { token });
+        return this.http.post(constants_1.API_ENDPOINTS.AUTH.VERIFY_EMAIL, { token, email });
     }
     // ────────── OAuth ────────────────────────────────────────────────────────
     getOAuthUrl(provider, redirectUrl) {

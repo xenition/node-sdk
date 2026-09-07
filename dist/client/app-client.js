@@ -375,8 +375,8 @@ function createAppClient(baseUrl, options = {}) {
             resetPassword(input) {
                 return postJson(`/auth/password-reset/confirm`, input);
             },
-            verifyEmail(token) {
-                return postJson(`/auth/email/verify`, { token });
+            verifyEmail(token, email) {
+                return postJson(`/auth/email/verify`, { token, email });
             },
             logout() {
                 return sendJson('POST', `/auth/logout`);

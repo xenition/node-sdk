@@ -489,8 +489,8 @@ export function createAppClient(baseUrl: string, options: AppClientOptions = {})
       resetPassword(input: ResetPasswordInput) {
         return postJson<{ reset: true }>(`/auth/password-reset/confirm`, input);
       },
-      verifyEmail(token) {
-        return postJson<{ verified: true }>(`/auth/email/verify`, { token });
+      verifyEmail(token, email) {
+        return postJson<{ verified: true }>(`/auth/email/verify`, { token, email });
       },
       logout() {
         return sendJson<{ ok: true }>('POST', `/auth/logout`);

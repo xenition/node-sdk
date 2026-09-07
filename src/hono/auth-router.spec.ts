@@ -169,6 +169,27 @@ describe('sign-in (public — no token attached)', () => {
     expect(await api.auth.verifyEmail('vt')).toEqual({ verified: true });
   });
 
+  /**
+   * The router rebuilds the confirm body rather than forwarding it, so a caller
+   * cannot smuggle extra fields upstream. It used to rebuild it WITHOUT the
+   * address — and the gateway keys a reset code by (email, purpose), because
+   * six digits cannot identify an account on their own.
+   *
+   * The result was a step no request could pass: send the client's shape and
+   * the gateway asked for an email, send the gateway's and the router asked for
+   * a newPassword, send both and the email was dropped anyway. Verified against
+   * a live gateway before this was changed.
+   */
+  it('reset confirm forwards the address the code is keyed by', async () => {
+    const { api, auth } = makeApp({}, null);
+    await api.auth.resetPassword({ token: '123456', newPassword: 'pw2', email: 'ada@example.com' });
+    expect(auth.resetPassword).toHaveBeenCalledWith({
+      token: '123456',
+      newPassword: 'pw2',
+      email: 'ada@example.com',
+    });
+  });
+
   it('lists social providers and starts the redirect flow', async () => {
     const { api, auth } = makeApp({}, null);
     const providers = await api.auth.socialProviders();
