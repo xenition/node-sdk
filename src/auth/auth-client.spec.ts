@@ -302,3 +302,94 @@ describe('searchUsers — a 404 from a search endpoint', () => {
     await expect(auth.searchUsers('demo')).resolves.toEqual(page);
   });
 });
+
+/**
+ * Social sign-in has two lanes and they are not interchangeable. These pin the
+ * wire calls each one makes, because both were wrong in ways a typecheck
+ * cannot see: `configureSocialProvider` POSTed to a route that is a PUT, and
+ * `handleOAuthCallback` posted to the path the PROVIDER redirects a browser to.
+ */
+describe('AuthClient social sign-in', () => {
+  const makeOAuthHttp = () => {
+    const get = jest.fn().mockResolvedValue({ url: 'https://consent', state: 'st' });
+    const post = jest.fn().mockResolvedValue({ token: 'tok' });
+    const put = jest.fn().mockResolvedValue({ provider: 'google' });
+    const del = jest.fn().mockResolvedValue({ provider: 'google' });
+    const http = { get, post, put, del } as unknown as HttpClient;
+    return { get, post, put, del, auth: new AuthClient(http) };
+  };
+
+  it('starts a brokered sign-in with returnTo, not redirectUrl', async () => {
+    const { get, auth } = makeOAuthHttp();
+    await auth.startSignIn('github', 'myapp://auth');
+    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_URL('github'), {
+      params: { returnTo: 'myapp://auth' },
+    });
+  });
+
+  /**
+   * The redeem route is deliberately not under `/{provider}/`: the code is
+   * bound to the app and the user, and an app handling a deep link should not
+   * have to remember which button started the flow.
+   */
+  it('redeems the one-time code at the provider-independent endpoint', async () => {
+    const { post, auth } = makeOAuthHttp();
+    await auth.completeSignIn('code-1');
+    expect(post).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_EXCHANGE, { code: 'code-1' });
+  });
+
+  /**
+   * `handleOAuthCallback` posted to `/auth/oauth/{provider}/callback` — the URL
+   * a PROVIDER redirects a browser to, never something an app calls. Every use
+   * of it hit the wrong endpoint. The old name now forwards to the right one.
+   */
+  it('sends the deprecated callback helper to the exchange endpoint', async () => {
+    const { post, auth } = makeOAuthHttp();
+    await auth.handleOAuthCallback('google', 'code-1', 'state-that-is-ignored');
+    expect(post).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_EXCHANGE, { code: 'code-1' });
+  });
+
+  it('keeps the deprecated url helper pointed at the same route', async () => {
+    const { get, auth } = makeOAuthHttp();
+    await auth.getOAuthUrl('google', 'myapp://auth');
+    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_URL('google'), {
+      params: { returnTo: 'myapp://auth' },
+    });
+  });
+
+  /**
+   * The gateway route is a PUT. This method used POST for as long as it
+   * existed, so configuring a provider was a 405 every single time — the one
+   * call standing between an app and the fast native lane.
+   */
+  it('configures a provider with PUT, which is what the route is', async () => {
+    const { put, post, auth } = makeOAuthHttp();
+    await auth.configureSocialProvider('google', {
+      clientId: 'id',
+      clientSecret: 'secret',
+      redirectUri: 'https://app/cb',
+    });
+    expect(put).toHaveBeenCalledWith(
+      API_ENDPOINTS.AUTH.OAUTH_PROVIDER_CONFIG('google'),
+      expect.objectContaining({ clientId: 'id' }),
+    );
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('reads and writes the return-URL allowlist', async () => {
+    const { get, post, del, auth } = makeOAuthHttp();
+
+    await auth.listReturnUrls();
+    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_RETURN_URLS);
+
+    await auth.addReturnUrl('https://app.example.com/auth');
+    expect(post).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_RETURN_URLS, {
+      url: 'https://app.example.com/auth',
+    });
+
+    await auth.removeReturnUrl('https://app.example.com/auth');
+    expect(del).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_RETURN_URLS, {
+      params: { url: 'https://app.example.com/auth' },
+    });
+  });
+});

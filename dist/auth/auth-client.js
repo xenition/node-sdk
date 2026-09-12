@@ -126,14 +126,19 @@ class AuthClient {
     /**
      * Sign in with an id token the device obtained natively.
      *
-     * This is what mobile actually does. `getOAuthUrl()` / `handleOAuthCallback()`
-     * are the browser redirect dance; on iOS and Android the platform SDK
-     * completes sign-in locally and hands the app an `idToken`, which the
-     * server verifies against the provider's published keys.
+     * The fast path, and the one with a hard prerequisite: it works ONLY for an
+     * app that registered its own Google/Apple client ids. A native id token's
+     * audience is the app's own bundle id, so Xenition's shared credentials
+     * cannot verify one — which is why this is the single part of social sign-in
+     * that is not covered by the zero-configuration default. Without them the
+     * server answers 412 naming `startSignIn()` as the alternative.
+     *
+     * Google and Apple only. GitHub issues no id token at all.
      *
      * Pass the `nonce` the app generated for this attempt. Apple echoes it
      * inside the token and the server compares the two — that is what stops a
-     * token captured from another session being replayed here.
+     * token captured from another session being replayed here. Hash it for
+     * Apple, send the RAW value here.
      */
     async signInWithIdToken(input) {
         const context = 'AuthClient.signInWithIdToken';
@@ -297,11 +302,91 @@ class AuthClient {
         return this.http.post(constants_1.API_ENDPOINTS.AUTH.VERIFY_EMAIL, { token, email });
     }
     // ────────── OAuth ────────────────────────────────────────────────────────
-    getOAuthUrl(provider, redirectUrl) {
-        return this.http.get(constants_1.API_ENDPOINTS.AUTH.OAUTH_URL(provider), { params: { redirectUrl } });
+    //
+    // There are two ways a user signs in with Google, Apple or GitHub, and which
+    // one an app gets is not a preference — it follows from what the app has
+    // registered:
+    //
+    //   NATIVE    the platform SDK on the device produces an `idToken`, which
+    //             `signInWithIdToken()` posts. One round trip, no browser. Google
+    //             and Apple only, and ONLY for an app that registered its own
+    //             client ids — a native token's audience IS the app's own bundle
+    //             id, so there is nothing Xenition could supply on its behalf.
+    //
+    //   BROKERED  `startSignIn()` returns a consent URL to open, the gateway does
+    //             the code exchange, and the app redeems the one-time code with
+    //             `completeSignIn()`. Runs on Xenition's own OAuth clients unless
+    //             the app configured its own, so it needs NO configuration at all.
+    //             The only way GitHub can work — GitHub issues no id token — and
+    //             the only way anything works in Expo Go or a web build.
+    //
+    // `signInWithProvider()` in `@xenition/sdk/mobile` picks between them. On the
+    // server side, use these directly.
+    /**
+     * Start a brokered sign-in. Returns the provider consent URL to open in a
+     * browser, plus whether the user will see this app's name or Xenition's.
+     *
+     * `returnTo` is where the finished sign-in is delivered — the app's own deep
+     * link (`myapp://auth`), NOT a URL registered with the provider. It must be
+     * accepted by the app's return-URL rules: with none registered, any
+     * custom-scheme deep link and localhost work and other http(s) URLs do not.
+     */
+    startSignIn(provider, returnTo) {
+        return this.http.get(constants_1.API_ENDPOINTS.AUTH.OAUTH_URL(provider), { params: { returnTo } });
     }
-    handleOAuthCallback(provider, code, state) {
-        return this.http.post(constants_1.API_ENDPOINTS.AUTH.OAUTH_CALLBACK(provider), { code, state });
+    /**
+     * Redeem the one-time code the brokered callback delivered to `returnTo`.
+     *
+     * The code is not a session: it is valid two minutes, bound to this app, and
+     * spent on first use. Redeeming it twice is an error rather than two
+     * sessions — a retry after a dropped response has to restart the sign-in.
+     */
+    completeSignIn(code) {
+        return this.http.post(constants_1.API_ENDPOINTS.AUTH.OAUTH_EXCHANGE, { code });
+    }
+    /**
+     * @deprecated Use {@link startSignIn}. Identical, under the older name.
+     */
+    getOAuthUrl(provider, redirectUrl) {
+        return this.startSignIn(provider, redirectUrl);
+    }
+    /**
+     * @deprecated Use {@link completeSignIn}, which takes only the code.
+     *
+     * This posted to the provider's own callback path, which is where the
+     * PROVIDER redirects a browser — never something an app calls. The state is
+     * consumed by the gateway during the exchange and an app never holds one, so
+     * it is ignored here.
+     */
+    handleOAuthCallback(provider, code, _state) {
+        void provider;
+        void _state;
+        return this.completeSignIn(code);
+    }
+    /**
+     * The deep links and URLs a finished sign-in may be delivered to.
+     *
+     * `mode` is the part worth reading: `open-to-deep-links` means nothing is
+     * registered and any custom-scheme deep link works, `allowlist` means the
+     * list is exhaustive — registering one URL stops custom schemes working too.
+     */
+    listReturnUrls() {
+        return this.http.get(constants_1.API_ENDPOINTS.AUTH.OAUTH_RETURN_URLS);
+    }
+    /**
+     * Register a return URL. Service-key call.
+     *
+     * Registering the FIRST one changes the app's posture: the list becomes
+     * exhaustive and custom-scheme deep links stop being accepted unless they are
+     * on it. That is the point — it is how an app locks itself to a universal
+     * link — but it will break a working sign-in if the deep link is not added.
+     */
+    addReturnUrl(url) {
+        return this.http.post(constants_1.API_ENDPOINTS.AUTH.OAUTH_RETURN_URLS, { url });
+    }
+    /** Remove a return URL. Service-key call. */
+    removeReturnUrl(url) {
+        return this.http.del(constants_1.API_ENDPOINTS.AUTH.OAUTH_RETURN_URLS, { params: { url } });
     }
     /**
      * List the status of every supported OAuth provider for the current app —
@@ -313,12 +398,19 @@ class AuthClient {
         return this.http.get(constants_1.API_ENDPOINTS.AUTH.OAUTH_PROVIDERS);
     }
     /**
-     * Set custom OAuth credentials for one provider on this app. Service-key
-     * call only (the seller dashboard, not end-user code). Re-configuring
-     * with no `clientSecret` preserves the existing one.
+     * Set this app's OWN OAuth credentials for one provider. Service-key call
+     * only (the seller dashboard, not end-user code).
+     *
+     * Doing this has two effects worth knowing before you call it: the consent
+     * screen starts showing THIS app's name instead of Xenition's, and Google or
+     * Apple become usable on the fast native path, which platform credentials can
+     * never offer. `deleteSocialProviderConfig()` reverts to the platform's.
+     *
+     * PUT, not POST — the gateway route is a PUT, and this method posted to it
+     * for as long as it has existed, which is a 405 every time it was called.
      */
     configureSocialProvider(provider, input) {
-        return this.http.post(constants_1.API_ENDPOINTS.AUTH.OAUTH_PROVIDER_CONFIG(provider), input);
+        return this.http.put(constants_1.API_ENDPOINTS.AUTH.OAUTH_PROVIDER_CONFIG(provider), input);
     }
     /**
      * Remove custom credentials for one provider — the app reverts to platform

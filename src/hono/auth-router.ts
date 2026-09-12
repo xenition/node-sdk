@@ -169,6 +169,7 @@ export function authRouter(options: AuthRouterOptions = {}): Hono {
     app.delete('/auth/account', standard);
     app.post('/auth/oauth/:provider/id-token', standard);
     app.post('/auth/oauth/:provider/callback', standard);
+    app.post('/auth/oauth/exchange', standard);
   }
 
   /* ── sign-in (public — a signed-out user has to reach these) ─────────── */
@@ -365,24 +366,50 @@ export function authRouter(options: AuthRouterOptions = {}): Hono {
     return c.json({ providers: normalizeRows(providers) });
   });
 
+  /**
+   * Start a brokered sign-in: hand back the provider consent URL to open.
+   *
+   * `returnTo` is the app's OWN deep link, not anything registered with the
+   * provider — the provider always redirects to the gateway, which then
+   * delivers a one-time code here. `redirectUrl` is accepted as the older
+   * spelling of the same parameter.
+   */
   app.get('/auth/oauth/:provider/url', async (c) => {
     const provider = oauthProvider(c);
     if (!provider) return badRequest(c, providerMessage(c));
-    const redirectUrl = c.req.query('redirectUrl');
-    if (!redirectUrl) return badRequest(c, '"redirectUrl" is required.');
-    return c.json(normalizeRow(await authOf(c).getOAuthUrl(provider, redirectUrl)));
+    const returnTo = c.req.query('returnTo') ?? c.req.query('redirectUrl');
+    if (!returnTo) {
+      return badRequest(
+        c,
+        '"returnTo" is required — the deep link this sign-in should come back to, such as myapp://auth.',
+      );
+    }
+    return c.json(normalizeRow(await authOf(c).startSignIn(provider, returnTo)));
   });
 
-  app.post('/auth/oauth/:provider/callback', async (c) => {
-    const provider = oauthProvider(c);
-    if (!provider) return badRequest(c, providerMessage(c));
+  /**
+   * Redeem the one-time code the sign-in was delivered to the app with.
+   *
+   * Not under `/:provider/` and not the provider's own callback path: the code
+   * is bound to the app and the user, not to which button was pressed, and an
+   * app receiving a deep link should not have to remember which provider
+   * produced it. The old `/auth/oauth/:provider/callback` still works and
+   * ignores the provider, because that is what apps already call.
+   */
+  app.post('/auth/oauth/exchange', async (c) => {
     const body = await readObjectBody(c);
     if (!body) return badRequest(c, 'Body must be a JSON object.');
     const code = stringField(body, 'code');
-    const state = stringField(body, 'state');
-    if (!code || !state) return badRequest(c, '"code" and "state" are required.');
-    const result = await authOf(c).handleOAuthCallback(provider, code, state);
-    return c.json(authResultBody(result));
+    if (!code) return badRequest(c, '"code" is required.');
+    return c.json(authResultBody(await authOf(c).completeSignIn(code)));
+  });
+
+  app.post('/auth/oauth/:provider/callback', async (c) => {
+    const body = await readObjectBody(c);
+    if (!body) return badRequest(c, 'Body must be a JSON object.');
+    const code = stringField(body, 'code');
+    if (!code) return badRequest(c, '"code" is required.');
+    return c.json(authResultBody(await authOf(c).completeSignIn(code)));
   });
 
   /**

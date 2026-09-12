@@ -91,9 +91,46 @@ export interface PagedResult<T> {
 export type OAuthProvider = 'google' | 'github' | 'facebook' | 'twitter' | 'apple';
 
 export interface OAuthUrlResult {
+  /** The provider consent URL to open in a browser. */
   url: string;
+  /**
+   * The sealed state this sign-in carries. Returned for logging and testing
+   * only — an app never has to send it back. The gateway consumes it at the
+   * callback, which the app never sees.
+   */
   state: string;
+  provider?: OAuthProvider;
+  /**
+   * Whose name the user will see on the consent screen: `true` for Xenition's
+   * shared OAuth client, `false` for this app's own. Worth surfacing on a login
+   * screen that wants to explain the Xenition name, and the signal that this
+   * app could upgrade to the faster native path by registering its own
+   * credentials.
+   */
+  usingSSO?: boolean;
 }
+
+/**
+ * How an app's return-URL rules currently behave.
+ *
+ * `open-to-deep-links` — nothing registered. Any custom-scheme deep link
+ * (`myapp://auth`) and localhost are accepted; other http(s) URLs are not.
+ * This is what makes brokered sign-in work with no configuration.
+ *
+ * `allowlist` — at least one URL registered, and the list is now EXHAUSTIVE.
+ * Custom-scheme deep links stop working unless they are on it.
+ */
+export type ReturnUrlMode = 'open-to-deep-links' | 'allowlist';
+
+export interface ReturnUrlPolicy {
+  urls: string[];
+  mode: ReturnUrlMode;
+  /** A sentence describing `mode`, safe to show in a dashboard. */
+  explanation: string;
+}
+
+/** Which sign-in path a provider will actually take for this app. */
+export type SignInLane = 'native' | 'brokered';
 
 /**
  * Status of one OAuth provider for the current app — merged view of the
