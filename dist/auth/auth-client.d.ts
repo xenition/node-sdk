@@ -1,5 +1,5 @@
 import { HttpClient } from '../core/http-client';
-import { AuthResponse, ChangePasswordInput, ConfigureSocialProviderInput, DeleteAccountInput, DeleteAccountResult, IdTokenSignInInput, LoginInput, OAuthProvider, OAuthUrlResult, PagedResult, RegisterInput, ResetPasswordInput, SearchUsersOptions, SendOtpInput, SendOtpResult, Session, ListUsersOptions, SocialProviderStatus, Team, TeamInvitationInput, UpdateProfileInput, User, UserDataExport, VerifyOtpInput } from './types';
+import { AuthResponse, ChangePasswordInput, ConfigureSocialProviderInput, DeleteAccountInput, DeleteAccountResult, IdTokenSignInInput, LoginInput, OAuthProvider, OAuthUrlResult, PagedResult, RegisterInput, ResetPasswordInput, SearchUsersOptions, SendOtpInput, SendOtpResult, Session, ListUsersOptions, ReturnUrlMode, ReturnUrlPolicy, SocialProviderStatus, Team, TeamInvitationInput, UpdateProfileInput, User, UserDataExport, VerifyOtpInput } from './types';
 export declare class AuthClient {
     private readonly http;
     constructor(http: HttpClient);
@@ -45,14 +45,19 @@ export declare class AuthClient {
     /**
      * Sign in with an id token the device obtained natively.
      *
-     * This is what mobile actually does. `getOAuthUrl()` / `handleOAuthCallback()`
-     * are the browser redirect dance; on iOS and Android the platform SDK
-     * completes sign-in locally and hands the app an `idToken`, which the
-     * server verifies against the provider's published keys.
+     * The fast path, and the one with a hard prerequisite: it works ONLY for an
+     * app that registered its own Google/Apple client ids. A native id token's
+     * audience is the app's own bundle id, so Xenition's shared credentials
+     * cannot verify one — which is why this is the single part of social sign-in
+     * that is not covered by the zero-configuration default. Without them the
+     * server answers 412 naming `startSignIn()` as the alternative.
+     *
+     * Google and Apple only. GitHub issues no id token at all.
      *
      * Pass the `nonce` the app generated for this attempt. Apple echoes it
      * inside the token and the server compares the two — that is what stops a
-     * token captured from another session being replayed here.
+     * token captured from another session being replayed here. Hash it for
+     * Apple, send the RAW value here.
      */
     signInWithIdToken(input: IdTokenSignInInput): Promise<AuthResponse>;
     /**
@@ -129,8 +134,63 @@ export declare class AuthClient {
     verifyEmail(token: string, email?: string): Promise<{
         verified: true;
     }>;
+    /**
+     * Start a brokered sign-in. Returns the provider consent URL to open in a
+     * browser, plus whether the user will see this app's name or Xenition's.
+     *
+     * `returnTo` is where the finished sign-in is delivered — the app's own deep
+     * link (`myapp://auth`), NOT a URL registered with the provider. It must be
+     * accepted by the app's return-URL rules: with none registered, any
+     * custom-scheme deep link and localhost work and other http(s) URLs do not.
+     */
+    startSignIn(provider: OAuthProvider, returnTo: string): Promise<OAuthUrlResult>;
+    /**
+     * Redeem the one-time code the brokered callback delivered to `returnTo`.
+     *
+     * The code is not a session: it is valid two minutes, bound to this app, and
+     * spent on first use. Redeeming it twice is an error rather than two
+     * sessions — a retry after a dropped response has to restart the sign-in.
+     */
+    completeSignIn(code: string): Promise<AuthResponse>;
+    /**
+     * @deprecated Use {@link startSignIn}. Identical, under the older name.
+     */
     getOAuthUrl(provider: OAuthProvider, redirectUrl: string): Promise<OAuthUrlResult>;
-    handleOAuthCallback(provider: OAuthProvider, code: string, state: string): Promise<AuthResponse>;
+    /**
+     * @deprecated Use {@link completeSignIn}, which takes only the code.
+     *
+     * This posted to the provider's own callback path, which is where the
+     * PROVIDER redirects a browser — never something an app calls. The state is
+     * consumed by the gateway during the exchange and an app never holds one, so
+     * it is ignored here.
+     */
+    handleOAuthCallback(provider: OAuthProvider, code: string, _state?: string): Promise<AuthResponse>;
+    /**
+     * The deep links and URLs a finished sign-in may be delivered to.
+     *
+     * `mode` is the part worth reading: `open-to-deep-links` means nothing is
+     * registered and any custom-scheme deep link works, `allowlist` means the
+     * list is exhaustive — registering one URL stops custom schemes working too.
+     */
+    listReturnUrls(): Promise<ReturnUrlPolicy>;
+    /**
+     * Register a return URL. Service-key call.
+     *
+     * Registering the FIRST one changes the app's posture: the list becomes
+     * exhaustive and custom-scheme deep links stop being accepted unless they are
+     * on it. That is the point — it is how an app locks itself to a universal
+     * link — but it will break a working sign-in if the deep link is not added.
+     */
+    addReturnUrl(url: string): Promise<{
+        url: string;
+        registered: true;
+    }>;
+    /** Remove a return URL. Service-key call. */
+    removeReturnUrl(url: string): Promise<{
+        removed: string;
+        remaining: number;
+        mode: ReturnUrlMode;
+    }>;
     /**
      * List the status of every supported OAuth provider for the current app —
      * which have custom credentials configured, which are using platform SSO,
@@ -139,9 +199,16 @@ export declare class AuthClient {
      */
     listSocialProviders(): Promise<SocialProviderStatus[]>;
     /**
-     * Set custom OAuth credentials for one provider on this app. Service-key
-     * call only (the seller dashboard, not end-user code). Re-configuring
-     * with no `clientSecret` preserves the existing one.
+     * Set this app's OWN OAuth credentials for one provider. Service-key call
+     * only (the seller dashboard, not end-user code).
+     *
+     * Doing this has two effects worth knowing before you call it: the consent
+     * screen starts showing THIS app's name instead of Xenition's, and Google or
+     * Apple become usable on the fast native path, which platform credentials can
+     * never offer. `deleteSocialProviderConfig()` reverts to the platform's.
+     *
+     * PUT, not POST — the gateway route is a PUT, and this method posted to it
+     * for as long as it has existed, which is a 405 every time it was called.
      */
     configureSocialProvider(provider: OAuthProvider, input: ConfigureSocialProviderInput): Promise<SocialProviderStatus>;
     /**

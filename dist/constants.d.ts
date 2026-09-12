@@ -28,6 +28,8 @@ export declare const API_ENDPOINTS: {
         readonly OAUTH_CALLBACK: (provider: string) => string;
         readonly OAUTH_PROVIDERS: "/app-platform/auth/oauth/providers";
         readonly OAUTH_PROVIDER_CONFIG: (provider: string) => string;
+        readonly OAUTH_EXCHANGE: "/app-platform/auth/oauth/exchange";
+        readonly OAUTH_RETURN_URLS: "/app-platform/auth/oauth/return-urls";
         readonly TEAMS: "/app-platform/auth/teams";
         readonly TEAM_INVITE: (teamId: string) => string;
         readonly REFRESH: "/app-platform/auth/refresh";

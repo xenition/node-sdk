@@ -53,7 +53,7 @@ const makeAuthStub = () => ({
   refresh: jest.fn(async () => AUTH_RESPONSE),
   signInWithIdToken: jest.fn(async () => AUTH_RESPONSE),
   verifyOtp: jest.fn(async () => AUTH_RESPONSE),
-  handleOAuthCallback: jest.fn(async () => AUTH_RESPONSE),
+  completeSignIn: jest.fn(async () => AUTH_RESPONSE),
   sendOtp: jest.fn(async () => ({
     sent: true as const,
     channel: 'email' as const,
@@ -71,7 +71,12 @@ const makeAuthStub = () => ({
   revokeAllSessions: jest.fn(async () => ({ revoked: 3 })),
   deleteAccount: jest.fn(async () => ({ deleted: true as const, purgeAt: '2026-02-01' })),
   exportData: jest.fn(async () => ({ user: USER, sessions: [SESSION], generatedAt: 'now' })),
-  getOAuthUrl: jest.fn(async () => ({ url: 'https://accounts.google.com/o/x', state: 'st-1' })),
+  startSignIn: jest.fn(async () => ({
+    url: 'https://accounts.google.com/o/x',
+    state: 'st-1',
+    provider: 'google' as const,
+    usingSSO: true,
+  })),
   listSocialProviders: jest.fn(async () => [
     {
       provider: 'google' as const,
@@ -190,19 +195,64 @@ describe('sign-in (public — no token attached)', () => {
     });
   });
 
-  it('lists social providers and starts the redirect flow', async () => {
+  it('lists social providers and runs a brokered sign-in end to end', async () => {
     const { api, auth } = makeApp({}, null);
     const providers = await api.auth.socialProviders();
     expect(providers).toHaveLength(1);
     expect(providers[0]).toMatchObject({ provider: 'google', isAvailable: true });
 
-    const started = await api.auth.oauthUrl('google', 'https://app/cb');
-    expect(auth.getOAuthUrl).toHaveBeenCalledWith('google', 'https://app/cb');
-    expect(started).toEqual({ url: 'https://accounts.google.com/o/x', state: 'st-1' });
+    const started = await api.auth.startSignIn('google', 'myapp://auth');
+    expect(auth.startSignIn).toHaveBeenCalledWith('google', 'myapp://auth');
+    expect(started).toMatchObject({ url: 'https://accounts.google.com/o/x', usingSSO: true });
 
-    const finished = await api.auth.oauthCallback('google', 'code-1', 'st-1');
-    expect(auth.handleOAuthCallback).toHaveBeenCalledWith('google', 'code-1', 'st-1');
+    const finished = await api.auth.completeSignIn('code-1');
+    expect(auth.completeSignIn).toHaveBeenCalledWith('code-1');
     expect(finished.token).toBe('access-tok');
+  });
+
+  /**
+   * `returnTo` is the current name and `redirectUrl` is what every app already
+   * sends. Dropping the old one would break a working sign-in at the first
+   * step, with a 400 that names a parameter the caller has never heard of.
+   */
+  it('accepts redirectUrl as the older spelling of returnTo', async () => {
+    const { app, auth } = makeApp({}, null);
+    const res = await app.request('/api/auth/oauth/google/url?redirectUrl=myapp%3A%2F%2Fauth');
+    expect(res.status).toBe(200);
+    expect(auth.startSignIn).toHaveBeenCalledWith('google', 'myapp://auth');
+  });
+
+  /**
+   * The code identifies the app and the user; which button produced it is not
+   * part of redeeming it. An app handling a deep link would otherwise have to
+   * remember the provider across a browser round trip it did not control.
+   */
+  it('redeems a code without being told which provider produced it', async () => {
+    const { app, auth } = makeApp({}, null);
+    const res = await app.request('/api/auth/oauth/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: 'code-1' }),
+    });
+    expect(res.status).toBe(200);
+    expect(auth.completeSignIn).toHaveBeenCalledWith('code-1');
+  });
+
+  /**
+   * The provider-scoped callback is what apps built against the old surface
+   * call. It has to keep working, and it must not start requiring the `state`
+   * it used to demand — the gateway consumes that during the exchange and an
+   * app never holds one.
+   */
+  it('keeps the old provider callback working without a state', async () => {
+    const { app, auth } = makeApp({}, null);
+    const res = await app.request('/api/auth/oauth/google/callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: 'code-1' }),
+    });
+    expect(res.status).toBe(200);
+    expect(auth.completeSignIn).toHaveBeenCalledWith('code-1');
   });
 });
 
@@ -315,7 +365,7 @@ describe('what must NOT be reachable', () => {
     // Unchecked, this would interpolate into the upstream service-key path.
     const res = await app.request('/api/auth/oauth/..%2F..%2Fusers/url?redirectUrl=x');
     expect(res.status).toBe(400);
-    expect(auth.getOAuthUrl).not.toHaveBeenCalled();
+    expect(auth.startSignIn).not.toHaveBeenCalled();
   });
 
   it('drops body fields the input type does not declare', async () => {

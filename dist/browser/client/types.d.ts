@@ -1167,10 +1167,23 @@ export interface AuthClient {
     exportData(): Promise<UserDataExport>;
     /** Which sign-in buttons to render — check `isAvailable` on each. */
     socialProviders(): Promise<SocialProvider[]>;
-    /** Start the browser redirect flow. Mobile uses `signInWithIdToken`. */
+    /**
+     * Start a brokered sign-in and get the consent URL to open.
+     *
+     * `returnTo` is the app's OWN deep link (`myapp://auth`). The provider never
+     * sees it — it redirects to the gateway, which delivers a one-time code
+     * here. Works with no configuration for google, github and apple.
+     */
+    startSignIn(provider: OAuthProvider, returnTo: string): Promise<OAuthUrlResult>;
+    /**
+     * Redeem the one-time code that deep link carried. Valid two minutes, bound
+     * to this app, and spent on first use.
+     */
+    completeSignIn(code: string): Promise<AuthResult>;
+    /** @deprecated Use {@link startSignIn}. */
     oauthUrl(provider: OAuthProvider, redirectUrl: string): Promise<OAuthUrlResult>;
-    /** Finish the browser redirect flow with the code + state it came back with. */
-    oauthCallback(provider: OAuthProvider, code: string, state: string): Promise<AuthResult>;
+    /** @deprecated Use {@link completeSignIn} — the state is not needed. */
+    oauthCallback(provider: OAuthProvider, code: string, state?: string): Promise<AuthResult>;
 }
 export interface JobsClient {
     /**

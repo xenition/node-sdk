@@ -798,10 +798,30 @@ describe('auth', () => {
         expect(calledUrl()).toBe('/api/auth/oauth/providers');
         expect(providers[0].isAvailable).toBe(true);
     });
-    it('builds the oauth url route with the redirect query', async () => {
+    it('starts a brokered sign-in with the returnTo query', async () => {
+        fetchMock.mockResolvedValue(jsonOk({ url: 'https://x', state: 's', usingSSO: true }));
+        await api().auth.startSignIn('github', 'myapp://auth');
+        expect(calledUrl()).toBe('/api/auth/oauth/github/url?returnTo=myapp%3A%2F%2Fauth');
+    });
+    /**
+     * The old name keeps working and now sends the current parameter. Both
+     * spellings are read server-side, so an app on either version of the SDK
+     * reaches the same route.
+     */
+    it('keeps the deprecated oauthUrl helper pointed at the same route', async () => {
         fetchMock.mockResolvedValue(jsonOk({ url: 'https://x', state: 's' }));
         await api().auth.oauthUrl('google', 'https://app.example.com/cb');
-        expect(calledUrl()).toBe('/api/auth/oauth/google/url?redirectUrl=https%3A%2F%2Fapp.example.com%2Fcb');
+        expect(calledUrl()).toBe('/api/auth/oauth/google/url?returnTo=https%3A%2F%2Fapp.example.com%2Fcb');
+    });
+    /**
+     * Redeeming is not provider-scoped: the code is bound to the app and the
+     * user, and an app handling a deep link should not have to remember which
+     * button started the flow.
+     */
+    it('redeems the one-time code without naming a provider', async () => {
+        fetchMock.mockResolvedValue(jsonOk({ token: 'tok', user: { id: 'u1' } }));
+        await api().auth.completeSignIn('code-1');
+        expect(calledUrl()).toBe('/api/auth/oauth/exchange');
     });
 });
 /* ============================= jobs ============================= */

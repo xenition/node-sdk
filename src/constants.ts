@@ -30,6 +30,13 @@ export const API_ENDPOINTS = {
     OAUTH_CALLBACK:         (provider: string) => `/app-platform/auth/oauth/${provider}/callback`,
     OAUTH_PROVIDERS:        '/app-platform/auth/oauth/providers',
     OAUTH_PROVIDER_CONFIG:  (provider: string) => `/app-platform/auth/oauth/${provider}/config`,
+    // Redeem the one-time code the brokered callback delivers to the app's deep
+    // link. Deliberately NOT under `/{provider}/` — the code is bound to the app
+    // and the user, not to which provider produced it, and the app that receives
+    // a deep link should not have to remember which button was pressed.
+    OAUTH_EXCHANGE:         '/app-platform/auth/oauth/exchange',
+    // Where a finished sign-in may be delivered. Service key to change.
+    OAUTH_RETURN_URLS:      '/app-platform/auth/oauth/return-urls',
     TEAMS:                  '/app-platform/auth/teams',
     TEAM_INVITE:            (teamId: string) => `/app-platform/auth/teams/${teamId}/invite`,
     // ── Mobile surface. See docs/PLATFORM-ENDPOINTS.md — these are the

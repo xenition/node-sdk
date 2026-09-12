@@ -519,17 +519,30 @@ export function createAppClient(baseUrl: string, options: AppClientOptions = {})
         const body = await getJson<{ providers: SocialProvider[] }>(`/auth/oauth/providers`);
         return body.providers ?? [];
       },
-      oauthUrl(provider: OAuthProvider, redirectUrl) {
-        const qs = query({ redirectUrl });
+      /**
+       * Start a brokered sign-in. `returnTo` is the app's own deep link — the
+       * provider never sees it; it redirects to the gateway, which delivers a
+       * one-time code to this URL.
+       */
+      startSignIn(provider: OAuthProvider, returnTo: string) {
+        const qs = query({ returnTo });
         return getJson<OAuthUrlResult>(
           `/auth/oauth/${encodeURIComponent(provider)}/url${qs}`,
         );
       },
-      oauthCallback(provider: OAuthProvider, code, state) {
-        return postJson<AuthResult>(`/auth/oauth/${encodeURIComponent(provider)}/callback`, {
-          code,
-          state,
-        });
+      /** Redeem the one-time code that deep link carried. */
+      completeSignIn(code: string) {
+        return postJson<AuthResult>(`/auth/oauth/exchange`, { code });
+      },
+      /** @deprecated Use {@link startSignIn}. */
+      oauthUrl(provider: OAuthProvider, redirectUrl) {
+        return this.startSignIn(provider, redirectUrl);
+      },
+      /** @deprecated Use {@link completeSignIn} — the state is not needed. */
+      oauthCallback(provider: OAuthProvider, code, _state?: string) {
+        void provider;
+        void _state;
+        return this.completeSignIn(code);
       },
     },
 
