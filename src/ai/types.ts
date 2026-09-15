@@ -12,6 +12,13 @@ export type AiProvider =
   | 'anthropic'
   | 'stability';
 
+/**
+ * Who actually answered a call. An app's own provider when it has a key for
+ * one under Manage → AI, otherwise `'xenition'`: the platform engine, billed
+ * to the app's owner.
+ */
+export type AiResultProvider = AiProvider | 'xenition';
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -26,7 +33,7 @@ export interface AiUsage {
 export interface GenerateTextOutput {
   text: string;
   model: string;
-  provider: AiProvider;
+  provider: AiResultProvider;
   usage?: AiUsage;
   usedOwnKey: boolean;
 }
@@ -34,7 +41,7 @@ export interface GenerateTextOutput {
 export interface ChatOutput {
   message: ChatMessage;
   model: string;
-  provider: AiProvider;
+  provider: AiResultProvider;
   usage?: AiUsage;
   usedOwnKey: boolean;
 }
@@ -42,22 +49,46 @@ export interface ChatOutput {
 export interface GenerateImageOutput {
   images: Array<{ url: string; contentType?: string }>;
   model: string;
-  provider: AiProvider;
+  provider: AiResultProvider;
   usedOwnKey: boolean;
 }
 
+/** Where a video job is. `videos` is filled once it is `completed`. */
+export type VideoJobStatus = 'processing' | 'completed' | 'failed';
+
+/**
+ * A video generation job. `generateVideo()` returns one straight away with
+ * `status: 'processing'` and no videos — a clip takes minutes — and
+ * `getVideo()` / `waitForVideo()` return it again as it progresses.
+ */
 export interface GenerateVideoOutput {
   videos: Array<{ url: string; duration?: number }>;
+  jobId: string;
+  status: VideoJobStatus;
+  /** Why the job failed, when `status` is `failed`. */
+  error?: string;
   model: string;
-  provider: AiProvider;
+  provider: AiResultProvider;
   usedOwnKey: boolean;
-  jobId?: string;
+}
+
+export type VideoJob = GenerateVideoOutput;
+
+export interface WaitForVideoOptions {
+  /** Delay between status checks. Default 5000 ms, minimum 1000 ms. */
+  intervalMs?: number;
+  /** Give up after this long. Default 10 minutes. */
+  timeoutMs?: number;
+  /** Stop waiting early. The job itself keeps running on the platform. */
+  signal?: AbortSignal;
+  /** Called with each status the job reports, for a progress indicator. */
+  onStatus?: (job: VideoJob) => void;
 }
 
 export interface GenerateEmbeddingsOutput {
   embeddings: number[][];
   model: string;
-  provider: AiProvider;
+  provider: AiResultProvider;
   dimension: number;
   usedOwnKey: boolean;
 }
@@ -104,9 +135,18 @@ export interface GenerateImageOptions {
 export interface GenerateVideoOptions {
   model?: string;
   provider?: AiProvider;
+  /** Clip length, 1–20 seconds. Default 5. */
   durationSeconds?: number;
+  /** An https image the video starts from. */
   imageUrl?: string;
-  options?: Record<string, unknown>;
+  /** Engine options passed through: `width`, `height`, `fps`, `seed`, `audio`. Others are ignored. */
+  options?: {
+    width?: number;
+    height?: number;
+    fps?: number;
+    seed?: number;
+    audio?: boolean;
+  } & Record<string, unknown>;
 }
 
 export interface GenerateEmbeddingsOptions {
@@ -197,6 +237,7 @@ export interface ChatDelta {
   done: boolean;
   usage?: AiUsage;
   model?: string;
+  provider?: AiResultProvider;
 }
 
 /**

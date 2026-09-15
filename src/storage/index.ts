@@ -6,6 +6,8 @@ export type {
   StorageFile,
   SignedUrlResult,
   SignedUrlOptions,
+  UploadUrlResult,
+  CreateUploadUrlOptions,
   ListFilesOptions,
   ListFilesResult,
 } from './types';

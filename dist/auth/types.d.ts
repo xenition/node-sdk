@@ -78,6 +78,14 @@ export interface PagedResult<T> {
     limit: number;
 }
 export type OAuthProvider = 'google' | 'github' | 'facebook' | 'twitter' | 'apple';
+/**
+ * The providers `startSignIn()` can run. `twitter` is in the registry but has
+ * no sign-in lane, so asking for it fails before any request is made.
+ */
+export declare const BROKERED_PROVIDERS: readonly ["google", "github", "apple", "facebook"];
+export type BrokeredProvider = (typeof BROKERED_PROVIDERS)[number];
+/** Whether a provider name can be passed to `startSignIn()`. */
+export declare function isBrokeredProvider(provider: string): provider is BrokeredProvider;
 export interface OAuthUrlResult {
     /** The provider consent URL to open in a browser. */
     url: string;

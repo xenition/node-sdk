@@ -156,7 +156,14 @@ The last one is what a user reaches for after losing a phone.
 
 ---
 
-## 3.5 `POST /app-platform/storage/signed-url` — **confirmed missing on api-dev**
+## 3.5 `POST /app-platform/storage/signed-url` — **implemented on gateway branch `feature/app-platform-services`**
+
+> **Status (2026-09-15):** `operation: "upload"` now presigns a PUT to R2 and
+> records the file. The response adds `method`, `headers` (send them exactly),
+> `bucket`, `path` and `publicUrl`; an optional `sizeBytes` is signed into the
+> URL. A gateway on the local-disk store answers 501 (`NOT_IMPLEMENTED`).
+> Browser PUTs also need a CORS rule on the bucket. The history below is kept
+> for context.
 
 Verified against `api-dev.xenition.com/v1` on 2026-08-25 with a valid service
 key. `storage.list()` answers fine, so the storage module is deployed and the
@@ -198,8 +205,9 @@ is in one place.
 |---|---|---|
 | `POST /app-platform/ai/transcribe` | speech-to-text, ideally with word timestamps | any voice, meeting, coaching or note app is built on it |
 | `POST /app-platform/ai/speech` | text-to-speech | voiced agents, accessibility |
-| streaming on `/app-platform/ai/chat` | SSE rather than a buffered response | a chat UI that waits 20s for a complete answer reads as broken |
-| `responseFormat: {type:'json_schema'}` on `/ai/chat` | structured output | apps currently prompt for "exact JSON" and hope; that is a parse failure waiting to happen in production |
+| ~~streaming on `/app-platform/ai/chat`~~ | **done**: `POST /ai/chat/stream` (gateway `feature/app-platform-services`) | token-by-token on an app's own key; one delta on the platform lane, which bills on the finished completion |
+| ~~`responseFormat: {type:'json_schema'}` on `/ai/chat`~~ | **done**: sent to the model as an instruction with the schema, code fences stripped | `chatJson()` still shape-checks the reply |
+| ~~`POST /app-platform/ai/video`~~ | **done**: returns a job; `GET /ai/video/{jobId}` reports it (`ai.getVideo`, `ai.waitForVideo`) | service key only |
 | `POST /app-platform/raw/transaction` | a list of statements, one transaction | billing and jobs both have half-apply windows without it |
 | `Idempotency-Key` honoured on writes | mobile retries | a retried purchase verification must not double-apply |
 

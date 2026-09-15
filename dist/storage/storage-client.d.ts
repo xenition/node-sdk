@@ -1,6 +1,6 @@
 import { HttpClient } from '../core/http-client';
 import { UploadBody } from '../core/multipart';
-import { ListFilesOptions, ListFilesResult, SignedUrlOptions, SignedUrlResult, UploadOptions, UploadResult } from './types';
+import { CreateUploadUrlOptions, UploadUrlResult, ListFilesOptions, ListFilesResult, SignedUrlOptions, SignedUrlResult, UploadOptions, UploadResult } from './types';
 /** One report of how much of an upload has left the process so far. */
 export interface UploadProgress {
     /** Bytes handed to the transport. */
@@ -90,16 +90,21 @@ export declare class StorageClient {
     /**
      * A presigned PUT the CLIENT uploads to directly.
      *
-     * The path a mobile app should take for recordings, photos and video: the
-     * bytes go to storage, never through the app's worker, so a long upload
-     * costs no worker time, no CPU budget and no request-size ceiling. Follow
-     * it with a call that records where the file landed.
+     * The path a mobile app or browser should take for recordings, photos and
+     * video: the bytes go to storage, never through the app's worker, so a long
+     * upload costs no worker time, no CPU budget and no request-size ceiling.
+     *
+     * Issue it on the server (service key), hand `url` and `headers` to the
+     * client, and PUT the file with exactly those headers. The file is recorded
+     * when the URL is issued, so `list()` and `getPublicUrl()` already see it
+     * and `publicUrl` is where it will be served.
+     *
+     *   const up = await client.storage.createUploadUrl('videos/intro.mp4', {
+     *     contentType: 'video/mp4', sizeBytes: file.size,
+     *   });
+     *   await fetch(up.url, { method: 'PUT', headers: up.headers, body: file });
      */
-    createUploadUrl(path: string, options?: {
-        bucket?: string;
-        expiresInSeconds?: number;
-        contentType?: string;
-    }): Promise<SignedUrlResult>;
+    createUploadUrl(path: string, options?: CreateUploadUrlOptions): Promise<UploadUrlResult>;
     /**
      * Returns a short-lived signed URL the caller can follow to download
      * the bytes. The SDK intentionally does not proxy bytes through the

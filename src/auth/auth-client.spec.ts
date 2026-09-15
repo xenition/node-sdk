@@ -319,6 +319,23 @@ describe('AuthClient social sign-in', () => {
     return { get, post, put, del, auth: new AuthClient(http) };
   };
 
+  it('starts a Facebook sign-in like any other brokered provider', async () => {
+    const { get, auth } = makeOAuthHttp();
+    await auth.startSignIn('facebook', 'https://app.example/api/auth/oauth/callback');
+    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.AUTH.OAUTH_URL('facebook'), {
+      params: { returnTo: 'https://app.example/api/auth/oauth/callback' },
+    });
+  });
+
+  it('refuses a provider with no sign-in lane before making a request', async () => {
+    const { get, auth } = makeOAuthHttp();
+    await expect(auth.startSignIn('twitter', 'myapp://auth')).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: expect.stringContaining('facebook'),
+    });
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it('starts a brokered sign-in with returnTo, not redirectUrl', async () => {
     const { get, auth } = makeOAuthHttp();
     await auth.startSignIn('github', 'myapp://auth');

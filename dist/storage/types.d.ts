@@ -27,6 +27,28 @@ export interface SignedUrlResult {
     url: string;
     expiresAt: string;
 }
+/** A presigned PUT from `createUploadUrl()`. */
+export interface UploadUrlResult extends SignedUrlResult {
+    method: 'PUT';
+    /**
+     * Headers the PUT must carry exactly — the URL is signed over them, so a
+     * different Content-Type (or Content-Length, when `sizeBytes` was given)
+     * is rejected by storage.
+     */
+    headers: Record<string, string>;
+    bucket: string;
+    path: string;
+    /** Where the file is served once the PUT lands. */
+    publicUrl: string;
+}
+export interface CreateUploadUrlOptions {
+    bucket?: string;
+    /** Seconds the URL stays valid. Default 3600, at most 86400. */
+    expiresInSeconds?: number;
+    contentType?: string;
+    /** The exact size to be uploaded. Signed into the URL, so nothing larger can be stored with it. */
+    sizeBytes?: number;
+}
 export interface ListFilesOptions {
     bucket?: string;
     prefix?: string;

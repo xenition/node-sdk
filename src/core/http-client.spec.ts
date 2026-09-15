@@ -109,6 +109,8 @@ describe('error classification (HTTP status → code)', () => {
     [404, 'NOT_FOUND'],
     [409, 'CONFLICT'],
     [429, 'RATE_LIMITED'],
+    [402, 'QUOTA_EXCEEDED'],
+    [501, 'NOT_IMPLEMENTED'],
     [500, 'SERVER_ERROR'],
     [503, 'SERVER_ERROR'],
     [418, 'UNKNOWN'],

@@ -4,8 +4,11 @@
  */
 
 export interface SendEmailOptions {
+  /** Plain-text alternative for clients that do not render HTML. */
   text?: string;
+  /** Where replies go. The From address itself is always the platform's. */
   replyTo?: string;
+  /** Sender display name. Defaults to the app's name; an email address here is refused. */
   from?: string;
 }
 

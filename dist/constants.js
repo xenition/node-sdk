@@ -80,6 +80,7 @@ exports.API_ENDPOINTS = {
         CHAT: '/app-platform/ai/chat',
         IMAGE: '/app-platform/ai/image',
         VIDEO: '/app-platform/ai/video',
+        VIDEO_JOB: (jobId) => `/app-platform/ai/video/${encodeURIComponent(jobId)}`,
         EMBEDDINGS: '/app-platform/ai/embeddings',
         // Mobile/media surface — see docs/PLATFORM-ENDPOINTS.md.
         TRANSCRIBE: '/app-platform/ai/transcribe',
