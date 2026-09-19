@@ -1,7 +1,7 @@
 # Social sign-in
 
-Google, Apple and GitHub, with no configuration to start and a faster path
-available when you want it.
+Google, Apple, GitHub and Facebook, with no configuration to start and a
+faster path available when you want it.
 
 ---
 
@@ -33,9 +33,39 @@ Which one runs is not a preference. It follows from what the app has registered.
 | How | the device's Google/Apple SDK produces an `idToken` | an in-app browser, the gateway does the code exchange |
 | Round trips | one | two, plus a browser |
 | Credentials | **the app's own, always** | Xenition's by default, the app's if configured |
-| Providers | Google, Apple | Google, Apple, **GitHub** |
+| Providers | Google, Apple | Google, Apple, **GitHub**, **Facebook** |
 | Works in Expo Go | no | yes |
 | Works in a web build | no | yes |
+
+### Facebook
+
+Brokered only. Facebook Login hands a web flow an access token, not an id
+token, so the gateway exchanges the code and reads the profile from the Graph
+API itself (with `appsecret_proof`, so the token is useless to anyone without
+the app secret). A server-side app starts it exactly like the others:
+
+```ts
+const { url } = await client.auth.startSignIn('facebook', 'https://myapp.com/auth/callback');
+// redirect the browser to url; the callback receives ?code=…
+const session = await client.auth.completeSignIn(code);
+```
+
+Two things are specific to Facebook:
+
+- **No email, no sign-in.** Graph returns `email` only for an address the
+  person confirmed with Facebook; accounts registered by phone number have
+  none, and the gateway refuses them because accounts are matched on email.
+  The callback redirects back with `?error=` in that case.
+- **Platform lane needs a Facebook app.** Set `APP_PLATFORM_FACEBOOK_APP_ID`
+  and `APP_PLATFORM_FACEBOOK_APP_SECRET` on the gateway, and add the callback
+  URL it prints at boot under *Facebook Login → Settings → Valid OAuth Redirect
+  URIs*. Until then `listSocialProviders()` reports Facebook unavailable. An
+  app can use its own Facebook app instead through `configureSocialProvider`.
+
+`twitter` is in the `OAuthProvider` type but has no lane;
+`startSignIn('twitter', …)` fails with `VALIDATION_ERROR` before any request.
+`BROKERED_PROVIDERS` and `isBrokeredProvider()` are exported for building a
+login screen.
 
 ### Why native cannot use Xenition's credentials
 

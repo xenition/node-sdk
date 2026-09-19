@@ -4,6 +4,8 @@ import { basename, buildMultipart, byteLengthOf, UploadBody } from '../core/mult
 import { XenitionError } from '../core/errors';
 import { API_ENDPOINTS } from '../constants';
 import {
+  CreateUploadUrlOptions,
+  UploadUrlResult,
   ListFilesOptions,
   ListFilesResult,
   SignedUrlOptions,
@@ -171,37 +173,43 @@ export class StorageClient {
   /**
    * A presigned PUT the CLIENT uploads to directly.
    *
-   * The path a mobile app should take for recordings, photos and video: the
-   * bytes go to storage, never through the app's worker, so a long upload
-   * costs no worker time, no CPU budget and no request-size ceiling. Follow
-   * it with a call that records where the file landed.
+   * The path a mobile app or browser should take for recordings, photos and
+   * video: the bytes go to storage, never through the app's worker, so a long
+   * upload costs no worker time, no CPU budget and no request-size ceiling.
+   *
+   * Issue it on the server (service key), hand `url` and `headers` to the
+   * client, and PUT the file with exactly those headers. The file is recorded
+   * when the URL is issued, so `list()` and `getPublicUrl()` already see it
+   * and `publicUrl` is where it will be served.
+   *
+   *   const up = await client.storage.createUploadUrl('videos/intro.mp4', {
+   *     contentType: 'video/mp4', sizeBytes: file.size,
+   *   });
+   *   await fetch(up.url, { method: 'PUT', headers: up.headers, body: file });
    */
   async createUploadUrl(
     path: string,
-    options: { bucket?: string; expiresInSeconds?: number; contentType?: string } = {},
-  ): Promise<SignedUrlResult> {
+    options: CreateUploadUrlOptions = {},
+  ): Promise<UploadUrlResult> {
     try {
-      return await this.http.post<SignedUrlResult>(API_ENDPOINTS.STORAGE.SIGNED_URL, {
+      return await this.http.post<UploadUrlResult>(API_ENDPOINTS.STORAGE.SIGNED_URL, {
         bucket: options.bucket || DEFAULT_BUCKET,
         path,
         operation: 'upload' as const,
         expiresInSeconds: options.expiresInSeconds ?? 3600,
         contentType: options.contentType,
+        sizeBytes: options.sizeBytes,
       });
     } catch (err) {
-      // The gateway currently ignores `operation` and looks the path up as
-      // if this were a download, so it answers "file not found" — for the
-      // one call whose whole purpose is a file that does not exist yet.
-      // Passing that through sends the caller hunting for a missing file
-      // instead of telling them presigned upload is not usable.
-      if (err instanceof XenitionError && err.code === 'NOT_FOUND') {
+      // Gateways from before presigned upload looked the path up as if this
+      // were a download and answered "file not found" — for the one call
+      // whose whole purpose is a file that does not exist yet.
+      if (err instanceof XenitionError && (err.code === 'NOT_FOUND' || err.code === 'NOT_IMPLEMENTED')) {
         throw new XenitionError(
-          'NOT_FOUND',
-          `StorageClient.createUploadUrl("${path}"): the gateway answered "file not found". ` +
-            'It is ignoring operation:"upload" on /app-platform/storage/signed-url and ' +
-            'resolving the path as a download, so no upload URL can be issued for a new ' +
-            'file. Use upload() to send the bytes through your worker until the gateway ' +
-            'honours the operation field. See docs/PLATFORM-ENDPOINTS.md.',
+          err.code,
+          `StorageClient.createUploadUrl("${path}"): this gateway cannot issue upload URLs ` +
+            '(an older gateway, or an object store that cannot presign). Use upload() to ' +
+            'send the bytes through your server instead.',
           { status: err.status, details: err.details },
         );
       }

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthClient = void 0;
 const errors_1 = require("../core/errors");
 const constants_1 = require("../constants");
+const types_1 = require("./types");
 /**
  * Auth client — wraps the xenition backend's `/app-platform/auth/*`
  * surface. Used through `xenition.auth`, not instantiated directly.
@@ -303,7 +304,7 @@ class AuthClient {
     }
     // ────────── OAuth ────────────────────────────────────────────────────────
     //
-    // There are two ways a user signs in with Google, Apple or GitHub, and which
+    // There are two ways a user signs in with Google, Apple, GitHub or Facebook, and which
     // one an app gets is not a preference — it follows from what the app has
     // registered:
     //
@@ -317,7 +318,8 @@ class AuthClient {
     //             the code exchange, and the app redeems the one-time code with
     //             `completeSignIn()`. Runs on Xenition's own OAuth clients unless
     //             the app configured its own, so it needs NO configuration at all.
-    //             The only way GitHub can work — GitHub issues no id token — and
+    //             The only way GitHub and Facebook can work — neither issues an
+    //             id token to a web flow — and
     //             the only way anything works in Expo Go or a web build.
     //
     // `signInWithProvider()` in `@xenition/sdk/mobile` picks between them. On the
@@ -332,6 +334,9 @@ class AuthClient {
      * custom-scheme deep link and localhost work and other http(s) URLs do not.
      */
     startSignIn(provider, returnTo) {
+        if (!(0, types_1.isBrokeredProvider)(provider)) {
+            return Promise.reject(new errors_1.XenitionError('VALIDATION_ERROR', `AuthClient.startSignIn: "${provider}" has no sign-in lane — use one of ${types_1.BROKERED_PROVIDERS.join(', ')}.`));
+        }
         return this.http.get(constants_1.API_ENDPOINTS.AUTH.OAUTH_URL(provider), { params: { returnTo } });
     }
     /**

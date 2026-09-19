@@ -147,8 +147,9 @@ Missing against both Supabase and Appwrite: **image transformations**,
 **resumable uploads** (a 200 MB video on hotel wifi cannot be retried today),
 **a CDN**, and **encryption at rest as a stated property**. Media
 transcode/duration/thumbnails are already on the "not started" list, and
-presigned upload is blocked gateway-side (#008), so large files must pass
-through the worker.
+presigned upload is implemented on the gateway branch
+`feature/app-platform-services` (`storage.createUploadUrl`); until that is
+deployed, large files must pass through the worker.
 
 ### 9. There is no emulator, and the test harness proved it can lie
 

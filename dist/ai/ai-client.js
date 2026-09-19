@@ -6,15 +6,27 @@ exports.parseSseStream = parseSseStream;
 const errors_1 = require("../core/errors");
 const constants_1 = require("../constants");
 /**
- * AI surface for generated apps. One SDK, many providers — xenition routes
- * each call to the right backend (OpenRouter / OpenAI / Runware / fal / …)
- * based on `options.provider` or a sensible default per kind.
+ * AI surface for generated apps. Each call runs on one of two lanes:
  *
- *   // text / chat / embeddings default to OpenRouter
+ *   OWN KEY   the app added a provider key under Manage → AI (OpenRouter,
+ *             OpenAI, Gemini or Anthropic). Text, chat, streaming chat and
+ *             embeddings go straight to that provider with that key, and the
+ *             app pays its provider. `usedOwnKey` is true.
+ *   PLATFORM  no usable key. The call runs on the Xenition engine and its real
+ *             cost is charged to the app owner's credits. `provider` is
+ *             `'xenition'`. Image and video always run here.
+ *
  *   const { text } = await client.ai.generateText('Summarize this post');
- *
- *   // images default to Runware; video → fal
  *   const { images } = await client.ai.generateImage('a red fox in snow');
+ *
+ *   // video is a job: start it, then wait (or poll getVideo from a cron)
+ *   const job = await client.ai.generateVideo('a red fox running');
+ *   const { videos } = await client.ai.waitForVideo(job.jobId);
+ *
+ * Failures are errors, not empty results: a 402 (`QUOTA_EXCEEDED`) means
+ * the owner's credits are used up, a 503 means this deployment has no AI
+ * engine, and a 400 naming the provider means the app's own key was refused.
+ * Video needs a service key.
  *   const { videos } = await client.ai.generateVideo('a red fox running');
  *
  * BYOK: sellers bring their own key via `client.ai.keys.create({ provider,
@@ -22,35 +34,75 @@ const constants_1 = require("../constants");
  * it instead of the platform key (and stops billing ai_credits).
  */
 /**
- * The one thing an empty AI response almost always means.
+ * An empty 200 from an AI route.
  *
- * When an app has no AI provider key the gateway still answers 200, with
- * an empty array (and `usedOwnKey: false`). Passing that back as success
- * is the worst kind of failure: nothing throws, and the problem reappears
- * far away as an empty search result or a blank image, with nothing
- * pointing back at the missing key.
+ * Current gateways answer a call they cannot serve with an error status. Only
+ * a gateway from before real AI shipped answers 200 with an empty array, so
+ * that is what this names — passing the empty result back as success would
+ * let the failure resurface far away as a blank image or a search that
+ * matches nothing.
  */
 function noProviderKey(method, what) {
-    return new errors_1.XenitionError('VALIDATION_ERROR', `AiClient.${method}: the platform ${what}. This app has no AI provider key ` +
-        'configured, so AI calls return empty results instead of failing. Add one in ' +
-        'the Xenition dashboard under Manage -> AI.');
+    return new errors_1.XenitionError('NOT_IMPLEMENTED', `AiClient.${method}: the platform ${what}. This gateway predates real AI ` +
+        'generation and answers with placeholders; update the Xenition gateway, or ' +
+        'add a provider key under Manage -> AI.');
 }
+/**
+ * True when a text reply cannot have come from a model. A real completion runs either on the app's
+ * own provider key (`usedOwnKey`) or on the platform's engine (`provider: 'xenition'`). Older
+ * gateways answer every text call with a fixed sentence, marked neither way, and that sentence must
+ * not reach a user as if it were an answer.
+ */
+function isPlaceholder(reply) {
+    return reply.usedOwnKey !== true && reply.provider !== 'xenition';
+}
+const sleep = (ms, signal) => new Promise((resolve, reject) => {
+    if (signal?.aborted)
+        return reject(cancelled());
+    const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+    }, ms);
+    const onAbort = () => {
+        clearTimeout(timer);
+        reject(cancelled());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+});
+const cancelled = () => new errors_1.XenitionError('CANCELLED', 'AiClient.waitForVideo: stopped waiting; the job keeps running.');
 class AiClient {
     constructor(http) {
         this.http = http;
         this.keys = new AiKeysClient(http);
     }
     async generateText(prompt, options = {}) {
-        return this.http.post(constants_1.API_ENDPOINTS.AI.TEXT, {
+        const result = await this.http.post(constants_1.API_ENDPOINTS.AI.TEXT, {
             prompt,
             ...options,
         });
+        if (typeof result?.text === 'string' && isPlaceholder(result)) {
+            throw noProviderKey('generateText', 'answered with a placeholder instead of a completion');
+        }
+        return result;
     }
     async chat(messages, options = {}) {
-        return this.http.post(constants_1.API_ENDPOINTS.AI.CHAT, {
+        const result = await this.http.post(constants_1.API_ENDPOINTS.AI.CHAT, {
             messages,
             ...options,
         });
+        if (typeof result?.message?.content === 'string')
+            return result;
+        // Some gateways answer chat with the text shape ({ text }) rather than { message }. A real
+        // completion in that shape is returned as the message this method promises; a placeholder is
+        // refused, so it is never shown to a user as the model's reply.
+        if (typeof result?.text === 'string') {
+            if (isPlaceholder(result)) {
+                throw noProviderKey('chat', 'answered with a placeholder instead of a completion');
+            }
+            const { text, ...rest } = result;
+            return { ...rest, message: { role: 'assistant', content: text } };
+        }
+        return result;
     }
     async generateImage(prompt, options = {}) {
         const result = await this.http.post(constants_1.API_ENDPOINTS.AI.IMAGE, {
@@ -62,11 +114,53 @@ class AiClient {
         }
         return result;
     }
+    /**
+     * Start generating a video. Returns at once with `status: 'processing'`
+     * and a `jobId`; the clip takes minutes. Follow with {@link waitForVideo},
+     * or store the id and check {@link getVideo} later — a request handler
+     * should not sit on a multi-minute wait. Needs a service key.
+     */
     async generateVideo(prompt, options = {}) {
+        if (typeof prompt !== 'string' || prompt.trim() === '') {
+            throw new errors_1.XenitionError('VALIDATION_ERROR', 'AiClient.generateVideo: "prompt" must be a non-empty string.');
+        }
         return this.http.post(constants_1.API_ENDPOINTS.AI.VIDEO, {
             prompt,
             ...options,
         });
+    }
+    /** The current state of a video job this app started. */
+    async getVideo(jobId) {
+        if (typeof jobId !== 'string' || jobId.trim() === '') {
+            throw new errors_1.XenitionError('VALIDATION_ERROR', 'AiClient.getVideo: "jobId" must be a non-empty string.');
+        }
+        return this.http.get(constants_1.API_ENDPOINTS.AI.VIDEO_JOB(jobId));
+    }
+    /**
+     * Poll a video job until it finishes. Resolves with the completed job (its
+     * `videos` filled); throws `JOB_FAILED` if generation failed, `TIMEOUT`
+     * after `timeoutMs`, and `CANCELLED` when `signal` aborts. Giving up
+     * does not stop the job — `getVideo()` still finds it later.
+     */
+    async waitForVideo(job, options = {}) {
+        const jobId = typeof job === 'string' ? job : job?.jobId;
+        const interval = Math.max(1000, options.intervalMs ?? 5000);
+        const deadline = Date.now() + (options.timeoutMs ?? 10 * 60 * 1000);
+        for (;;) {
+            if (options.signal?.aborted)
+                throw cancelled();
+            const current = await this.getVideo(jobId);
+            options.onStatus?.(current);
+            if (current.status === 'completed')
+                return current;
+            if (current.status === 'failed') {
+                throw new errors_1.XenitionError('JOB_FAILED', `AiClient.waitForVideo: video job ${jobId} failed: ${current.error ?? 'no reason given'}`, { details: { jobId } });
+            }
+            if (Date.now() + interval > deadline) {
+                throw new errors_1.XenitionError('TIMEOUT', `AiClient.waitForVideo: video job ${jobId} is still processing; check it later with getVideo().`, { details: { jobId } });
+            }
+            await sleep(interval, options.signal);
+        }
     }
     async generateEmbeddings(input, options = {}) {
         const inputs = Array.isArray(input) ? input : [input];
@@ -270,20 +364,28 @@ function parseSseEvent(event) {
     const payload = dataLines.join('\n');
     if (payload === '[DONE]')
         return { text: '', done: true };
+    let parsed;
     try {
-        const parsed = JSON.parse(payload);
-        return {
-            text: parsed.text ?? parsed.delta ?? '',
-            done: parsed.done === true,
-            usage: parsed.usage,
-            model: parsed.model,
-        };
+        parsed = JSON.parse(payload);
     }
     catch {
         // A malformed frame must not kill a stream that is otherwise fine —
         // the next token is usually right behind it.
         return null;
     }
+    // The gateway reports a provider that dropped mid-reply as a frame, since
+    // the 200 status has already been sent. Ending quietly would hand the caller
+    // half an answer as if it were the whole one.
+    if (typeof parsed.error === 'string' && parsed.error !== '') {
+        throw new errors_1.XenitionError('SERVER_ERROR', `AiClient.streamChat: ${parsed.error}`);
+    }
+    return {
+        text: parsed.text ?? parsed.delta ?? '',
+        done: parsed.done === true,
+        usage: parsed.usage,
+        model: parsed.model,
+        provider: parsed.provider,
+    };
 }
 /**
  * BYOK key management. All methods require a service key.

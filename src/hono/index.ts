@@ -160,6 +160,7 @@ export {
 export type { AuthUser, XenitionAuthOptions } from './auth';
 export {
   badRequest,
+  EndUserAuthRejection,
   forbidden,
   unauthorized,
   honoErrorHandler,

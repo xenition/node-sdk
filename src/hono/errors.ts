@@ -152,7 +152,25 @@ function httpExceptionResponse(err: HTTPException, c: Context): Response {
 }
 
 /** Shared `app.onError` handler — see module doc for the mapping rules. */
+/**
+ * An end-user credential was rejected — wrong password, wrong code, spent refresh
+ * token. Carried as its own type so it answers 401 rather than being read as a
+ * service-key failure (502).
+ *
+ * Handled here, in the shared handler, and not only in the auth router's own
+ * `onError`: a router mounted into an app with `app.route()` runs under the
+ * APP's error handler, so a type only the router understood reached the app as
+ * an unknown error and a mistyped password answered 500.
+ */
+export class EndUserAuthRejection extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EndUserAuthRejection';
+  }
+}
+
 export function honoErrorHandler(err: Error | unknown, c: Context): Response {
+  if (err instanceof EndUserAuthRejection) return unauthorized(c, err.message);
   // First, ahead of the message-shape sniffing below: a route that threw an
   // HTTPException has already said what it means, and guessing from its
   // text could only overrule it.

@@ -82,6 +82,47 @@ describe('chat', () => {
     });
     expect(post.mock.calls[0][1].responseFormat).toMatchObject({ type: 'json_schema', schema });
   });
+
+  it('returns a { message } reply unchanged', async () => {
+    const { post, ai } = makeAi();
+    const reply = { message: { role: 'assistant', content: 'pong' }, model: 'm', provider: 'openai', usedOwnKey: true };
+    post.mockResolvedValue(reply);
+    await expect(ai.chat([{ role: 'user', content: 'ping' }])).resolves.toEqual(reply);
+  });
+
+  it('turns a real completion in the text shape into the message it promises', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue({ text: 'pong', model: 'm', provider: 'xenition', usedOwnKey: false, usage: { inputTokens: 3 } });
+    const result = await ai.chat([{ role: 'user', content: 'ping' }]);
+    expect(result.message).toEqual({ role: 'assistant', content: 'pong' });
+    expect(result).toMatchObject({ provider: 'xenition', usage: { inputTokens: 3 } });
+    expect(result).not.toHaveProperty('text');
+  });
+
+  it('refuses a placeholder rather than passing it off as the model reply', async () => {
+    // An old gateway answers every chat with a fixed "add an AI key" sentence, on no key and no engine.
+    const { post, ai } = makeAi();
+    post.mockResolvedValue({ text: 'AI text generation runs through your configured provider key.', model: 'gpt-4o-mini', provider: 'openai', usedOwnKey: false });
+    const failure = await ai.chat([{ role: 'user', content: 'ping' }]).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(XenitionError);
+    expect(failure).toMatchObject({ code: 'NOT_IMPLEMENTED' });
+  });
+});
+
+describe('generateText', () => {
+  it('returns a completion from the app key or the platform engine', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue({ text: 'pong', model: 'm', provider: 'openai', usedOwnKey: true });
+    await expect(ai.generateText('ping')).resolves.toMatchObject({ text: 'pong' });
+    post.mockResolvedValue({ text: 'pong', model: 'm', provider: 'xenition', usedOwnKey: false });
+    await expect(ai.generateText('ping')).resolves.toMatchObject({ text: 'pong' });
+  });
+
+  it('refuses a placeholder', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue({ text: 'Add an AI key in Manage -> AI.', model: 'gpt-4o-mini', provider: 'openai', usedOwnKey: false });
+    await expect(ai.generateText('ping')).rejects.toMatchObject({ code: 'NOT_IMPLEMENTED' });
+  });
 });
 
 describe('streamChat', () => {
@@ -252,7 +293,7 @@ describe('chatJson', () => {
   });
 });
 
-describe('AiClient — empty results mean no provider key', () => {
+describe('AiClient — an empty 200 is an outdated gateway, not success', () => {
   /**
    * Found in the lab: with no AI key configured, api-dev answers 200 with
    * { embeddings: [], usedOwnKey: false } and { images: [] }. The lab
@@ -264,12 +305,12 @@ describe('AiClient — empty results mean no provider key', () => {
 
   it('generateEmbeddings throws instead of returning zero vectors', async () => {
     const ai = clientWith({ embeddings: [], model: 'text-embedding-3-small', usedOwnKey: false });
-    await expect(ai.generateEmbeddings('hello')).rejects.toThrow(/no AI provider key/);
+    await expect(ai.generateEmbeddings('hello')).rejects.toThrow(/predates real AI/);
   });
 
   it('generateImage throws instead of returning zero images', async () => {
     const ai = clientWith({ images: [], model: 'dall-e-3', usedOwnKey: false });
-    await expect(ai.generateImage('a red fox')).rejects.toThrow(/no AI provider key/);
+    await expect(ai.generateImage('a red fox')).rejects.toThrow(/predates real AI/);
   });
 
   it('a real embedding response passes through untouched', async () => {
@@ -288,5 +329,106 @@ describe('AiClient — empty results mean no provider key', () => {
     const payload = { embeddings: [], model: 'm' };
     const ai = clientWith(payload);
     await expect(ai.generateEmbeddings([])).resolves.toEqual(payload);
+  });
+});
+
+describe('AiClient — video jobs', () => {
+  const job = (status: string, extra: Record<string, unknown> = {}) => ({
+    jobId: 'job-1', status, videos: [], model: 'veo', provider: 'xenition', usedOwnKey: false, ...extra,
+  });
+
+  it('starts a video with the prompt and options', async () => {
+    const post = jest.fn().mockResolvedValue(job('processing'));
+    const ai = new AiClient({ post } as unknown as HttpClient);
+    const started = await ai.generateVideo('a red fox', { durationSeconds: 8, imageUrl: 'https://x/a.png' });
+    expect(post).toHaveBeenCalledWith(API_ENDPOINTS.AI.VIDEO, {
+      prompt: 'a red fox', durationSeconds: 8, imageUrl: 'https://x/a.png',
+    });
+    expect(started.jobId).toBe('job-1');
+  });
+
+  it('refuses an empty prompt before spending a request', async () => {
+    const post = jest.fn();
+    const ai = new AiClient({ post } as unknown as HttpClient);
+    await expect(ai.generateVideo('  ')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('reads a job by id', async () => {
+    const get = jest.fn().mockResolvedValue(job('processing'));
+    const ai = new AiClient({ get } as unknown as HttpClient);
+    await ai.getVideo('job/1');
+    expect(get).toHaveBeenCalledWith('/app-platform/ai/video/job%2F1');
+  });
+
+  it('waits until the job completes and reports each status', async () => {
+    const done = job('completed', { videos: [{ url: 'https://cdn/x.mp4' }] });
+    const get = jest.fn()
+      .mockResolvedValueOnce(job('processing'))
+      .mockResolvedValueOnce(done);
+    const ai = new AiClient({ get } as unknown as HttpClient);
+    const seen: string[] = [];
+    jest.useFakeTimers();
+    try {
+      const waiting = ai.waitForVideo('job-1', { intervalMs: 1000, onStatus: (j) => seen.push(j.status) });
+      await jest.advanceTimersByTimeAsync(1000);
+      await expect(waiting).resolves.toEqual(done);
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(seen).toEqual(['processing', 'completed']);
+  });
+
+  it('throws JOB_FAILED with the reason when generation fails', async () => {
+    const get = jest.fn().mockResolvedValue(job('failed', { error: 'prompt blocked' }));
+    const ai = new AiClient({ get } as unknown as HttpClient);
+    await expect(ai.waitForVideo({ jobId: 'job-1' })).rejects.toMatchObject({
+      code: 'JOB_FAILED',
+      message: expect.stringContaining('prompt blocked'),
+    });
+  });
+
+  it('times out without pretending the job stopped', async () => {
+    const get = jest.fn().mockResolvedValue(job('processing'));
+    const ai = new AiClient({ get } as unknown as HttpClient);
+    await expect(ai.waitForVideo('job-1', { intervalMs: 1000, timeoutMs: 500 })).rejects.toMatchObject({
+      code: 'TIMEOUT',
+      message: expect.stringContaining('getVideo'),
+    });
+  });
+
+  it('stops waiting when the signal aborts', async () => {
+    const get = jest.fn().mockResolvedValue(job('processing'));
+    const ai = new AiClient({ get } as unknown as HttpClient);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(ai.waitForVideo('job-1', { signal: controller.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+  });
+});
+
+describe('parseSseStream — gateway frames', () => {
+  it('reads delta frames and the provider on the final frame', async () => {
+    const deltas: ChatDelta[] = [];
+    for await (const d of parseSseStream(sseResponse([
+      'data: {"delta":"Hel"}\n\n',
+      'data: {"delta":"lo"}\n\n',
+      'data: {"done":true,"model":"m","provider":"openrouter","usage":{"inputTokens":1,"outputTokens":2,"totalTokens":3}}\n\n',
+    ]))) {
+      deltas.push(d);
+    }
+    expect(deltas.map((d) => d.text).join('')).toBe('Hello');
+    expect(deltas[2]).toMatchObject({ done: true, provider: 'openrouter' });
+  });
+
+  it('throws when the provider drops mid-reply instead of ending quietly', async () => {
+    const run = async () => {
+      for await (const _ of parseSseStream(sseResponse([
+        'data: {"delta":"Hel"}\n\n',
+        'data: {"error":"the stream was interrupted"}\n\n',
+      ]))) {
+        void _;
+      }
+    };
+    await expect(run()).rejects.toThrow(/interrupted/);
   });
 });

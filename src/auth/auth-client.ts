@@ -2,6 +2,8 @@ import { HttpClient } from '../core/http-client';
 import { XenitionError } from '../core/errors';
 import { API_ENDPOINTS } from '../constants';
 import {
+  BROKERED_PROVIDERS,
+  isBrokeredProvider,
   AuthResponse,
   ChangePasswordInput,
   ConfigureSocialProviderInput,
@@ -426,7 +428,7 @@ export class AuthClient {
 
   // ────────── OAuth ────────────────────────────────────────────────────────
   //
-  // There are two ways a user signs in with Google, Apple or GitHub, and which
+  // There are two ways a user signs in with Google, Apple, GitHub or Facebook, and which
   // one an app gets is not a preference — it follows from what the app has
   // registered:
   //
@@ -440,7 +442,8 @@ export class AuthClient {
   //             the code exchange, and the app redeems the one-time code with
   //             `completeSignIn()`. Runs on Xenition's own OAuth clients unless
   //             the app configured its own, so it needs NO configuration at all.
-  //             The only way GitHub can work — GitHub issues no id token — and
+  //             The only way GitHub and Facebook can work — neither issues an
+  //             id token to a web flow — and
   //             the only way anything works in Expo Go or a web build.
   //
   // `signInWithProvider()` in `@xenition/sdk/mobile` picks between them. On the
@@ -459,6 +462,14 @@ export class AuthClient {
     provider: OAuthProvider,
     returnTo: string,
   ): Promise<OAuthUrlResult> {
+    if (!isBrokeredProvider(provider)) {
+      return Promise.reject(
+        new XenitionError(
+          'VALIDATION_ERROR',
+          `AuthClient.startSignIn: "${provider}" has no sign-in lane — use one of ${BROKERED_PROVIDERS.join(', ')}.`,
+        ),
+      );
+    }
     return this.http.get<OAuthUrlResult>(
       API_ENDPOINTS.AUTH.OAUTH_URL(provider),
       { params: { returnTo } },

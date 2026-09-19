@@ -3,6 +3,7 @@ export type { XenitionClientOptions } from './xenition-client';
 
 // Auth module
 export { AuthClient } from './auth/auth-client';
+export { BROKERED_PROVIDERS, isBrokeredProvider } from './auth/types';
 export type {
   User,
   Session,
@@ -16,6 +17,7 @@ export type {
   PagedResult,
   OAuthProvider,
   OAuthUrlResult,
+  BrokeredProvider,
   Team,
   TeamInvitationInput,
   ResetPasswordInput,
@@ -53,6 +55,8 @@ export type {
   StorageFile,
   SignedUrlResult,
   SignedUrlOptions,
+  UploadUrlResult,
+  CreateUploadUrlOptions,
   ListFilesOptions,
   ListFilesResult,
 } from './storage';
@@ -77,6 +81,10 @@ export type {
 export { AiClient, AiKeysClient, parseJsonReply, parseSseStream } from './ai';
 export type {
   AiProvider,
+  AiResultProvider,
+  VideoJob,
+  VideoJobStatus,
+  WaitForVideoOptions,
   AiUsage,
   ChatMessage,
   GenerateTextOutput,

@@ -3,23 +3,38 @@ import { StorageClient, UploadProgress } from './storage-client';
 import { RequestOptions } from '../core/http-client';
 import { XenitionError } from '../core/errors';
 
-describe('createUploadUrl — the gateway ignores operation:"upload"', () => {
+describe('createUploadUrl — presigned PUT', () => {
   /**
-   * Probed directly against api-dev: /storage/signed-url returns the same
-   * download URL for operation:"upload" as for "download", and 404s
-   * "file not found" for a path that does not exist yet — which is every
-   * upload. Passing "file not found" through sends the caller looking for
-   * a missing file instead of telling them the feature is unusable.
+   * Older gateways looked the path up as a download and 404'd "file not
+   * found" for every new file; a disk-backed gateway answers 501. Either way
+   * the caller needs to hear that upload URLs are unavailable, not go looking
+   * for a missing file.
    */
-  it('replaces the gateway 404 with what actually went wrong', async () => {
+  it('replaces an old gateway 404 with what actually went wrong', async () => {
     const post = jest.fn().mockRejectedValue(
       new XenitionError('NOT_FOUND', 'file not found', { status: 404 }),
     );
     const storage = new StorageClient({ post } as never);
-    await expect(storage.createUploadUrl('lab/new.m4a')).rejects.toThrow(
-      /ignoring operation:"upload"/,
-    );
+    await expect(storage.createUploadUrl('lab/new.m4a')).rejects.toThrow(/cannot issue upload URLs/);
     await expect(storage.createUploadUrl('lab/new.m4a')).rejects.toThrow(/lab\/new\.m4a/);
+  });
+
+  it('explains a store that cannot presign', async () => {
+    const post = jest.fn().mockRejectedValue(
+      new XenitionError('NOT_IMPLEMENTED', 'cannot presign', { status: 501 }),
+    );
+    const storage = new StorageClient({ post } as never);
+    await expect(storage.createUploadUrl('a.mp4')).rejects.toMatchObject({ code: 'NOT_IMPLEMENTED' });
+  });
+
+  it('sends the content type and the size to sign into the URL', async () => {
+    const post = jest.fn().mockResolvedValue({});
+    const storage = new StorageClient({ post } as never);
+    await storage.createUploadUrl('videos/intro.mp4', { bucket: 'media', contentType: 'video/mp4', sizeBytes: 1234 });
+    expect(post).toHaveBeenCalledWith('/app-platform/storage/signed-url', {
+      bucket: 'media', path: 'videos/intro.mp4', operation: 'upload',
+      expiresInSeconds: 3600, contentType: 'video/mp4', sizeBytes: 1234,
+    });
   });
 
   it('leaves every other error alone', async () => {

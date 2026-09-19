@@ -1,5 +1,5 @@
 import { HttpClient } from '../core/http-client';
-import { AiKeyRecord, ChatDelta, ChatMessage, ChatOptions, ChatOutput, CreateAiKeyInput, GenerateEmbeddingsOptions, GenerateEmbeddingsOutput, GenerateImageOptions, GenerateImageOutput, GenerateTextOptions, GenerateTextOutput, GenerateVideoOptions, GenerateVideoOutput, SpeechOptions, SpeechOutput, TranscribeOptions, TranscribeOutput, UpdateAiKeyInput } from './types';
+import { AiKeyRecord, ChatDelta, ChatMessage, ChatOptions, ChatOutput, CreateAiKeyInput, GenerateEmbeddingsOptions, GenerateEmbeddingsOutput, GenerateImageOptions, GenerateImageOutput, GenerateTextOptions, GenerateTextOutput, GenerateVideoOptions, GenerateVideoOutput, VideoJob, WaitForVideoOptions, SpeechOptions, SpeechOutput, TranscribeOptions, TranscribeOutput, UpdateAiKeyInput } from './types';
 export declare class AiClient {
     private readonly http;
     readonly keys: AiKeysClient;
@@ -7,7 +7,22 @@ export declare class AiClient {
     generateText(prompt: string, options?: GenerateTextOptions): Promise<GenerateTextOutput>;
     chat(messages: ChatMessage[], options?: ChatOptions): Promise<ChatOutput>;
     generateImage(prompt: string, options?: GenerateImageOptions): Promise<GenerateImageOutput>;
+    /**
+     * Start generating a video. Returns at once with `status: 'processing'`
+     * and a `jobId`; the clip takes minutes. Follow with {@link waitForVideo},
+     * or store the id and check {@link getVideo} later — a request handler
+     * should not sit on a multi-minute wait. Needs a service key.
+     */
     generateVideo(prompt: string, options?: GenerateVideoOptions): Promise<GenerateVideoOutput>;
+    /** The current state of a video job this app started. */
+    getVideo(jobId: string): Promise<VideoJob>;
+    /**
+     * Poll a video job until it finishes. Resolves with the completed job (its
+     * `videos` filled); throws `JOB_FAILED` if generation failed, `TIMEOUT`
+     * after `timeoutMs`, and `CANCELLED` when `signal` aborts. Giving up
+     * does not stop the job — `getVideo()` still finds it later.
+     */
+    waitForVideo(job: string | Pick<VideoJob, 'jobId'>, options?: WaitForVideoOptions): Promise<VideoJob>;
     generateEmbeddings(input: string | string[], options?: GenerateEmbeddingsOptions): Promise<GenerateEmbeddingsOutput>;
     /**
      * Chat, but the reply comes back parsed and shape-checked.

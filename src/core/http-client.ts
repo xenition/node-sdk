@@ -717,6 +717,10 @@ export class HttpClient {
     if (status === 404) return 'NOT_FOUND';
     if (status === 409) return 'CONFLICT';
     if (status === 429) return 'RATE_LIMITED';
+    // A 402 is a spend limit the owner can act on, and a 501 is a capability this
+    // deployment lacks: neither is an outage, and neither should be retried.
+    if (status === 402) return 'QUOTA_EXCEEDED';
+    if (status === 501) return 'NOT_IMPLEMENTED';
     if (status >= 500) return 'SERVER_ERROR';
     return 'UNKNOWN';
   }

@@ -57,7 +57,7 @@ export type { RouterDefinition, RouterToolkit } from './define-router';
 export type { DocsOptions, OpenApiRouterOptions } from './docs';
 export { xenitionAuth, requireAuth, currentUser, currentUserId, requireUser, bearerToken, } from './auth';
 export type { AuthUser, XenitionAuthOptions } from './auth';
-export { badRequest, forbidden, unauthorized, honoErrorHandler, jsonNotFound, NotConfiguredError, paymentRequired, paymentRequiredBody, } from './errors';
+export { badRequest, EndUserAuthRejection, forbidden, unauthorized, honoErrorHandler, jsonNotFound, NotConfiguredError, paymentRequired, paymentRequiredBody, } from './errors';
 export type { PaymentRequiredBody, PaymentRequiredOptions, PaymentRequiredQuota, } from './errors';
 export { camelizeKey, normalizeRow, normalizeRows } from './normalize';
 export { createClientFromEnv, readEnvVar, XenitionApiConfigError } from './client';

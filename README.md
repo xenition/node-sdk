@@ -358,6 +358,35 @@ the `./hono` subpath is Worker/Node-only (excluded from the browser
 build). Routers only ever call `modules.use()` — never `enable()`/DDL at
 request time; migrations belong in the deploy step.
 
+## AI, email, video and direct uploads
+
+These run on the Xenition gateway; server-side calls use the service key.
+
+```ts
+// Text and chat: the app's own provider key under Manage → AI if it has one,
+// otherwise the platform engine, billed to the app owner's credits.
+const { text, provider, usedOwnKey } = await client.ai.generateText('Summarise this review');
+const summary = await client.ai.chatJson<{ score: number }>(messages, SCORE_SCHEMA);
+for await (const delta of client.ai.streamChat(messages)) process.stdout.write(delta.text);
+
+// Images, and video as a job (a clip takes minutes; video needs a service key)
+const { images } = await client.ai.generateImage('a rice field at dawn');
+const job = await client.ai.generateVideo('oxen ploughing a field', { durationSeconds: 8 });
+const done = await client.ai.waitForVideo(job.jobId); // or store job.jobId and call getVideo later
+
+// Email (service key; 50 recipients per request, 100 an hour, 1,000 a day)
+await client.email.send('rahim@example.com', 'Welcome', '<p>Hi</p>', { replyTo: 'support@myapp.com' });
+
+// Direct upload: sign on the server, PUT from the browser with exactly these headers
+const up = await client.storage.createUploadUrl('videos/intro.mp4', { contentType: 'video/mp4', sizeBytes: size });
+await fetch(up.url, { method: up.method, headers: up.headers, body: file }); // served at up.publicUrl
+```
+
+Errors are errors, not empty results: `QUOTA_EXCEEDED` (402) when the owner's
+AI credits are used up, `RATE_LIMITED` over an email limit, `NOT_IMPLEMENTED`
+(501) when the deployment cannot presign, `SERVER_ERROR` (503) when it has no
+AI engine or email sender.
+
 ## Status
 
 Phase 1: `client.auth.*` (register, login, logout, me, OAuth, password

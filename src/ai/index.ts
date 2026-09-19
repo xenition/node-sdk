@@ -1,6 +1,10 @@
 export { AiClient, AiKeysClient, parseJsonReply, parseSseStream } from './ai-client';
 export type {
   AiProvider,
+  AiResultProvider,
+  VideoJob,
+  VideoJobStatus,
+  WaitForVideoOptions,
   ChatMessage,
   AiUsage,
   GenerateTextOutput,
