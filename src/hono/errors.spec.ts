@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { XenitionError } from '../core/errors';
 import type { QuotaState } from '../modules/quotas';
-import { honoErrorHandler, paymentRequired, paymentRequiredBody } from './errors';
+import { EndUserAuthRejection, honoErrorHandler, paymentRequired, paymentRequiredBody } from './errors';
 import type { PaymentRequiredOptions } from './errors';
 
 /**
@@ -234,5 +234,15 @@ describe('the one payment-required body', () => {
       paymentRequiredBody({ entitlement: 'premium', message: 'Upgrade to keep cooking.' }).error
         .message,
     ).toBe('Upgrade to keep cooking.');
+  });
+});
+
+describe('honoErrorHandler: a rejected end-user credential', () => {
+  it('answers 401 in any app, not only inside the auth router', async () => {
+    // The auth router's own onError does not run when it is mounted with app.route():
+    // the app's handler does. Unknown there, a mistyped password became a 500.
+    const res = await appThatThrows(new EndUserAuthRejection('Invalid email or password')).request('/x');
+    expect(res.status).toBe(401);
+    expect((await errorOf(res)).error.message).toBe('Invalid email or password');
   });
 });

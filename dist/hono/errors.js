@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NotConfiguredError = void 0;
+exports.NotConfiguredError = exports.EndUserAuthRejection = void 0;
 exports.scrubMessage = scrubMessage;
 exports.honoErrorHandler = honoErrorHandler;
 exports.jsonNotFound = jsonNotFound;
@@ -138,7 +138,26 @@ function httpExceptionResponse(err, c) {
     return c.json(errorBody(fallback?.code ?? 'ERROR', scrubMessage(message)), status);
 }
 /** Shared `app.onError` handler — see module doc for the mapping rules. */
+/**
+ * An end-user credential was rejected — wrong password, wrong code, spent refresh
+ * token. Carried as its own type so it answers 401 rather than being read as a
+ * service-key failure (502).
+ *
+ * Handled here, in the shared handler, and not only in the auth router's own
+ * `onError`: a router mounted into an app with `app.route()` runs under the
+ * APP's error handler, so a type only the router understood reached the app as
+ * an unknown error and a mistyped password answered 500.
+ */
+class EndUserAuthRejection extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'EndUserAuthRejection';
+    }
+}
+exports.EndUserAuthRejection = EndUserAuthRejection;
 function honoErrorHandler(err, c) {
+    if (err instanceof EndUserAuthRejection)
+        return unauthorized(c, err.message);
     // First, ahead of the message-shape sniffing below: a route that threw an
     // HTTPException has already said what it means, and guessing from its
     // text could only overrule it.

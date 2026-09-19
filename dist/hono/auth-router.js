@@ -10,17 +10,6 @@ const normalize_1 = require("./normalize");
 const rate_limit_1 = require("./rate-limit");
 const router_utils_1 = require("./router-utils");
 /**
- * An end-user credential was rejected — wrong password, wrong code, spent refresh
- * token. Carried as its own type so the router answers 401 rather than letting the
- * shared handler read it as a service-key failure and answer 502.
- */
-class EndUserAuthRejection extends Error {
-    constructor(message) {
-        super(message);
-        this.name = 'EndUserAuthRejection';
-    }
-}
-/**
  * Credential routes are rate limited harder than the write default (10/min).
  *
  * Five per minute per IP sits far above any human: someone mistyping a
@@ -50,7 +39,7 @@ function authRouter(options = {}) {
     const app = new hono_1.Hono();
     (0, router_utils_1.applyCors)(app, options.cors);
     app.onError((err, c) => {
-        if (err instanceof EndUserAuthRejection)
+        if (err instanceof errors_1.EndUserAuthRejection)
             return (0, errors_1.unauthorized)(c, err.message);
         return (0, errors_1.honoErrorHandler)(err, c);
     });
@@ -122,7 +111,7 @@ function authRouter(options = {}) {
             if (err instanceof errors_2.XenitionError && err.code.startsWith('AUTH_')) {
                 // Thrown, not returned, so the handler's own `return c.json(...)` is never
                 // reached and the router's error handler renders it.
-                throw new EndUserAuthRejection(message);
+                throw new errors_1.EndUserAuthRejection(message);
             }
             throw err;
         }

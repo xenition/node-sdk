@@ -82,6 +82,47 @@ describe('chat', () => {
     });
     expect(post.mock.calls[0][1].responseFormat).toMatchObject({ type: 'json_schema', schema });
   });
+
+  it('returns a { message } reply unchanged', async () => {
+    const { post, ai } = makeAi();
+    const reply = { message: { role: 'assistant', content: 'pong' }, model: 'm', provider: 'openai', usedOwnKey: true };
+    post.mockResolvedValue(reply);
+    await expect(ai.chat([{ role: 'user', content: 'ping' }])).resolves.toEqual(reply);
+  });
+
+  it('turns a real completion in the text shape into the message it promises', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue({ text: 'pong', model: 'm', provider: 'xenition', usedOwnKey: false, usage: { inputTokens: 3 } });
+    const result = await ai.chat([{ role: 'user', content: 'ping' }]);
+    expect(result.message).toEqual({ role: 'assistant', content: 'pong' });
+    expect(result).toMatchObject({ provider: 'xenition', usage: { inputTokens: 3 } });
+    expect(result).not.toHaveProperty('text');
+  });
+
+  it('refuses a placeholder rather than passing it off as the model reply', async () => {
+    // An old gateway answers every chat with a fixed "add an AI key" sentence, on no key and no engine.
+    const { post, ai } = makeAi();
+    post.mockResolvedValue({ text: 'AI text generation runs through your configured provider key.', model: 'gpt-4o-mini', provider: 'openai', usedOwnKey: false });
+    const failure = await ai.chat([{ role: 'user', content: 'ping' }]).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(XenitionError);
+    expect(failure).toMatchObject({ code: 'NOT_IMPLEMENTED' });
+  });
+});
+
+describe('generateText', () => {
+  it('returns a completion from the app key or the platform engine', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue({ text: 'pong', model: 'm', provider: 'openai', usedOwnKey: true });
+    await expect(ai.generateText('ping')).resolves.toMatchObject({ text: 'pong' });
+    post.mockResolvedValue({ text: 'pong', model: 'm', provider: 'xenition', usedOwnKey: false });
+    await expect(ai.generateText('ping')).resolves.toMatchObject({ text: 'pong' });
+  });
+
+  it('refuses a placeholder', async () => {
+    const { post, ai } = makeAi();
+    post.mockResolvedValue({ text: 'Add an AI key in Manage -> AI.', model: 'gpt-4o-mini', provider: 'openai', usedOwnKey: false });
+    await expect(ai.generateText('ping')).rejects.toMatchObject({ code: 'NOT_IMPLEMENTED' });
+  });
 });
 
 describe('streamChat', () => {

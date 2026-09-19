@@ -72,6 +72,16 @@ function noProviderKey(method: string, what: string): XenitionError {
   );
 }
 
+/**
+ * True when a text reply cannot have come from a model. A real completion runs either on the app's
+ * own provider key (`usedOwnKey`) or on the platform's engine (`provider: 'xenition'`). Older
+ * gateways answer every text call with a fixed sentence, marked neither way, and that sentence must
+ * not reach a user as if it were an answer.
+ */
+function isPlaceholder(reply: { usedOwnKey?: boolean; provider?: string }): boolean {
+  return reply.usedOwnKey !== true && reply.provider !== 'xenition';
+}
+
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     if (signal?.aborted) return reject(cancelled());
@@ -100,20 +110,36 @@ export class AiClient {
     prompt: string,
     options: GenerateTextOptions = {},
   ): Promise<GenerateTextOutput> {
-    return this.http.post<GenerateTextOutput>(API_ENDPOINTS.AI.TEXT, {
+    const result = await this.http.post<GenerateTextOutput>(API_ENDPOINTS.AI.TEXT, {
       prompt,
       ...options,
     });
+    if (typeof result?.text === 'string' && isPlaceholder(result)) {
+      throw noProviderKey('generateText', 'answered with a placeholder instead of a completion');
+    }
+    return result;
   }
 
   async chat(
     messages: ChatMessage[],
     options: ChatOptions = {},
   ): Promise<ChatOutput> {
-    return this.http.post<ChatOutput>(API_ENDPOINTS.AI.CHAT, {
+    const result = await this.http.post<ChatOutput & { text?: string }>(API_ENDPOINTS.AI.CHAT, {
       messages,
       ...options,
     });
+    if (typeof result?.message?.content === 'string') return result;
+    // Some gateways answer chat with the text shape ({ text }) rather than { message }. A real
+    // completion in that shape is returned as the message this method promises; a placeholder is
+    // refused, so it is never shown to a user as the model's reply.
+    if (typeof result?.text === 'string') {
+      if (isPlaceholder(result)) {
+        throw noProviderKey('chat', 'answered with a placeholder instead of a completion');
+      }
+      const { text, ...rest } = result;
+      return { ...rest, message: { role: 'assistant', content: text } };
+    }
+    return result;
   }
 
   async generateImage(

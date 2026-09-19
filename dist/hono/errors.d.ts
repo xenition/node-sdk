@@ -3,6 +3,19 @@ import type { EntitlementCheck } from '../modules/billing';
 /** Belt-and-braces: strip anything key- or URL-shaped from 4xx messages. */
 export declare function scrubMessage(message: string): string;
 /** Shared `app.onError` handler — see module doc for the mapping rules. */
+/**
+ * An end-user credential was rejected — wrong password, wrong code, spent refresh
+ * token. Carried as its own type so it answers 401 rather than being read as a
+ * service-key failure (502).
+ *
+ * Handled here, in the shared handler, and not only in the auth router's own
+ * `onError`: a router mounted into an app with `app.route()` runs under the
+ * APP's error handler, so a type only the router understood reached the app as
+ * an unknown error and a mistyped password answered 500.
+ */
+export declare class EndUserAuthRejection extends Error {
+    constructor(message: string);
+}
 export declare function honoErrorHandler(err: Error | unknown, c: Context): Response;
 /** JSON 404 for unmatched routes (hono's default is text/plain). */
 export declare function jsonNotFound(c: Context): Response;

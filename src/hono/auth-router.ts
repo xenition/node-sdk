@@ -4,24 +4,13 @@ import type { AuthClient } from '../auth/auth-client';
 import type { AuthResponse, OAuthProvider, OtpPurpose, UserDataExport } from '../auth/types';
 import { requireAuth, requireUser } from './auth';
 import { makeClientResolver } from './client';
-import { badRequest, honoErrorHandler, jsonNotFound, unauthorized } from './errors';
+import { badRequest, EndUserAuthRejection, honoErrorHandler, jsonNotFound, unauthorized } from './errors';
 import { XenitionError } from '../core/errors';
 import { normalizeRow, normalizeRows } from './normalize';
 import { rateLimiter } from './rate-limit';
 import { applyCors } from './router-utils';
 import type { XenitionRouterOptions } from './types';
 
-/**
- * An end-user credential was rejected — wrong password, wrong code, spent refresh
- * token. Carried as its own type so the router answers 401 rather than letting the
- * shared handler read it as a service-key failure and answer 502.
- */
-class EndUserAuthRejection extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'EndUserAuthRejection';
-  }
-}
 
 /**
  * `/auth` — end-user accounts over HTTP, for the app's own frontend.
