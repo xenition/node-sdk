@@ -71,6 +71,10 @@ function authRouter(options = {}) {
         // rather than with the ordinary writes.
         app.post('/auth/password', credential);
         app.post('/auth/email/verify', standard);
+        // Sends mail to an address the caller names, so it is throttled like the
+        // other code-sending routes; confirm is a code guess, likewise.
+        app.post('/auth/email/add', credential);
+        app.post('/auth/email/add/confirm', credential);
         app.post('/auth/logout', standard);
         app.patch('/auth/profile', standard);
         app.delete('/auth/sessions', standard);
@@ -367,6 +371,32 @@ function authRouter(options = {}) {
         }
         const changed = await asEndUserAuth(c, () => authOf(c).changePassword({ currentPassword, newPassword }, (0, auth_1.requireUser)(c).accessToken), 'That current password is not right.');
         return c.json(changed);
+    });
+    /**
+     * An account made without an email (a phone-only Facebook account) adds one.
+     * Two steps, both as the signed-in user: a code to the address, then the code
+     * back. The gateway refuses an account that already has an address, and an
+     * address another account uses, with a 409 the client can explain.
+     */
+    app.post('/auth/email/add', guard, async (c) => {
+        const body = await readObjectBody(c);
+        if (!body)
+            return (0, errors_1.badRequest)(c, 'Body must be a JSON object.');
+        const email = stringField(body, 'email');
+        if (!email)
+            return (0, errors_1.badRequest)(c, '"email" is required.');
+        return c.json(await authOf(c).addEmail(email, (0, auth_1.requireUser)(c).accessToken));
+    });
+    app.post('/auth/email/add/confirm', guard, async (c) => {
+        const body = await readObjectBody(c);
+        if (!body)
+            return (0, errors_1.badRequest)(c, 'Body must be a JSON object.');
+        const email = stringField(body, 'email');
+        const code = stringField(body, 'code');
+        if (!email || !code)
+            return (0, errors_1.badRequest)(c, '"email" and "code" are required.');
+        const user = await asEndUserAuth(c, () => authOf(c).confirmAddEmail({ email, code }, (0, auth_1.requireUser)(c).accessToken), 'That code is not right, or it has expired.');
+        return c.json((0, normalize_1.normalizeRow)(user));
     });
     app.post('/auth/logout', guard, async (c) => {
         return c.json(await authOf(c).logout((0, auth_1.requireUser)(c).accessToken));

@@ -3,7 +3,7 @@ export type { XenitionClientOptions } from './xenition-client';
 
 // Auth module
 export { AuthClient } from './auth/auth-client';
-export { BROKERED_PROVIDERS, isBrokeredProvider } from './auth/types';
+export { BROKERED_PROVIDERS, isBrokeredProvider, NO_EMAIL_DOMAIN, hasNoEmail } from './auth/types';
 export type {
   User,
   Session,

@@ -3,6 +3,15 @@
  * backend/sql/app-database/0001_auth.sql so the SDK surface matches
  * server persistence 1:1.
  */
+/**
+ * Where an account made by a provider with no email is stored (a phone-only
+ * Facebook account). A reserved domain: never mailed, never registrable.
+ */
+export declare const NO_EMAIL_DOMAIN = "no-email.invalid";
+/** True for an account with no real email yet — ask for one with `addEmail`. */
+export declare function hasNoEmail(user: {
+    email?: string | null;
+} | null | undefined): boolean;
 export interface User {
     id: string;
     email: string;

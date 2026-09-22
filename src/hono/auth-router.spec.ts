@@ -65,6 +65,12 @@ const makeAuthStub = () => ({
   requestPasswordReset: jest.fn(async () => ({ requested: true as const })),
   resetPassword: jest.fn(async () => ({ reset: true as const })),
   verifyEmail: jest.fn(async () => ({ verified: true as const })),
+  addEmail: jest.fn(async () => ({
+    sent: true as const,
+    channel: 'email' as const,
+    expiresAt: '2026-01-01T00:10:00.000Z',
+  })),
+  confirmAddEmail: jest.fn(async () => ({ ...USER, email: 'rahim@example.com' })),
   logout: jest.fn(async () => ({ ok: true as const })),
   listSessions: jest.fn(async () => [SESSION]),
   revokeSession: jest.fn(async () => ({ revoked: true as const })),
@@ -316,6 +322,8 @@ describe('the account half (behind requireAuth)', () => {
       ['GET', '/api/auth/me'],
       ['PATCH', '/api/auth/profile'],
       ['POST', '/api/auth/password'],
+      ['POST', '/api/auth/email/add'],
+      ['POST', '/api/auth/email/add/confirm'],
       ['POST', '/api/auth/logout'],
       ['GET', '/api/auth/sessions'],
       ['DELETE', '/api/auth/sessions'],
@@ -384,6 +392,40 @@ describe('what must NOT be reachable', () => {
       email: 'ada@example.com',
       password: 'pw',
     });
+  });
+
+  it('adds an email for the signed-in user, forwarding only the address and the code', async () => {
+    const { app, auth } = makeApp();
+    const send = await app.request('/api/auth/email/add', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'rahim@example.com', userId: 'someone-else' }),
+    });
+    expect(send.status).toBe(200);
+    expect(auth.addEmail).toHaveBeenCalledWith('rahim@example.com', 'tok');
+
+    const confirm = await app.request('/api/auth/email/add/confirm', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'rahim@example.com', code: '123456', role: 'admin' }),
+    });
+    expect(confirm.status).toBe(200);
+    expect(auth.confirmAddEmail).toHaveBeenCalledWith({ email: 'rahim@example.com', code: '123456' }, 'tok');
+    expect(await confirm.json()).toMatchObject({ email: 'rahim@example.com' });
+  });
+
+  it('400s adding an email without the address or the code', async () => {
+    const { app, auth } = makeApp();
+    const post = (path: string, body: unknown) =>
+      app.request(path, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    expect((await post('/api/auth/email/add', {})).status).toBe(400);
+    expect((await post('/api/auth/email/add/confirm', { email: 'a@b.c' })).status).toBe(400);
+    expect(auth.addEmail).not.toHaveBeenCalled();
+    expect(auth.confirmAddEmail).not.toHaveBeenCalled();
   });
 
   it('ignores a user id in the profile body — the token decides who this is', async () => {

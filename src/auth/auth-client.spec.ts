@@ -2,7 +2,7 @@ import { HttpClient } from '../core/http-client';
 import { API_ENDPOINTS } from '../constants';
 import { XenitionError } from '../core/errors';
 import { AuthClient } from './auth-client';
-import { User } from './types';
+import { User, hasNoEmail } from './types';
 
 /**
  * The client's only dependency is the HttpClient verb methods, so a bare
@@ -142,6 +142,38 @@ describe('AuthClient mobile surface', () => {
     await expect(auth.verifyOtp({ code: '123456' })).rejects.toThrow(
       /"email" or "phone" is required/,
     );
+  });
+
+  it('addEmail sends the address as the signed-in user', async () => {
+    const { post, auth } = makeHttp();
+    post.mockResolvedValueOnce({ sent: true, channel: 'email', expiresAt: 'soon' });
+    await auth.addEmail('rahim@example.com', 'tok');
+    expect(post.mock.calls[0][0]).toBe(API_ENDPOINTS.AUTH.ADD_EMAIL);
+    expect(post.mock.calls[0][1]).toEqual({ email: 'rahim@example.com' });
+    expect(authHeader(post.mock.calls[0][2])).toBe('Bearer tok');
+  });
+
+  it('confirmAddEmail sends exactly the address and the code', async () => {
+    const { post, auth } = makeHttp();
+    post.mockResolvedValueOnce(USER);
+    await auth.confirmAddEmail({ email: 'rahim@example.com', code: '123456', role: 'admin' } as never, 'tok');
+    expect(post.mock.calls[0][0]).toBe(API_ENDPOINTS.AUTH.ADD_EMAIL_CONFIRM);
+    expect(post.mock.calls[0][1]).toEqual({ email: 'rahim@example.com', code: '123456' });
+    expect(authHeader(post.mock.calls[0][2])).toBe('Bearer tok');
+  });
+
+  it('addEmail and confirmAddEmail refuse missing fields before any request', async () => {
+    const { post, auth } = makeHttp();
+    await expect(auth.addEmail('', 'tok')).rejects.toThrow('email');
+    await expect(auth.confirmAddEmail({ email: 'a@b.c', code: '' }, 'tok')).rejects.toThrow('code');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('hasNoEmail recognises only the reserved placeholder domain', () => {
+    expect(hasNoEmail({ email: 'facebook.123@no-email.invalid' })).toBe(true);
+    expect(hasNoEmail({ email: 'rahim@gmail.com' })).toBe(false);
+    expect(hasNoEmail({ email: 'invalid@example.com' })).toBe(false);
+    expect(hasNoEmail(null)).toBe(false);
   });
 
   it('changePassword carries the end-user token', async () => {

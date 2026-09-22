@@ -52,10 +52,16 @@ const session = await client.auth.completeSignIn(code);
 
 Two things are specific to Facebook:
 
-- **No email, no sign-in.** Graph returns `email` only for an address the
+- **No email still signs in.** Graph returns `email` only for an address the
   person confirmed with Facebook; accounts registered by phone number have
-  none, and the gateway refuses them because accounts are matched on email.
-  The callback redirects back with `?error=` in that case.
+  none. The gateway matches those on the Facebook id instead and gives the
+  user a placeholder address, `facebook.<id>@no-email.invalid` (a reserved
+  domain: never mailed, never registrable; `email.send` refuses it). If the
+  person later adds an email on Facebook, the account takes it at their next
+  sign-in. To ask such a user for a real address, check `hasNoEmail(user)`,
+  then `auth.addEmail(email, token)` (a code goes to it) and
+  `auth.confirmAddEmail({ email, code }, token)`. Both refuse (409) an
+  account that already has an address and an address another account uses.
 - **Platform lane needs a Facebook app.** Set `APP_PLATFORM_FACEBOOK_APP_ID`
   and `APP_PLATFORM_FACEBOOK_APP_SECRET` on the gateway, and add the callback
   URL it prints at boot under *Facebook Login → Settings → Valid OAuth Redirect
@@ -251,7 +257,7 @@ pass it through as `name` the first time or it is gone for good.
 | `SignInCancelled` | the user closed the consent screen. A decision, not a failure — no error dialog |
 | `412` / `AUTH_PROVIDER_NOT_CONFIGURED` | native was attempted on an app with no credentials. Handled for you by `signInWithProvider` |
 | `"...is not a registered return URL"` | the allowlist became exhaustive and this deep link is not on it |
-| `"that account did not share an email address"` | Apple's hide-my-email with no relay address. There is no key to match an account on |
+| `"that account did not share an email address"` | Apple's hide-my-email with no relay address. There is no key to match an account on. (Facebook accounts without an email sign in instead — see above) |
 
 Every brokered failure is delivered back to your `returnTo` as `?error=...`
 rather than left on a browser page, so a user who cancels lands back in the app
