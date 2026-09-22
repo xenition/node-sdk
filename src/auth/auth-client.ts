@@ -418,6 +418,37 @@ export class AuthClient {
    * Sending only the token failed with "email and token are required" — this
    * step, like the reset it mirrors, could not be completed by any caller.
    */
+  /**
+   * Send a code to the address an account with no email wants to use.
+   *
+   * Only for an account on a placeholder address — one made by a provider that
+   * gave no email, such as a Facebook account opened with a phone number
+   * (`hasNoEmail(user)`). An account that already has an address gets a 409, as
+   * does an address another account uses: the useful next step then is signing
+   * in with that account.
+   */
+  async addEmail(email: string, accessToken?: string): Promise<SendOtpResult> {
+    const context = 'AuthClient.addEmail';
+    requireField(context, 'email', email);
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.ADD_EMAIL, () =>
+      this.http.post<SendOtpResult>(API_ENDPOINTS.AUTH.ADD_EMAIL, { email }, asUser(accessToken)),
+    );
+  }
+
+  /** Redeem the code `addEmail` sent. Returns the user, now on the real, confirmed address. */
+  async confirmAddEmail(input: { email: string; code: string }, accessToken?: string): Promise<User> {
+    const context = 'AuthClient.confirmAddEmail';
+    requireField(context, 'email', input?.email);
+    requireField(context, 'code', input?.code);
+    return requiringEndpoint(context, API_ENDPOINTS.AUTH.ADD_EMAIL_CONFIRM, () =>
+      this.http.post<User>(
+        API_ENDPOINTS.AUTH.ADD_EMAIL_CONFIRM,
+        { email: input.email, code: input.code },
+        asUser(accessToken),
+      ),
+    );
+  }
+
   async verifyEmail(token: string, email?: string): Promise<{ verified: true }> {
     requireField('AuthClient.verifyEmail', 'token', token);
     return this.http.post<{ verified: true }>(

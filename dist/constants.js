@@ -27,6 +27,10 @@ exports.API_ENDPOINTS = {
         PASSWORD_RESET_REQUEST: '/app-platform/auth/password-reset/request',
         PASSWORD_RESET_CONFIRM: '/app-platform/auth/password-reset/confirm',
         VERIFY_EMAIL: '/app-platform/auth/email/verify',
+        // An account made by a provider that gave no email (a phone-only Facebook
+        // account) adds one: a code to the address, then the code back.
+        ADD_EMAIL: '/app-platform/auth/email/add',
+        ADD_EMAIL_CONFIRM: '/app-platform/auth/email/add/confirm',
         OAUTH_URL: (provider) => `/app-platform/auth/oauth/${provider}/url`,
         OAUTH_CALLBACK: (provider) => `/app-platform/auth/oauth/${provider}/callback`,
         OAUTH_PROVIDERS: '/app-platform/auth/oauth/providers',

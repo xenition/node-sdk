@@ -24,6 +24,8 @@ export declare const API_ENDPOINTS: {
         readonly PASSWORD_RESET_REQUEST: "/app-platform/auth/password-reset/request";
         readonly PASSWORD_RESET_CONFIRM: "/app-platform/auth/password-reset/confirm";
         readonly VERIFY_EMAIL: "/app-platform/auth/email/verify";
+        readonly ADD_EMAIL: "/app-platform/auth/email/add";
+        readonly ADD_EMAIL_CONFIRM: "/app-platform/auth/email/add/confirm";
         readonly OAUTH_URL: (provider: string) => string;
         readonly OAUTH_CALLBACK: (provider: string) => string;
         readonly OAUTH_PROVIDERS: "/app-platform/auth/oauth/providers";
