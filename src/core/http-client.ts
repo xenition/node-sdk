@@ -8,6 +8,31 @@ import { XENITION_BASE_URL } from '../constants';
 import { XenitionError, XenitionErrorCode, isXenitionErrorCode } from './errors';
 import { codeFromEnvelope, messageFromEnvelope } from './error-envelope';
 
+/**
+ * A `Request` that leaves out `cache: 'default'`.
+ *
+ * axios ≥ 1.20's fetch adapter fills `cache: 'default'` into every request it
+ * builds, and the Cloudflare Workers runtime rejects any `cache` value it does
+ * not implement — so on Workers EVERY SDK call failed with "Unsupported cache
+ * mode: default" before it left the worker (found deploying an app, 2026-10).
+ * 'default' is what fetch does when no mode is given, so dropping it changes
+ * nothing anywhere else; an explicit, non-default mode is passed through.
+ * `undefined` where there is no global Request (axios then uses another adapter).
+ */
+export function cacheSafeRequest(Base: typeof Request | undefined = globalThis.Request): typeof Request | undefined {
+  if (typeof Base !== 'function') return undefined;
+  return class extends Base {
+    constructor(input: ConstructorParameters<typeof Request>[0], init?: RequestInit & { cache?: string }) {
+      if (init && init.cache === 'default') {
+        const { cache: _omit, ...rest } = init;
+        super(input, rest);
+      } else {
+        super(input, init);
+      }
+    }
+  } as typeof Request;
+}
+
 /** Correlates one logical call across the SDK, the gateway and its logs. */
 export const REQUEST_ID_HEADER = 'x-request-id';
 /** Lets the platform collapse a retried write into one effect. */
@@ -294,9 +319,11 @@ export class HttpClient {
       onResponse: options.onResponse,
       onError: options.onError,
     };
+    const SafeRequest = cacheSafeRequest();
     this.axios = axios.create({
       baseURL: options.baseUrl || XENITION_BASE_URL,
       timeout: options.timeout ?? 30_000,
+      ...(SafeRequest ? { env: { Request: SafeRequest } } : {}),
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,

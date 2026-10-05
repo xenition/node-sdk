@@ -1,5 +1,17 @@
 import { AxiosRequestConfig } from 'axios';
 import { XenitionError } from './errors';
+/**
+ * A `Request` that leaves out `cache: 'default'`.
+ *
+ * axios ≥ 1.20's fetch adapter fills `cache: 'default'` into every request it
+ * builds, and the Cloudflare Workers runtime rejects any `cache` value it does
+ * not implement — so on Workers EVERY SDK call failed with "Unsupported cache
+ * mode: default" before it left the worker (found deploying an app, 2026-10).
+ * 'default' is what fetch does when no mode is given, so dropping it changes
+ * nothing anywhere else; an explicit, non-default mode is passed through.
+ * `undefined` where there is no global Request (axios then uses another adapter).
+ */
+export declare function cacheSafeRequest(Base?: typeof Request | undefined): typeof Request | undefined;
 /** Correlates one logical call across the SDK, the gateway and its logs. */
 export declare const REQUEST_ID_HEADER = "x-request-id";
 /** Lets the platform collapse a retried write into one effect. */

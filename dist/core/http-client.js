@@ -4,10 +4,37 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HttpClient = exports.isCancelledError = exports.CIRCUIT_COOL_OFF_MS = exports.CIRCUIT_FAILURE_THRESHOLD = exports.MAX_RETRY_WAIT_MS = exports.IDEMPOTENCY_HEADER = exports.REQUEST_ID_HEADER = void 0;
+exports.cacheSafeRequest = cacheSafeRequest;
 const axios_1 = __importDefault(require("axios"));
 const constants_1 = require("../constants");
 const errors_1 = require("./errors");
 const error_envelope_1 = require("./error-envelope");
+/**
+ * A `Request` that leaves out `cache: 'default'`.
+ *
+ * axios ≥ 1.20's fetch adapter fills `cache: 'default'` into every request it
+ * builds, and the Cloudflare Workers runtime rejects any `cache` value it does
+ * not implement — so on Workers EVERY SDK call failed with "Unsupported cache
+ * mode: default" before it left the worker (found deploying an app, 2026-10).
+ * 'default' is what fetch does when no mode is given, so dropping it changes
+ * nothing anywhere else; an explicit, non-default mode is passed through.
+ * `undefined` where there is no global Request (axios then uses another adapter).
+ */
+function cacheSafeRequest(Base = globalThis.Request) {
+    if (typeof Base !== 'function')
+        return undefined;
+    return class extends Base {
+        constructor(input, init) {
+            if (init && init.cache === 'default') {
+                const { cache: _omit, ...rest } = init;
+                super(input, rest);
+            }
+            else {
+                super(input, init);
+            }
+        }
+    };
+}
 /** Correlates one logical call across the SDK, the gateway and its logs. */
 exports.REQUEST_ID_HEADER = 'x-request-id';
 /** Lets the platform collapse a retried write into one effect. */
@@ -176,9 +203,11 @@ class HttpClient {
             onResponse: options.onResponse,
             onError: options.onError,
         };
+        const SafeRequest = cacheSafeRequest();
         this.axios = axios_1.default.create({
             baseURL: options.baseUrl || constants_1.XENITION_BASE_URL,
             timeout: options.timeout ?? 30000,
+            ...(SafeRequest ? { env: { Request: SafeRequest } } : {}),
             headers: {
                 'Content-Type': 'application/json',
                 'x-api-key': apiKey,
