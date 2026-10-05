@@ -137,7 +137,7 @@ export class AiClient {
         throw noProviderKey('chat', 'answered with a placeholder instead of a completion');
       }
       const { text, ...rest } = result;
-      return { ...rest, message: { role: 'assistant', content: text } };
+      return { ...rest, message: { role: 'assistant' as const, content: text } };
     }
     return result;
   }

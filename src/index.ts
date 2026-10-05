@@ -87,6 +87,8 @@ export type {
   WaitForVideoOptions,
   AiUsage,
   ChatMessage,
+  ChatContentPart,
+  ChatReply,
   GenerateTextOutput,
   ChatOutput,
   GenerateImageOutput,

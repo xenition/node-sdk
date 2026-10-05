@@ -9,8 +9,30 @@ export type AiProvider = 'openrouter' | 'openai' | 'runware' | 'fal' | 'gemini' 
  * to the app's owner.
  */
 export type AiResultProvider = AiProvider | 'xenition';
+/**
+ * One part of a message: text, or an image for the model to look at — a
+ * scanned bill, a receipt, a photo to describe. Images go in user messages
+ * only, as an https URL (typically `storage.createSignedUrl()`) or a
+ * `data:image/...` URL; at most 16 a request.
+ */
+export type ChatContentPart = {
+    type: 'text';
+    text: string;
+} | {
+    type: 'image_url';
+    image_url: {
+        url: string;
+        detail?: 'auto' | 'low' | 'high';
+    };
+};
 export interface ChatMessage {
     role: 'system' | 'user' | 'assistant';
+    /** Text, or text and images (see `ChatContentPart`). */
+    content: string | ChatContentPart[];
+}
+/** The model's reply: always text. */
+export interface ChatReply {
+    role: 'assistant';
     content: string;
 }
 export interface AiUsage {
@@ -26,7 +48,7 @@ export interface GenerateTextOutput {
     usedOwnKey: boolean;
 }
 export interface ChatOutput {
-    message: ChatMessage;
+    message: ChatReply;
     model: string;
     provider: AiResultProvider;
     usage?: AiUsage;
@@ -105,6 +127,13 @@ export interface ChatOptions {
      * "reply in this exact JSON format" is a parse failure waiting to happen.
      */
     responseFormat?: ResponseFormat;
+    /**
+     * Ask the provider neither to store nor to train on this request — for
+     * health, financial or other sensitive content. Honoured on the app's own
+     * OpenRouter key (the platform sets `data_collection: deny`); any other
+     * lane refuses the call with a 400 rather than silently ignoring it.
+     */
+    noDataRetention?: boolean;
 }
 export interface GenerateImageOptions {
     model?: string;
