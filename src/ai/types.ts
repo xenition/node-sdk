@@ -23,11 +23,14 @@ export type AiResultProvider = AiProvider | 'xenition';
  * One part of a message: text, or an image for the model to look at — a
  * scanned bill, a receipt, a photo to describe. Images go in user messages
  * only, as an https URL (typically `storage.createSignedUrl()`) or a
- * `data:image/...` URL; at most 16 a request.
+ * `data:image/...` URL; PDFs as a `file` part. At most 16 images and files
+ * a request.
  */
 export type ChatContentPart =
   | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } };
+  | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } }
+  /** A PDF for the model to read: an https URL or a `data:application/pdf` URL. */
+  | { type: 'file'; file: { filename?: string; file_data: string } };
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
