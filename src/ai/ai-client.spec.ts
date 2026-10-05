@@ -72,6 +72,22 @@ describe('speech', () => {
 });
 
 describe('chat', () => {
+  it('sends image parts exactly as given, so a model can read a picture', async () => {
+    const { post, ai } = makeAi();
+    const content = [
+      { type: 'text' as const, text: 'Read this bill' },
+      { type: 'image_url' as const, image_url: { url: 'https://cdn.example.com/page-1.jpg' } },
+    ];
+    await ai.chat([{ role: 'user', content }]);
+    expect(post.mock.calls[0][1].messages[0].content).toEqual(content);
+  });
+
+  it('passes noDataRetention through for sensitive content', async () => {
+    const { post, ai } = makeAi();
+    await ai.chat([{ role: 'user', content: 'x' }], { noDataRetention: true, provider: 'openrouter' });
+    expect(post.mock.calls[0][1]).toMatchObject({ noDataRetention: true, provider: 'openrouter' });
+  });
+
   it('passes a response format through so replies can be schema-constrained', async () => {
     // Prompting for "reply in this exact JSON" works until it does not, and
     // then it is a parse failure in production.

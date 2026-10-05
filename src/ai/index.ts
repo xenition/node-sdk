@@ -6,6 +6,8 @@ export type {
   VideoJobStatus,
   WaitForVideoOptions,
   ChatMessage,
+  ChatContentPart,
+  ChatReply,
   AiUsage,
   GenerateTextOutput,
   ChatOutput,
