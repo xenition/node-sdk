@@ -67,8 +67,12 @@ export const API_ENDPOINTS = {
     UPLOAD:     '/app-platform/storage/upload',
     LIST:       '/app-platform/storage/list',
     SIGNED_URL: '/app-platform/storage/signed-url',
+    // Each segment encoded, the slashes kept: the gateway routes the object by
+    // its path and never decodes %2F, so encoding the whole key made every
+    // delete of a nested file (`households/…/page.jpg`) answer "file not found"
+    // while the file stayed in storage.
     OBJECT:     (bucket: string, path: string) =>
-                  `/app-platform/storage/${bucket}/${encodeURIComponent(path)}`,
+                  `/app-platform/storage/${encodeURIComponent(bucket)}/${path.split('/').map(encodeURIComponent).join('/')}`,
   },
   EMAIL: {
     SEND:      '/app-platform/email/send',
