@@ -369,6 +369,24 @@ const { text, provider, usedOwnKey } = await client.ai.generateText('Summarise t
 const summary = await client.ai.chatJson<{ score: number }>(messages, SCORE_SCHEMA);
 for await (const delta of client.ai.streamChat(messages)) process.stdout.write(delta.text);
 
+// Reading a picture or a PDF (a receipt, a bill, a statement): content parts.
+// Images go in user messages as https or data:image/ URLs (a signed storage URL
+// is typical); PDFs as a `file` part; at most 16 a request.
+// noDataRetention: the provider may neither store nor train on it — honoured on
+// the app's own OpenRouter key (Manage → AI), refused (400) on any other lane.
+const receipt = await client.ai.chatJson<{ total: number; merchant: string }>(
+  [{
+    role: 'user',
+    content: [
+      { type: 'text', text: 'Read this receipt. Return the total and the merchant.' },
+      { type: 'image_url', image_url: { url: signedPageUrl } },
+      // { type: 'file', file: { filename: 'statement.pdf', file_data: signedPdfUrl } },
+    ],
+  }],
+  RECEIPT_SCHEMA,
+  { provider: 'openrouter', model: 'google/gemini-2.5-flash', noDataRetention: true },
+);
+
 // Images, and video as a job (a clip takes minutes; video needs a service key)
 const { images } = await client.ai.generateImage('a rice field at dawn');
 const job = await client.ai.generateVideo('oxen ploughing a field', { durationSeconds: 8 });
@@ -381,6 +399,11 @@ await client.email.send('rahim@example.com', 'Welcome', '<p>Hi</p>', { replyTo: 
 const up = await client.storage.createUploadUrl('videos/intro.mp4', { contentType: 'video/mp4', sizeBytes: size });
 await fetch(up.url, { method: up.method, headers: up.headers, body: file }); // served at up.publicUrl
 ```
+
+Runs inside Cloudflare Workers from 0.2.8. Before that, every call from a
+Worker failed with `NETWORK_ERROR Unsupported cache mode: default` (axios's
+fetch adapter sets a `cache` mode Workers reject); upgrade any app that
+deploys a Worker.
 
 Errors are errors, not empty results: `QUOTA_EXCEEDED` (402) when the owner's
 AI credits are used up, `RATE_LIMITED` over an email limit, `NOT_IMPLEMENTED`
