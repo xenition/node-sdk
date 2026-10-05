@@ -142,3 +142,25 @@ describe('upload progress', () => {
     expect(config()?.signal).toBe(controller.signal);
   });
 });
+
+describe('delete — nested paths', () => {
+  /**
+   * The gateway routes an object by its path and never decodes %2F. Encoding
+   * the whole key made every delete of a nested file answer "file not found"
+   * while the file stayed in storage (found on a medical-bill app's account
+   * deletion). Slashes stay; each segment is encoded.
+   */
+  it('keeps the slashes and encodes each segment', async () => {
+    const del = jest.fn().mockResolvedValue(undefined);
+    const storage = new StorageClient({ del } as never);
+    await storage.delete('households/a b/docs/p#1.jpg', { bucket: 'default' });
+    expect(del).toHaveBeenCalledWith('/app-platform/storage/default/households/a%20b/docs/p%231.jpg');
+  });
+
+  it('reads a nested object at the same address', async () => {
+    const get = jest.fn().mockResolvedValue({ publicUrl: 'https://cdn/x' });
+    const storage = new StorageClient({ get } as never);
+    await storage.getPublicUrl('a/b.png');
+    expect(get).toHaveBeenCalledWith('/app-platform/storage/default/a/b.png');
+  });
+});
