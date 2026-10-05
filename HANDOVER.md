@@ -115,6 +115,8 @@ export default withScheduled(app, {
 | Google purchases were never acknowledged | **Google auto-refunds after 3 days.** Verifying is not acknowledging |
 | Duplicate `forbidden()` in checkout-router | Removed, moved to shared errors |
 | 404 returned text instead of JSON under a prefix mount | Hono does not carry a sub-app's `notFound`. Documented + `jsonNotFound` exported |
+| Every call failed inside Cloudflare Workers (0.2.8) | **Any deployed Worker answered 502.** axios ≥ 1.20 sets `cache: 'default'`, which Workers reject; the client now drops it (`cacheSafeRequest`) |
+| AI chat could not read a picture (0.2.6–0.2.7) | Text only. `content` may now carry `image_url` and `file` (PDF) parts; `noDataRetention` for health/financial content. Needs gateway a59c18b7 |
 
 ---
 
