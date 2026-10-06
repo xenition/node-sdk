@@ -12,7 +12,7 @@ phone                     app worker (Hono + SDK)            Xenition gateway   
 ─────                     ───────────────────────            ────────────────             ────────
 registerForPush()  ──►  POST /notifications/devices   ──►  /push/devices (stores it)
                         (registered to the CALLER)
-                        notify(userId, …)             ──►  /push/send (service key) ──►  Expo push service ──► APNs / FCM
+                        notify({ userId, … })         ──►  /push/send (service key) ──►  Expo push service ──► APNs / FCM
 ```
 
 The gateway picks a lane **per device, from the token**:
@@ -32,14 +32,20 @@ credentials **for its own bundle id**. That is the operating system's rule, so
 no SDK can get around it. With EAS it costs about two minutes per app, once:
 
 1. **iOS:** nothing extra. `eas build` creates or reuses your Apple team's push
-   key automatically. One key covers every app in the team.
-2. **Android:** in the app's EAS project, run `eas credentials` → Android →
-   *Google Service Account* → *Push Notifications (FCM V1)* and upload the
-   service-account JSON. **You can upload the same JSON for every app:** add each
-   app's package name to one shared Firebase project, and put that project's
-   `google-services.json` in the app (`android.googleServicesFile` in `app.json`).
+   key automatically. One key covers every app in the team. No Firebase.
+2. **Android needs Firebase**, because Google delivers to Android phones only
+   through FCM, and Expo hands Android messages to FCM. Use **one** Firebase
+   project for every app:
+   - **Once, ever:** create the project (for example "Xenition Apps"). In
+     Project settings → Service accounts, choose *Generate new private key* and
+     keep that JSON.
+   - **Per app:** in the same project, use *Add app → Android* with the app's
+     package name. Download its `google-services.json` into the app and set
+     `"android": { "googleServicesFile": "./google-services.json" }` in `app.json`.
+     Then run `eas credentials` → Android → *Google Service Account* →
+     *Push Notifications (FCM V1)* and upload **the same** private-key JSON.
 3. The app needs an EAS `projectId`. `getExpoPushTokenAsync` needs it in a
-   standalone build.
+   standalone build. `eas init` sets it.
 
 Push does not work in **Expo Go** on Android, or on web. Use a development
 build.
@@ -52,11 +58,23 @@ build.
 import { createXenitionApi } from '@xenition/sdk/hono';
 app.route('/api', createXenitionApi({ modules: ['notifications'] }));
 
+// once, at deploy (creates the inbox, preference and schedule tables)
+await client.modules.enable('notifications');
+
 // anywhere on the server — inbox row + push, honouring preferences and quiet hours
-await client.modules.notifications.notify(userId, {
+await client.modules.notifications.notify({
+  userId,
   title: 'Rent is due tomorrow',
   body: 'Unit 4B — $1,200',
   data: { leaseId: 'l_42' },
+});
+
+// quiet hours DEFER a push rather than drop it, and schedule() sends later —
+// both are delivered by dispatchDue(), so run it from a cron:
+export default withScheduled(app, {
+  // plus  [triggers] crons = ["* * * * *"]  in wrangler.toml
+  crons: [{ name: 'push-due', schedule: '* * * * *',
+            run: ({ client }) => client.modules.notifications.dispatchDue() }],
 });
 
 // or a bare push, no inbox row

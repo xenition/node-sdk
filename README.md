@@ -306,7 +306,7 @@ await registerForPush({ notifications: Notifications, projectId, os: Platform.OS
   register: (token) => api.post('/notifications/devices', { token }) });
 
 // worker
-await client.modules.notifications.notify(userId, { title: 'Rent due', body: 'Tomorrow' });
+await client.modules.notifications.notify({ userId, title: 'Rent due', body: 'Tomorrow' });
 ```
 
 What each app still needs (an EAS push credential, which is an OS rule) and
