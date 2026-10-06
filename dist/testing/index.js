@@ -12,6 +12,7 @@ const forms_1 = require("../modules/forms");
 const reviews_1 = require("../modules/reviews");
 const fake_store_1 = require("./fake-store");
 const jobs_raw_1 = require("./jobs-raw");
+const expo_token_1 = require("../push/expo-token");
 /**
  * `@xenition/sdk/testing` — run a generated backend's tests without a
  * network.
@@ -51,9 +52,9 @@ const DEFAULT_USER = {
  * A client that talks to memory instead of the platform.
  *
  * Only the surfaces a backend test actually drives are wired: the modules,
- * and enough of `auth` for the middleware to resolve a caller. Anything else
- * throws with a message saying so, which is far better than a silently
- * undefined method that fails three frames later.
+ * enough of `auth` for the middleware to resolve a caller, and an in-memory
+ * `push`. Anything else throws with a message saying so, which is far better
+ * than a silently undefined method that fails three frames later.
  */
 function createTestClient(options = {}) {
     const user = { ...DEFAULT_USER, ...options.user };
@@ -79,7 +80,39 @@ function createTestClient(options = {}) {
             throw new errors_1.XenitionError('AUTH_INVALID_TOKEN', 'No token.');
         return user;
     };
+    const push = { devices: new Map(), sent: [] };
     const client = {
+        push: {
+            registerDevice: async (input) => {
+                const device = {
+                    id: input.token,
+                    userId: input.userId ?? user.id,
+                    token: input.token,
+                    platform: (0, expo_token_1.isExpoPushToken)(input.token) ? 'expo' : input.platform,
+                    deviceName: input.deviceName ?? null,
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                };
+                push.devices.set(input.token, device);
+                return device;
+            },
+            unregisterDevice: async (token) => {
+                push.devices.delete(token);
+            },
+            send: async (input) => {
+                push.sent.push(input);
+                const targets = Array.isArray(input.targets) ? input.targets : [input.targets];
+                const hit = [...push.devices.values()].filter((d) => targets.some((t) => ('userId' in t && t.userId === d.userId) ||
+                    ('token' in t && t.token === d.token) ||
+                    ('deviceIds' in t && t.deviceIds.includes(d.id))));
+                return {
+                    sent: hit.length,
+                    failed: 0,
+                    skipped: 0,
+                    results: hit.map((d) => ({ deviceId: d.id, platform: d.platform, status: 'sent' })),
+                };
+            },
+        },
         auth: {
             verifyToken,
             me: async () => user,
@@ -104,7 +137,7 @@ function createTestClient(options = {}) {
                 'statements, or drive the module method that wraps them.');
         },
     };
-    return { client, store, user };
+    return { client, store, user, push };
 }
 /**
  * Instantiate every module over one shared context.

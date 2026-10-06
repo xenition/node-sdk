@@ -3,10 +3,24 @@
  * `modules/app-platform-push/` types.
  */
 
-export type PushPlatform = 'fcm' | 'apns' | 'web';
+/**
+ * How a device is reached. `expo` is the one that needs no setup: an
+ * `ExponentPushToken[…]` goes through Expo's push service on the platform's
+ * behalf, so an app ships push without holding any credentials. `fcm` works
+ * for apps inside the platform's Firebase project. `apns` and `web` are
+ * accepted and stored, but the platform has no credentials for them yet, so
+ * a send to them comes back `skipped` — never `sent`.
+ */
+export type PushPlatform = 'expo' | 'fcm' | 'apns' | 'web';
 
 export interface RegisterDeviceInput {
-  userId: string;
+  /**
+   * Whose device this is. Honoured only with a service key. Called with an
+   * end user's session instead, the platform registers the device to that
+   * user and ignores this — otherwise anyone holding the public anon key
+   * could route another user's notifications to their own phone.
+   */
+  userId?: string;
   token: string;
   platform: PushPlatform;
   deviceName?: string;
@@ -38,8 +52,12 @@ export interface PushNotification {
   clickAction?: string;
   /** iOS badge count. */
   badge?: number;
-  /** iOS sound name; FCM also supports it. */
+  /** iOS sound name; FCM also supports it. Defaults to `default` on Expo. */
   sound?: string;
+  /** Android notification channel — create it on the device first. */
+  channelId?: string;
+  /** Action buttons registered on the device (`setNotificationCategoryAsync`). */
+  categoryId?: string;
 }
 
 export type PushTarget =

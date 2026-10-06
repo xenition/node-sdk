@@ -66,7 +66,7 @@ export { EmailClient } from './email';
 export type { SendEmailOptions, SendEmailResult, SendBulkResult } from './email';
 
 // Push module
-export { PushClient } from './push';
+export { PushClient, isExpoPushToken } from './push';
 export type {
   PushPlatform,
   PushDevice,

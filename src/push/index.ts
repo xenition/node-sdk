@@ -1,4 +1,5 @@
 export { PushClient } from './push-client';
+export { isExpoPushToken } from './expo-token';
 export type {
   PushPlatform,
   PushDevice,

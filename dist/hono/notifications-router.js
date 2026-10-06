@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notificationsRouter = notificationsRouter;
 const hono_1 = require("hono");
+const expo_token_1 = require("../push/expo-token");
 const auth_1 = require("./auth");
 const client_1 = require("./client");
 const errors_1 = require("./errors");
@@ -12,6 +13,7 @@ const MINUTES_PER_DAY = 1440;
 /** UTC-14 … UTC+14, the real span of civil offsets. */
 const MAX_OFFSET_MINUTES = 840;
 const DEFAULT_LIMIT = 25;
+const MAX_TOKEN_LENGTH = 4096;
 const MAX_LIMIT = 100;
 function notificationsRouter(options = {}) {
     const app = new hono_1.Hono();
@@ -30,6 +32,7 @@ function notificationsRouter(options = {}) {
         app.post('/notifications/:id/read', limit);
         app.post('/notifications/read-all', limit);
         app.put('/notifications/preferences', limit);
+        app.post('/notifications/devices', limit);
     }
     /* ── the feed ────────────────────────────────────────────────────────── */
     app.get('/notifications', auth, async (c) => {
@@ -146,6 +149,51 @@ function notificationsRouter(options = {}) {
         const written = await Promise.all((target ? [target] : categories).map((name) => inbox.setPreference(userId, name, patch)));
         return c.json({ preferences: (0, normalize_1.normalizeRows)(written) });
     });
+    /* ── devices ─────────────────────────────────────────────────────────── */
+    /**
+     * Register this phone for push, as the CALLER. A `userId` in the body is
+     * ignored on purpose: this route holds the service key, and a device
+     * registered to whatever id a client names is a way to read someone
+     * else's notifications on your own lock screen.
+     *
+     * Idempotent — the token is the key — so the app can call it on every
+     * launch, which is also how a token the OS rotated gets picked up.
+     */
+    app.post('/notifications/devices', auth, async (c) => {
+        const body = await readObjectBody(c);
+        if (!body)
+            return (0, errors_1.badRequest)(c, 'Body must be a JSON object.');
+        const token = typeof body.token === 'string' ? body.token.trim() : '';
+        if (!token || token.length > MAX_TOKEN_LENGTH) {
+            return (0, errors_1.badRequest)(c, '"token" is required — the Expo push token from getExpoPushTokenAsync().');
+        }
+        const platform = pushPlatform(token, body.platform);
+        if (platform instanceof Error)
+            return (0, errors_1.badRequest)(c, platform.message);
+        const deviceName = typeof body.deviceName === 'string' && body.deviceName.trim()
+            ? body.deviceName.trim().slice(0, 120)
+            : undefined;
+        const device = await resolveClient(c).push.registerDevice({
+            userId: (0, auth_1.requireUser)(c).id,
+            token,
+            platform,
+            deviceName,
+        });
+        return c.json({ device }, 201);
+    });
+    /**
+     * Stop pushing to this phone — called on sign-out, so the next person to
+     * sign in on it does not get the previous one's notifications. Answers
+     * 204 whether or not the token was registered: there is nothing useful a
+     * client can do with "it was already gone".
+     */
+    app.delete('/notifications/devices/:token', auth, async (c) => {
+        const token = c.req.param('token');
+        if (!token)
+            return (0, errors_1.badRequest)(c, 'A device token is required.');
+        await resolveClient(c).push.unregisterDevice(token);
+        return c.body(null, 204);
+    });
     return app;
 }
 /* ── helpers ───────────────────────────────────────────────────────────── */
@@ -205,6 +253,20 @@ function optionalCategory(value) {
         return new Error('"category" must be a string of at most 60 characters.');
     }
     return value.trim();
+}
+/**
+ * The platform a token is reached through. An Expo token is recognised by
+ * its shape whatever the client says, because the shape is what decides the
+ * lane on the platform too.
+ */
+function pushPlatform(token, value) {
+    if ((0, expo_token_1.isExpoPushToken)(token))
+        return 'expo';
+    if (value === undefined || value === null || value === '')
+        return 'fcm';
+    if (value === 'fcm' || value === 'apns' || value === 'web' || value === 'expo')
+        return value;
+    return new Error('"platform" must be expo, fcm, apns or web.');
 }
 /** A JSON object body, or undefined for anything else (array/scalar/invalid). */
 async function readObjectBody(c) {

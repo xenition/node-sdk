@@ -1,6 +1,6 @@
 "use strict";
 /**
- * `@xenition/sdk/mobile` — social sign-in on a device, in one call.
+ * `@xenition/sdk/mobile` — social sign-in and push registration on a device.
  *
  * Everything here is runtime-agnostic on purpose. This package is installed by
  * Cloudflare Workers backends as often as by Expo apps, so it declares no
@@ -46,7 +46,7 @@
  * with no code change.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SignInCancelled = void 0;
+exports.isExpoPushToken = exports.registerForPush = exports.SignInCancelled = void 0;
 exports.signInWithProvider = signInWithProvider;
 exports.readCallbackUrl = readCallbackUrl;
 exports.createAppleNonce = createAppleNonce;
@@ -224,4 +224,8 @@ function isProviderNotConfigured(err) {
         return false;
     return err.code === 'AUTH_PROVIDER_NOT_CONFIGURED' || err.status === 412;
 }
+var push_1 = require("./push");
+Object.defineProperty(exports, "registerForPush", { enumerable: true, get: function () { return push_1.registerForPush; } });
+var expo_token_1 = require("../push/expo-token");
+Object.defineProperty(exports, "isExpoPushToken", { enumerable: true, get: function () { return expo_token_1.isExpoPushToken; } });
 //# sourceMappingURL=index.js.map

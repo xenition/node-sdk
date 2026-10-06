@@ -1,5 +1,5 @@
 /**
- * `@xenition/sdk/mobile` — social sign-in on a device, in one call.
+ * `@xenition/sdk/mobile` — social sign-in and push registration on a device.
  *
  * Everything here is runtime-agnostic on purpose. This package is installed by
  * Cloudflare Workers backends as often as by Expo apps, so it declares no
@@ -199,4 +199,7 @@ export declare function createAppleNonce(options?: {
     raw: string;
     hashed: string;
 }>;
+export { registerForPush } from './push';
+export type { NotificationsModule, PushRegistration, RegisterForPushOptions, } from './push';
+export { isExpoPushToken } from '../push/expo-token';
 //# sourceMappingURL=index.d.ts.map

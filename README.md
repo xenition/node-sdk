@@ -293,6 +293,25 @@ Delivery is **at least once**: a worker can die after doing the work but
 before recording success, so handlers must be idempotent. `enqueue` takes an
 `idempotencyKey` for the same reason on the producing side.
 
+## Push notifications
+
+Configured **once, on the platform**, not per app. A phone's Expo push token
+is delivered through Expo's push service with no credentials in the app or its
+worker. `notificationsRouter()` adds `POST /notifications/devices`, which
+registers the phone to the signed-in caller, and `notify()` then pushes to it.
+
+```ts
+// phone, after sign-in
+await registerForPush({ notifications: Notifications, projectId, os: Platform.OS,
+  register: (token) => api.post('/notifications/devices', { token }) });
+
+// worker
+await client.modules.notifications.notify(userId, { title: 'Rent due', body: 'Tomorrow' });
+```
+
+What each app still needs (an EAS push credential, which is an OS rule) and
+the full set of guarantees are in [docs/PUSH.md](docs/PUSH.md).
+
 ## Testing without a network
 
 ```ts
