@@ -1,6 +1,7 @@
 import { XenitionClient } from '../xenition-client';
 import type { User } from '../auth/types';
 import { FakeStore, RawHandler } from './fake-store';
+import type { PushDevice, SendPushInput } from '../push/types';
 /**
  * `@xenition/sdk/testing` — run a generated backend's tests without a
  * network.
@@ -44,14 +45,22 @@ export interface TestClient {
     store: FakeStore;
     /** The user every request authenticates as. */
     user: User;
+    /**
+     * What `client.push` was asked to do. Devices are keyed by token, like the
+     * platform; `sent` holds every `push.send()` input in order.
+     */
+    push: {
+        devices: Map<string, PushDevice>;
+        sent: SendPushInput[];
+    };
 }
 /**
  * A client that talks to memory instead of the platform.
  *
  * Only the surfaces a backend test actually drives are wired: the modules,
- * and enough of `auth` for the middleware to resolve a caller. Anything else
- * throws with a message saying so, which is far better than a silently
- * undefined method that fails three frames later.
+ * enough of `auth` for the middleware to resolve a caller, and an in-memory
+ * `push`. Anything else throws with a message saying so, which is far better
+ * than a silently undefined method that fails three frames later.
  */
 export declare function createTestClient(options?: TestClientOptions): TestClient;
 //# sourceMappingURL=index.d.ts.map

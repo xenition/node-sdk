@@ -9,7 +9,7 @@ export { StorageClient } from './storage';
 export type { UploadOptions, UploadResult, StorageFile, SignedUrlResult, SignedUrlOptions, UploadUrlResult, CreateUploadUrlOptions, ListFilesOptions, ListFilesResult, } from './storage';
 export { EmailClient } from './email';
 export type { SendEmailOptions, SendEmailResult, SendBulkResult } from './email';
-export { PushClient } from './push';
+export { PushClient, isExpoPushToken } from './push';
 export type { PushPlatform, PushDevice, PushNotification, PushTarget, RegisterDeviceInput, SendPushInput, SendPushResult, } from './push';
 export { AiClient, AiKeysClient, parseJsonReply, parseSseStream } from './ai';
 export type { AiProvider, AiResultProvider, VideoJob, VideoJobStatus, WaitForVideoOptions, AiUsage, ChatMessage, ChatContentPart, ChatReply, GenerateTextOutput, ChatOutput, GenerateImageOutput, GenerateVideoOutput, GenerateEmbeddingsOutput, AiKeyRecord, GenerateTextOptions, ChatOptions, GenerateImageOptions, GenerateVideoOptions, GenerateEmbeddingsOptions, CreateAiKeyInput, UpdateAiKeyInput, ChatDelta, ResponseFormat, SpeechFormat, SpeechOptions, SpeechOutput, TranscribeOptions, TranscribeOutput, TranscribedWord, } from './ai';

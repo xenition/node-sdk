@@ -11,6 +11,8 @@ import { FormsClient } from '../modules/forms';
 import { ReviewsClient } from '../modules/reviews';
 import { FakeStore, makeFakeContext, RawHandler } from './fake-store';
 import { jobsRawHandler } from './jobs-raw';
+import { isExpoPushToken } from '../push/expo-token';
+import type { PushDevice, RegisterDeviceInput, SendPushInput, SendPushResult } from '../push/types';
 
 /**
  * `@xenition/sdk/testing` — run a generated backend's tests without a
@@ -58,6 +60,11 @@ export interface TestClient {
   store: FakeStore;
   /** The user every request authenticates as. */
   user: User;
+  /**
+   * What `client.push` was asked to do. Devices are keyed by token, like the
+   * platform; `sent` holds every `push.send()` input in order.
+   */
+  push: { devices: Map<string, PushDevice>; sent: SendPushInput[] };
 }
 
 const DEFAULT_USER: User = {
@@ -72,9 +79,9 @@ const DEFAULT_USER: User = {
  * A client that talks to memory instead of the platform.
  *
  * Only the surfaces a backend test actually drives are wired: the modules,
- * and enough of `auth` for the middleware to resolve a caller. Anything else
- * throws with a message saying so, which is far better than a silently
- * undefined method that fails three frames later.
+ * enough of `auth` for the middleware to resolve a caller, and an in-memory
+ * `push`. Anything else throws with a message saying so, which is far better
+ * than a silently undefined method that fails three frames later.
  */
 export function createTestClient(options: TestClientOptions = {}): TestClient {
   const user: User = { ...DEFAULT_USER, ...options.user };
@@ -101,7 +108,45 @@ export function createTestClient(options: TestClientOptions = {}): TestClient {
     return user;
   };
 
+  const push = { devices: new Map<string, PushDevice>(), sent: [] as SendPushInput[] };
+
   const client = {
+    push: {
+      registerDevice: async (input: RegisterDeviceInput): Promise<PushDevice> => {
+        const device: PushDevice = {
+          id: input.token,
+          userId: input.userId ?? user.id,
+          token: input.token,
+          platform: isExpoPushToken(input.token) ? 'expo' : input.platform,
+          deviceName: input.deviceName ?? null,
+          active: true,
+          createdAt: new Date().toISOString(),
+        };
+        push.devices.set(input.token, device);
+        return device;
+      },
+      unregisterDevice: async (token: string): Promise<void> => {
+        push.devices.delete(token);
+      },
+      send: async (input: SendPushInput): Promise<SendPushResult> => {
+        push.sent.push(input);
+        const targets = Array.isArray(input.targets) ? input.targets : [input.targets];
+        const hit = [...push.devices.values()].filter((d) =>
+          targets.some(
+            (t) =>
+              ('userId' in t && t.userId === d.userId) ||
+              ('token' in t && t.token === d.token) ||
+              ('deviceIds' in t && t.deviceIds.includes(d.id)),
+          ),
+        );
+        return {
+          sent: hit.length,
+          failed: 0,
+          skipped: 0,
+          results: hit.map((d) => ({ deviceId: d.id, platform: d.platform, status: 'sent' as const })),
+        };
+      },
+    },
     auth: {
       verifyToken,
       me: async () => user,
@@ -129,7 +174,7 @@ export function createTestClient(options: TestClientOptions = {}): TestClient {
     },
   } as unknown as XenitionClient;
 
-  return { client, store, user };
+  return { client, store, user, push };
 }
 
 /**

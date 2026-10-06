@@ -35,10 +35,10 @@ const message = (over: Record<string, unknown> = {}) => ({
 });
 
 const makeApp = (options: Record<string, unknown> = {}, unauthenticated = false) => {
-  const { client, store, user } = createTestClient({ unauthenticated });
+  const { client, store, user, push } = createTestClient({ unauthenticated });
   const app = new Hono();
   app.route('/api', notificationsRouter({ client, ...options }));
-  return { app, store, client, user };
+  return { app, store, client, user, push };
 };
 
 describe('GET /notifications', () => {
@@ -290,5 +290,55 @@ describe('mounting', () => {
     const { client } = createTestClient();
     const api = createXenitionApi({ client, modules: ['cms'] });
     expect((await api.request('/notifications', auth)).status).toBe(404);
+  });
+});
+
+describe('/notifications/devices', () => {
+  const postJson = (body: unknown) => ({
+    method: 'POST',
+    headers: { ...auth.headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  it('registers the phone to the CALLER, ignoring any userId in the body', async () => {
+    const { app, push } = makeApp();
+    const res = await app.request(
+      '/api/notifications/devices',
+      postJson({ token: 'ExponentPushToken[abc]', userId: 'someone-else', platform: 'fcm' }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { device: { userId: string; platform: string } };
+    // The token's shape decides the lane, whatever the client claimed.
+    expect(body.device).toMatchObject({ userId: 'test-user', platform: 'expo' });
+    expect(push.devices.get('ExponentPushToken[abc]')?.userId).toBe('test-user');
+  });
+
+  it('rejects a missing token and an unknown platform', async () => {
+    const { app } = makeApp();
+    expect((await app.request('/api/notifications/devices', postJson({}))).status).toBe(400);
+    expect(
+      (await app.request('/api/notifications/devices', postJson({ token: 'raw', platform: 'pager' })))
+        .status,
+    ).toBe(400);
+  });
+
+  it('unregisters on sign-out', async () => {
+    const { app, push } = makeApp();
+    await app.request('/api/notifications/devices', postJson({ token: 'ExponentPushToken[abc]' }));
+    const res = await app.request('/api/notifications/devices/ExponentPushToken%5Babc%5D', {
+      method: 'DELETE',
+      ...auth,
+    });
+    expect(res.status).toBe(204);
+    expect(push.devices.size).toBe(0);
+  });
+
+  it('401s without a token', async () => {
+    const { app } = makeApp();
+    const res = await app.request('/api/notifications/devices', {
+      method: 'POST',
+      body: JSON.stringify({ token: 'ExponentPushToken[abc]' }),
+    });
+    expect(res.status).toBe(401);
   });
 });
