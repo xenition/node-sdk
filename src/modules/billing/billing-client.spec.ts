@@ -210,6 +210,48 @@ describe('purchase status → access', () => {
 });
 
 describe('check', () => {
+  it('reports the store free trial on a purchase-backed entitlement', async () => {
+    const { billing } = await withPremium();
+    await billing.recordPurchase(
+      applePurchase({ raw: { offerType: 1, offerDiscountType: 'FREE_TRIAL', productId: 'com.acme.premium.monthly' } }),
+    );
+    expect(await billing.check('user-1', 'premium')).toMatchObject({
+      allowed: true,
+      source: 'purchase',
+      isTrial: true,
+      trialSource: 'store',
+      willRenew: true,
+      productId: 'com.acme.premium.monthly',
+      purchaseStatus: 'active',
+    });
+  });
+
+  it('a sandbox purchase (App Review, TestFlight) unlocks, labelled as sandbox', async () => {
+    const { billing } = await withPremium();
+    await billing.recordPurchase(applePurchase({ environment: 'sandbox' }));
+    expect(await billing.check('user-1', 'premium')).toMatchObject({ allowed: true, environment: 'sandbox' });
+  });
+
+  it('a purchase in billing grace keeps access until its grace expiry', async () => {
+    const { billing } = await withPremium();
+    const graceEnd = new Date(Date.now() + 5 * 86_400_000).toISOString();
+    await billing.recordPurchase(applePurchase({ status: 'grace', expiresAt: graceEnd }));
+    expect(await billing.check('user-1', 'premium')).toMatchObject({ allowed: true, purchaseStatus: 'grace', expiresAt: graceEnd });
+  });
+
+  it('a converted (renewed) store trial is a paid purchase', async () => {
+    const { billing } = await withPremium();
+    await billing.recordPurchase(applePurchase({ raw: { offerType: 1, offerDiscountType: 'FREE_TRIAL' } }));
+    await billing.recordPurchase(applePurchase({ transactionId: 'txn-2', raw: { type: 'Auto-Renewable Subscription' } }));
+    expect(await billing.check('user-1', 'premium')).toMatchObject({ allowed: true, isTrial: false, trialSource: null });
+  });
+
+  it('the server trial still reports trialSource server', async () => {
+    const { billing } = await withPremium();
+    await billing.startTrial({ userId: 'user-2', entitlement: 'premium', days: 3 });
+    expect(await billing.check('user-2', 'premium')).toMatchObject({ isTrial: true, trialSource: 'server', willRenew: null, productId: null });
+  });
+
   it('reports none for a user who never bought anything', async () => {
     const { billing } = await withPremium();
     expect(await billing.check('nobody', 'premium')).toMatchObject({

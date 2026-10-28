@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import { XenitionClient } from '../xenition-client';
 import { AppleStore, GoogleStore } from '../modules/billing';
+import type { ResolveAccount, VerifyPubSubOptions, VerifyX5cOptions } from '../modules/billing';
 import type { XenitionRouterOptions } from './types';
 /**
  * `/billing` — in-app purchases over HTTP, for the mobile client.
@@ -49,13 +50,39 @@ export interface BillingRouterOptions extends XenitionRouterOptions {
     trialDays?: number;
     /** Entitlement the trial grants. Defaults to `premium`. */
     trialEntitlement?: string;
+    /**
+     * Map a purchase's account token (StoreKit appAccountToken / Play
+     * obfuscatedAccountId, set by the app when buying) to a user, so a store
+     * notification that arrives before `/billing/verify` still finds its owner.
+     * See `ResolveAccount`. Off when omitted.
+     */
+    resolveAccount?: ResolveAccount;
+    /** Check Apple's x5c certificate chain on `/billing/webhooks/apple` (true = pin Apple Root CA - G3). */
+    verifyAppleSignature?: boolean | VerifyX5cOptions;
+    /** Check the Pub/Sub OIDC token on `/billing/webhooks/google` (audience / service account to expect). */
+    verifyGooglePubSub?: VerifyPubSubOptions;
 }
 export declare function billingRouter(options?: BillingRouterOptions): Hono;
 export interface RequireEntitlementOptions {
     client?: XenitionClient;
     /** Message for the 402 body. Defaults to a generic upgrade prompt. */
     message?: string;
+    /**
+     * WHOSE entitlement decides. Defaults to the caller. A shared space where
+     * one person pays for everyone (a household, a team) returns the payer's
+     * user id here, so a member is let in on the owner's subscription.
+     */
+    subject?: (c: Context, callerId: string) => string | Promise<string>;
+    /**
+     * When billing itself cannot answer (the platform is down): `'deny'`
+     * (default) lets the error surface; `'allow'` lets the request through and
+     * logs it — a hard paywall should not lock out every paying customer
+     * because a dependency blinked.
+     */
+    onBillingError?: 'deny' | 'allow';
 }
+/** The EntitlementCheck `requireEntitlement` decided on, for the handler: `c.get(ENTITLEMENT_CHECK)`. */
+export declare const ENTITLEMENT_CHECK = "xenition:entitlementCheck";
 /**
  * Gate a route on an entitlement — the paywall, as one line per route.
  *

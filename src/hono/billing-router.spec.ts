@@ -4,7 +4,7 @@ import { AppleStore, BillingClient, GoogleStore } from '../modules/billing';
 import { makeFakeContext } from '../testing/fake-store';
 import type { User } from '../auth/types';
 import { requireAuth } from './auth';
-import { billingRouter, requireEntitlement } from './billing-router';
+import { billingRouter, ENTITLEMENT_CHECK, requireEntitlement } from './billing-router';
 import { honoErrorHandler } from './errors';
 
 /**
@@ -412,6 +412,41 @@ describe('requireEntitlement', () => {
       quota?: unknown;
     };
     expect(body.quota).toBeUndefined();
+  });
+
+  it('subject: a member is let in on the payer subscription, and the handler gets the check', async () => {
+    const { ctx } = makeFakeContext();
+    const billing = new BillingClient(ctx);
+    await billing.grant({ userId: 'owner-1', entitlement: 'premium' });
+    const client = {
+      auth: { verifyToken: jest.fn().mockResolvedValue(USER) },
+      modules: { use: jest.fn(), billing },
+    } as unknown as XenitionClient;
+    const app = new Hono();
+    app.onError(honoErrorHandler);
+    app.use('/home/*', requireAuth({ client }), requireEntitlement('premium', { client, subject: () => 'owner-1' }));
+    app.get('/home/x', (c) => c.json({ check: c.get(ENTITLEMENT_CHECK as never) }));
+    const res = await app.request('/home/x', auth);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ check: { allowed: true, entitlement: 'premium' } });
+  });
+
+  it('onBillingError: allow lets the request through when billing throws; deny does not', async () => {
+    const broken = {
+      auth: { verifyToken: jest.fn().mockResolvedValue(USER) },
+      modules: { use: jest.fn(), billing: { check: jest.fn().mockRejectedValue(new Error('platform down')) } },
+    } as unknown as XenitionClient;
+    const make = (onBillingError: 'allow' | 'deny') => {
+      const app = new Hono();
+      app.onError(honoErrorHandler);
+      app.use('/coach/*', requireAuth({ client: broken }), requireEntitlement('premium', { client: broken, onBillingError }));
+      app.get('/coach/session', (c) => c.json({ ok: true }));
+      return app;
+    };
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect((await make('allow').request('/coach/session', auth)).status).toBe(200);
+    expect((await make('deny').request('/coach/session', auth)).status).toBeGreaterThanOrEqual(500);
+    warn.mockRestore();
   });
 
   it('401s before checking entitlement when there is no token', async () => {

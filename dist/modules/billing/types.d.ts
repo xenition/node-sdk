@@ -65,7 +65,7 @@ export interface Purchase {
     /** Null for non-expiring products (non-consumable, consumable). */
     expires_at: string | null;
     auto_renewing: boolean;
-    /** 'production' | 'sandbox' — sandbox purchases must never unlock production. */
+    /** 'production' | 'sandbox' — from the store host that answered. Sandbox (App Review, TestFlight) still unlocks; leave it out of revenue. */
     environment: string;
     /** Verbatim store payload, for support and audit. */
     raw: Record<string, unknown>;
@@ -101,8 +101,21 @@ export interface EntitlementCheck {
     expiresAt: string | null;
     /** Whole days remaining, rounded up. Null when perpetual or not allowed. */
     daysRemaining: number | null;
-    /** True while this is a free trial rather than a paid purchase. */
+    /**
+     * True while this is a free trial rather than a paid purchase — the SDK's
+     * own `startTrial()` OR the store's introductory free trial (`trialSource`).
+     */
     isTrial: boolean;
+    /** Whose trial: 'server' (startTrial), 'store' (an App Store / Play intro offer), or null. */
+    trialSource: 'server' | 'store' | null;
+    /** Store purchases: will it renew (or, in a trial, convert)? Null when unknown or not a store purchase. */
+    willRenew: boolean | null;
+    /** The store product behind it, when a purchase backs it. */
+    productId: string | null;
+    /** The backing purchase's own status ('grace', 'on_hold'…), when a purchase backs it. */
+    purchaseStatus: PurchaseStatus | null;
+    /** 'production' | 'sandbox' for a store purchase (App Review and TestFlight are sandbox); null otherwise. */
+    environment: string | null;
     /** Machine-readable why-not: 'expired' | 'revoked' | 'none'. */
     reason: string | null;
 }

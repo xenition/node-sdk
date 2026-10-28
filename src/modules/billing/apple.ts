@@ -118,6 +118,7 @@ export class AppleStore {
     const isSubscription = transaction.type === 'Auto-Renewable Subscription';
     let status: PurchaseStatus = 'active';
     let autoRenewing = false;
+    let graceUntil: number | null = null;
     // The looked-up id may be months old — a subscription's CURRENT state
     // lives on the latest transaction in the chain, so prefer that when the
     // status endpoint supplies it.
@@ -127,6 +128,7 @@ export class AppleStore {
       const current = await this.subscriptionStatus(transaction.originalTransactionId, host);
       status = current.status;
       autoRenewing = current.autoRenewing;
+      graceUntil = current.graceUntil;
       if (current.transaction) effective = current.transaction;
     }
     // A revocation beats any status: the money went back. Checked on both
@@ -134,7 +136,7 @@ export class AppleStore {
     // stops.
     if (isRevoked(transaction) || isRevoked(effective)) status = 'refunded';
 
-    return toRecordInput(userId, effective, status, autoRenewing, environmentOf(host));
+    return toRecordInput(userId, effective, status, autoRenewing, environmentOf(host), graceUntil);
   }
 
   /**
@@ -168,7 +170,7 @@ export class AppleStore {
             : (STATUS_BY_CODE[Number(entry.status)] ?? 'expired');
         const renewal = readRenewalInfo(entry);
         records.push(
-          toRecordInput(userId, transaction, status, renewal.autoRenewing, environmentOf(host)),
+          toRecordInput(userId, transaction, status, renewal.autoRenewing, environmentOf(host), renewal.graceUntil),
         );
       }
     }
@@ -193,7 +195,12 @@ export class AppleStore {
   private async subscriptionStatus(
     originalTransactionId: string,
     host: string,
-  ): Promise<{ status: PurchaseStatus; autoRenewing: boolean; transaction?: AppleTransaction }> {
+  ): Promise<{
+    status: PurchaseStatus;
+    autoRenewing: boolean;
+    graceUntil: number | null;
+    transaction?: AppleTransaction;
+  }> {
     const { body } = await this.request(
       `/inApps/v1/subscriptions/${encodeURIComponent(originalTransactionId)}`,
       host,
@@ -208,9 +215,11 @@ export class AppleStore {
       );
       if (!entry) continue;
       const signed = entry.signedTransactionInfo;
+      const renewal = readRenewalInfo(entry);
       return {
         status: STATUS_BY_CODE[Number(entry.status)] ?? 'expired',
-        autoRenewing: readRenewalInfo(entry).autoRenewing,
+        autoRenewing: renewal.autoRenewing,
+        graceUntil: renewal.graceUntil,
         transaction:
           typeof signed === 'string'
             ? decodeJwsPayloadUnverified<AppleTransaction>(signed)
@@ -219,7 +228,7 @@ export class AppleStore {
     }
     // Apple knows the transaction but reports no subscription group for it:
     // treat as expired rather than assuming access.
-    return { status: 'expired', autoRenewing: false };
+    return { status: 'expired', autoRenewing: false, graceUntil: null };
   }
 
   /**
@@ -317,15 +326,23 @@ export class AppleStore {
 
 /* ── helpers ───────────────────────────────────────────────────────────── */
 
-function readRenewalInfo(entry: Record<string, unknown>): { autoRenewing: boolean } {
+/**
+ * The renewal side of a subscription: will it renew, and — in billing grace —
+ * until when Apple keeps the customer's access while it retries the card.
+ */
+function readRenewalInfo(entry: Record<string, unknown>): { autoRenewing: boolean; graceUntil: number | null } {
   const signed = entry?.signedRenewalInfo;
-  if (typeof signed !== 'string') return { autoRenewing: false };
+  if (typeof signed !== 'string') return { autoRenewing: false, graceUntil: null };
   try {
     const renewal = decodeJwsPayloadUnverified<Record<string, unknown>>(signed);
-    return { autoRenewing: Number(renewal.autoRenewStatus) === 1 };
+    const grace = Number(renewal.gracePeriodExpiresDate);
+    return {
+      autoRenewing: Number(renewal.autoRenewStatus) === 1,
+      graceUntil: Number.isFinite(grace) && grace > 0 ? grace : null,
+    };
   } catch {
     // Renewal info is a nice-to-have; never fail a verification over it.
-    return { autoRenewing: false };
+    return { autoRenewing: false, graceUntil: null };
   }
 }
 
@@ -336,7 +353,15 @@ export function toRecordInput(
   status: PurchaseStatus,
   autoRenewing: boolean,
   environment?: string,
+  graceUntil?: number | null,
 ): RecordPurchaseInput {
+  // In billing grace the lapsed transaction's expiresDate is already past;
+  // access runs to Apple's gracePeriodExpiresDate instead. Without this the
+  // entitlement reads as expired while the store still grants access.
+  const expiresDate =
+    status === 'grace' && typeof graceUntil === 'number' && graceUntil > (transaction.expiresDate ?? 0)
+      ? graceUntil
+      : transaction.expiresDate;
   return {
     userId,
     platform: 'apple',
@@ -345,7 +370,7 @@ export function toRecordInput(
     transactionId: transaction.transactionId,
     status,
     purchasedAt: msToIso(transaction.purchaseDate),
-    expiresAt: msToIso(transaction.expiresDate),
+    expiresAt: msToIso(expiresDate),
     autoRenewing,
     environment: environment ?? (transaction.environment ?? 'Production').toLowerCase(),
     raw: transaction as Record<string, unknown>,
@@ -363,7 +388,9 @@ export function msToIso(value: unknown): string | null {
  *
  * Taken from the host that ANSWERED rather than the `environment` field in
  * the payload: the host is what the request actually reached, and it cannot
- * be stale or absent. A sandbox purchase must never unlock production.
+ * be stale or absent. Sandbox purchases still grant access — App Review buys
+ * with sandbox accounts against production — but are labelled, so revenue
+ * and analytics can leave them out (`EntitlementCheck.environment`).
  */
 export function environmentOf(host: string): string {
   return host === SANDBOX_HOST ? 'sandbox' : 'production';

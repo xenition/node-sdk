@@ -8,7 +8,7 @@ import {
   handleAppleNotification,
   handleGoogleNotification,
 } from '../modules/billing';
-import type { EntitlementCheck } from '../modules/billing';
+import type { EntitlementCheck, ResolveAccount, VerifyPubSubOptions, VerifyX5cOptions } from '../modules/billing';
 import { currentUser, requireAuth, requireUser } from './auth';
 import { makeClientResolver, readEnvVar, XenitionApiConfigError } from './client';
 import {
@@ -70,6 +70,17 @@ export interface BillingRouterOptions extends XenitionRouterOptions {
   trialDays?: number;
   /** Entitlement the trial grants. Defaults to `premium`. */
   trialEntitlement?: string;
+  /**
+   * Map a purchase's account token (StoreKit appAccountToken / Play
+   * obfuscatedAccountId, set by the app when buying) to a user, so a store
+   * notification that arrives before `/billing/verify` still finds its owner.
+   * See `ResolveAccount`. Off when omitted.
+   */
+  resolveAccount?: ResolveAccount;
+  /** Check Apple's x5c certificate chain on `/billing/webhooks/apple` (true = pin Apple Root CA - G3). */
+  verifyAppleSignature?: boolean | VerifyX5cOptions;
+  /** Check the Pub/Sub OIDC token on `/billing/webhooks/google` (audience / service account to expect). */
+  verifyGooglePubSub?: VerifyPubSubOptions;
 }
 
 export function billingRouter(options: BillingRouterOptions = {}): Hono {
@@ -240,6 +251,8 @@ export function billingRouter(options: BillingRouterOptions = {}): Hono {
       billing: billingOf(c),
       apple: appleFrom(c, options),
       signedPayload,
+      resolveAccount: options.resolveAccount,
+      verifySignature: options.verifyAppleSignature,
     });
     return c.json(notificationBody(result));
   });
@@ -251,6 +264,10 @@ export function billingRouter(options: BillingRouterOptions = {}): Hono {
       billing: billingOf(c),
       google: googleFrom(c, options),
       body,
+      resolveAccount: options.resolveAccount,
+      verifyPubSub: options.verifyGooglePubSub
+        ? { ...options.verifyGooglePubSub, authorization: c.req.header('authorization') }
+        : undefined,
     });
     return c.json(notificationBody(result));
   });
@@ -264,7 +281,23 @@ export interface RequireEntitlementOptions {
   client?: XenitionClient;
   /** Message for the 402 body. Defaults to a generic upgrade prompt. */
   message?: string;
+  /**
+   * WHOSE entitlement decides. Defaults to the caller. A shared space where
+   * one person pays for everyone (a household, a team) returns the payer's
+   * user id here, so a member is let in on the owner's subscription.
+   */
+  subject?: (c: Context, callerId: string) => string | Promise<string>;
+  /**
+   * When billing itself cannot answer (the platform is down): `'deny'`
+   * (default) lets the error surface; `'allow'` lets the request through and
+   * logs it — a hard paywall should not lock out every paying customer
+   * because a dependency blinked.
+   */
+  onBillingError?: 'deny' | 'allow';
 }
+
+/** The EntitlementCheck `requireEntitlement` decided on, for the handler: `c.get(ENTITLEMENT_CHECK)`. */
+export const ENTITLEMENT_CHECK = 'xenition:entitlementCheck';
 
 /**
  * Gate a route on an entitlement — the paywall, as one line per route.
@@ -302,10 +335,20 @@ export function requireEntitlement(
           'Mount requireAuth() before it.',
       );
     }
-    const check = await resolveClient(c).modules.billing.check(user.id, entitlement);
+    let check: EntitlementCheck;
+    try {
+      const subject = options.subject ? await options.subject(c, user.id) : user.id;
+      check = await resolveClient(c).modules.billing.check(subject, entitlement);
+    } catch (error) {
+      if (options.onBillingError !== 'allow') throw error;
+      console.warn(`requireEntitlement("${entitlement}"): billing did not answer, letting the request through:`, error instanceof Error ? error.message : error);
+      await next();
+      return;
+    }
     if (!check.allowed) {
       return paymentRequired(c, { entitlement, message: options.message, check });
     }
+    c.set(ENTITLEMENT_CHECK as never, check as never);
     await next();
   };
 }
@@ -342,11 +385,13 @@ function notificationBody(result: {
   handled: boolean;
   notificationType: string;
   reason?: string;
+  event?: string;
 }): Record<string, unknown> {
   return {
     received: true,
     handled: result.handled,
     type: result.notificationType,
+    ...(result.event ? { event: result.event } : {}),
     ...(result.reason ? { reason: result.reason } : {}),
   };
 }

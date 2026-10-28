@@ -1,4 +1,5 @@
 import { Migration } from '../../migrations/types';
+import { storeOffer } from './offers';
 import { defineModule, ModuleContext } from '../core';
 import {
   fail,
@@ -370,22 +371,25 @@ export class BillingClient {
         expiresAt: null,
         daysRemaining: null,
         isTrial: false,
+        trialSource: null,
+        willRenew: null,
+        productId: null,
+        purchaseStatus: null,
+        environment: null,
         reason: 'none',
       };
     }
+    return evaluateEntitlement(row, await this.backingPurchase(row));
+  }
 
-    const expired = isExpired(row.expires_at);
-    const allowed = row.status === 'active' && !expired;
-    return {
-      allowed,
-      entitlement: key,
-      source: row.source,
-      status: expired && row.status === 'active' ? 'expired' : row.status,
-      expiresAt: row.expires_at,
-      daysRemaining: allowed ? daysUntil(row.expires_at) : null,
-      isTrial: row.source === 'trial',
-      reason: allowed ? null : expired ? 'expired' : row.status,
-    };
+  /** The purchase an entitlement row was projected from, when there is one. */
+  private async backingPurchase(row: Entitlement): Promise<Purchase | null> {
+    if (row.source !== 'purchase' || !row.purchase_id) return null;
+    const purchase = await this.ctx.query
+      .from(BILLING_TABLES.PURCHASES)
+      .where('id', row.purchase_id)
+      .first<Purchase>();
+    return purchase ?? null;
   }
 
   /** Every entitlement row for a user, evaluated the same way as `check`. */
@@ -397,20 +401,9 @@ export class BillingClient {
       .where('user_id', userId)
       .orderBy('entitlement', 'ASC')
       .rows<Entitlement>();
-    return rows.map((row) => {
-      const expired = isExpired(row.expires_at);
-      const allowed = row.status === 'active' && !expired;
-      return {
-        allowed,
-        entitlement: row.entitlement,
-        source: row.source,
-        status: expired && row.status === 'active' ? 'expired' : row.status,
-        expiresAt: row.expires_at,
-        daysRemaining: allowed ? daysUntil(row.expires_at) : null,
-        isTrial: row.source === 'trial',
-        reason: allowed ? null : expired ? 'expired' : row.status,
-      } as EntitlementCheck;
-    });
+    const out: EntitlementCheck[] = [];
+    for (const row of rows) out.push(evaluateEntitlement(row, await this.backingPurchase(row)));
+    return out;
   }
 
   /**
@@ -686,6 +679,34 @@ export interface RecordPurchaseInput {
   autoRenewing?: boolean;
   environment?: string;
   raw?: Record<string, unknown>;
+}
+
+/**
+ * One entitlement row, evaluated at read time (`check` and `listEntitlements`).
+ * The backing purchase, when there is one, says whether this is the store's
+ * free trial and whether it will renew.
+ */
+export function evaluateEntitlement(row: Entitlement, purchase: Purchase | null): EntitlementCheck {
+  const expired = isExpired(row.expires_at);
+  const allowed = row.status === 'active' && !expired;
+  const offer = purchase ? storeOffer(purchase) : null;
+  const storeTrial = Boolean(allowed && offer?.isStoreTrial);
+  const serverTrial = row.source === 'trial';
+  return {
+    allowed,
+    entitlement: row.entitlement,
+    source: row.source,
+    status: expired && row.status === 'active' ? 'expired' : row.status,
+    expiresAt: row.expires_at,
+    daysRemaining: allowed ? daysUntil(row.expires_at) : null,
+    isTrial: serverTrial || storeTrial,
+    trialSource: serverTrial ? 'server' : storeTrial ? 'store' : null,
+    willRenew: purchase ? (offer?.willRenew ?? Boolean(purchase.auto_renewing)) : null,
+    productId: purchase?.product_id ?? null,
+    purchaseStatus: purchase?.status ?? null,
+    environment: purchase?.environment ?? null,
+    reason: allowed ? null : expired ? 'expired' : row.status,
+  };
 }
 
 /** Past its expiry. A null expiry is perpetual and never expires. */
