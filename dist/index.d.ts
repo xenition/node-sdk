@@ -57,8 +57,8 @@ export { CartClient, cartModule, CART_MIGRATIONS, CART_TABLES } from './modules/
 export type { CartStatus, CartRecord, CartItem, CartItemView, CartView, } from './modules/cart';
 export { OrdersClient, ordersModule, ORDERS_MIGRATIONS, ORDERS_TABLES } from './modules/orders';
 export type { OrderStatus, OrderRecord, OrderItem, OrderWithItems, CreateOrderInput, MarkPaidInput, ListOrdersOptions, } from './modules/orders';
-export { BillingClient, billingModule, BILLING_MIGRATIONS, BILLING_TABLES, AppleStore, GoogleStore, handleAppleNotification, handleGoogleNotification, } from './modules/billing';
-export type { AppleConfig, AppleTransaction, GoogleConfig, NotificationResult, } from './modules/billing';
+export { BillingClient, billingModule, BILLING_MIGRATIONS, BILLING_TABLES, AppleStore, GoogleStore, handleAppleNotification, handleGoogleNotification, storeOffer, classifyPurchaseChange, evaluateEntitlement, verifyJwsX5c, verifyPubSubToken, parseCertificate, APPLE_ROOT_CA_G3_SHA256, } from './modules/billing';
+export type { AppleConfig, AppleTransaction, GoogleConfig, NotificationResult, ResolveAccount, StoreOffer, OfferPeriod, PurchaseEvent, VerifyX5cOptions, VerifyPubSubOptions, ParsedCertificate, } from './modules/billing';
 export type { BillingEvent, BillingPlatform, BillingProduct, DefineProductInput, Entitlement, EntitlementCheck, EntitlementSource, EntitlementStatus, GrantInput, ProductKind, Purchase, PurchaseStatus, RecordPurchaseInput, StartTrialInput, ListProductsOptions as ListBillingProductsOptions, ListPurchasesOptions, } from './modules/billing';
 export { JobsClient, jobsModule, JOBS_MIGRATIONS, JOBS_TABLE } from './modules/jobs';
 export type { ClaimOptions, EnqueueOptions, FailOptions, Job, JobContext, JobHandler, JobStatus, WorkSummary, ListJobsOptions as ListJobsQueryOptions, } from './modules/jobs';

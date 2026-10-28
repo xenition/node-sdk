@@ -428,12 +428,27 @@ export {
   GoogleStore,
   handleAppleNotification,
   handleGoogleNotification,
+  // 0.2.11 — store trials, purchase events, webhook signature checks
+  storeOffer,
+  classifyPurchaseChange,
+  evaluateEntitlement,
+  verifyJwsX5c,
+  verifyPubSubToken,
+  parseCertificate,
+  APPLE_ROOT_CA_G3_SHA256,
 } from './modules/billing';
 export type {
   AppleConfig,
   AppleTransaction,
   GoogleConfig,
   NotificationResult,
+  ResolveAccount,
+  StoreOffer,
+  OfferPeriod,
+  PurchaseEvent,
+  VerifyX5cOptions,
+  VerifyPubSubOptions,
+  ParsedCertificate,
 } from './modules/billing';
 export type {
   BillingEvent,
