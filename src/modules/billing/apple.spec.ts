@@ -171,6 +171,64 @@ describe('verify', () => {
     }
   });
 
+  it('in billing grace, access runs to the gracePeriodExpiresDate, not the lapsed expiry', async () => {
+    const graceEnd = TRANSACTION.expiresDate + 16 * 24 * HOUR;
+    const body = {
+      data: [
+        {
+          lastTransactions: [
+            {
+              originalTransactionId: 'chain-1',
+              status: 4,
+              signedTransactionInfo: signedPayload(TRANSACTION),
+              signedRenewalInfo: signedPayload({ autoRenewStatus: 1, gracePeriodExpiresDate: graceEnd }),
+            },
+          ],
+        },
+      ],
+    };
+    const apple = new AppleStore({
+      ...CONFIG,
+      fetchImpl: makeFetch({
+        '/inApps/v1/transactions/': { body: { signedTransactionInfo: signedPayload(TRANSACTION) } },
+        '/inApps/v1/subscriptions/': { body },
+      }) as unknown as typeof fetch,
+    });
+    const record = await apple.verify({ userId: 'user-1', transactionId: 'txn-1' });
+    expect(record.status).toBe('grace');
+    expect(record.expiresAt).toBe(new Date(graceEnd).toISOString());
+
+    const restored = await apple.restore({ userId: 'user-1', originalTransactionId: 'chain-1' });
+    expect(restored[0]?.expiresAt).toBe(new Date(graceEnd).toISOString());
+  });
+
+  it('outside grace, gracePeriodExpiresDate does not extend anything', async () => {
+    const body = {
+      data: [
+        {
+          lastTransactions: [
+            {
+              originalTransactionId: 'chain-1',
+              status: 3,
+              signedTransactionInfo: signedPayload(TRANSACTION),
+              signedRenewalInfo: signedPayload({ autoRenewStatus: 1, gracePeriodExpiresDate: TRANSACTION.expiresDate + 99 * HOUR }),
+            },
+          ],
+        },
+      ],
+    };
+    const apple = new AppleStore({
+      ...CONFIG,
+      fetchImpl: makeFetch({
+        '/inApps/v1/transactions/': { body: { signedTransactionInfo: signedPayload(TRANSACTION) } },
+        '/inApps/v1/subscriptions/': { body },
+      }) as unknown as typeof fetch,
+    });
+    const record = await apple.verify({ userId: 'user-1', transactionId: 'txn-1' });
+    expect(record.status).toBe('on_hold');
+    expect(record.expiresAt).toBe(new Date(TRANSACTION.expiresDate).toISOString());
+  });
+
   it('treats a revocation date as a refund whatever the status says', async () => {
     const revoked = { ...TRANSACTION, revocationDate: 1_700_100_000_000, revocationReason: 1 };
     const apple = new AppleStore({

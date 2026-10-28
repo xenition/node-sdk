@@ -4,6 +4,9 @@ import { GoogleStore } from './google';
 import { base64UrlToBytes, decodeJwsPayloadUnverified } from './jws';
 import { generateId } from '../util';
 import { BillingPlatform, Purchase } from './types';
+import { classifyPurchaseChange, type PurchaseEvent } from './offers';
+import { verifyJwsX5c, type VerifyX5cOptions } from './x509';
+import { verifyPubSubToken, type VerifyPubSubOptions } from './pubsub';
 
 /**
  * Server notifications from Apple and Google.
@@ -45,16 +48,53 @@ export interface NotificationResult {
   /** The chain the notification concerned, when it named one. */
   originalTransactionId: string | null;
   /** Why nothing happened, when `handled` is false or no purchase changed. */
-  reason?: 'duplicate' | 'unknown_purchase' | 'test' | 'unsupported';
+  reason?: 'duplicate' | 'unknown_purchase' | 'test' | 'unsupported' | 'invalid_signature';
   /** The refreshed purchase, when one was re-verified. */
   purchase?: Purchase;
+  /**
+   * What changed, the same words for both stores (`classifyPurchaseChange`):
+   * trial_started, trial_converted, renewed, cancelled, expired, refunded…
+   * Set whenever `purchase` is.
+   */
+  event?: PurchaseEvent;
+  /**
+   * How the owner was found: an earlier verify of this chain, the chain it
+   * replaced (Play linkedPurchaseToken), or the purchase's account token.
+   */
+  ownerFrom?: 'chain' | 'linked_chain' | 'account_token';
 }
+
+/**
+ * Map the account token the app attached at purchase time to one of YOUR
+ * users, or null when it is not one.
+ *
+ * The app passes it to the store when buying — StoreKit `appAccountToken`
+ * (must be a UUID) and Play `obfuscatedAccountId` — and the store hands it
+ * back on every transaction of that chain. It lets a notification find its
+ * owner when it arrives BEFORE the app's own `/billing/verify` (the app was
+ * killed mid-purchase, the network dropped), instead of answering
+ * `unknown_purchase` until the customer taps Restore.
+ *
+ * Opt-in, and it must CHECK the token: the simplest correct implementation
+ * looks the id up — `async (t) => (await users.exists(t)) ? t : null`.
+ */
+export type ResolveAccount = (token: string, platform: BillingPlatform) => Promise<string | null> | string | null;
 
 export interface AppleNotificationOptions {
   billing: BillingClient;
   apple: AppleStore;
   /** The raw `signedPayload` string from Apple's POST body. */
   signedPayload: string;
+  /** Resolve a chain no account has verified yet through its appAccountToken. */
+  resolveAccount?: ResolveAccount;
+  /**
+   * Check the JWS certificate chain (x5c → Apple Root CA - G3) before doing
+   * anything. `true` pins Apple's root; pass options to pin others (tests).
+   * A failed check answers `{ handled: false, reason: 'invalid_signature' }`
+   * and records nothing. Off by default: the store re-read already makes a
+   * forged notification harmless; this also keeps it out of the event log.
+   */
+  verifySignature?: boolean | VerifyX5cOptions;
 }
 
 export interface GoogleNotificationOptions {
@@ -62,6 +102,15 @@ export interface GoogleNotificationOptions {
   google: GoogleStore;
   /** The decoded Pub/Sub push body: `{ message: { data, messageId } }`. */
   body: Record<string, unknown>;
+  /** Resolve a token no account has verified yet through its obfuscatedAccountId. */
+  resolveAccount?: ResolveAccount;
+  /**
+   * Check the Pub/Sub push's OIDC token before doing anything: pass the
+   * request's `Authorization` header and what to expect. A failed check
+   * answers `{ handled: false, reason: 'invalid_signature' }` and records
+   * nothing. Off when omitted.
+   */
+  verifyPubSub?: VerifyPubSubOptions & { authorization: string | null | undefined };
 }
 
 /* ── Apple ─────────────────────────────────────────────────────────────── */
@@ -80,6 +129,14 @@ export async function handleAppleNotification(
     throw new Error('handleAppleNotification: "signedPayload" is required.');
   }
 
+  if (options.verifySignature) {
+    try {
+      await verifyJwsX5c(signedPayload, options.verifySignature === true ? {} : options.verifySignature);
+    } catch {
+      const claimed = safeAppleType(signedPayload);
+      return { handled: false, platform: 'apple', notificationType: claimed, originalTransactionId: null, reason: 'invalid_signature' };
+    }
+  }
   const payload = decodeJwsPayloadUnverified<AppleNotificationPayload>(signedPayload);
   const notificationType = String(payload.notificationType ?? 'UNKNOWN');
   const subtype = payload.subtype ? `.${payload.subtype}` : '';
@@ -115,20 +172,38 @@ export async function handleAppleNotification(
   // Apple's own connectivity check. It names no purchase by design.
   if (notificationType === 'TEST') return { ...base, handled: true, reason: 'test' };
 
-  const owner = originalTransactionId
+  let owner = originalTransactionId
     ? await findOwner(billing, 'apple', originalTransactionId)
     : null;
+  let ownerFrom: NotificationResult['ownerFrom'] = owner ? 'chain' : undefined;
+  if (!owner && transactionId && options.resolveAccount) {
+    // Not verified by any account yet. The app said who was buying when it
+    // bought (appAccountToken); the app's resolver decides if that is a user.
+    const token = typeof transaction.appAccountToken === 'string' ? transaction.appAccountToken : '';
+    owner = token ? await options.resolveAccount(token, 'apple') : null;
+    if (owner) ownerFrom = 'account_token';
+  }
   if (!owner || !transactionId) {
     // A purchase this backend never recorded — someone else's app sharing an
-    // Apple team, or a notification that arrived before the client verified.
-    // Nothing to update, and inventing a user here would be worse than
-    // waiting for the client to verify normally.
+    // Apple team, or a notification that arrived before the client verified
+    // with no account token to go on. Nothing to update, and inventing a user
+    // here would be worse than waiting for the client to verify normally.
     return { ...base, handled: true, reason: 'unknown_purchase' };
   }
 
+  const before = originalTransactionId ? await billing.findPurchase('apple', originalTransactionId) : null;
   const verified = await apple.verify({ userId: owner, transactionId });
   const purchase = await billing.recordPurchase(verified);
-  return { ...base, handled: true, purchase };
+  return { ...base, handled: true, purchase, ownerFrom, event: classifyPurchaseChange(before, purchase) };
+}
+
+/** The notification type a payload claims, for the log line of a refused one. */
+function safeAppleType(signedPayload: string): string {
+  try {
+    return String(decodeJwsPayloadUnverified<AppleNotificationPayload>(signedPayload).notificationType ?? 'UNKNOWN');
+  } catch {
+    return 'UNREADABLE';
+  }
 }
 
 interface AppleNotificationPayload {
@@ -151,6 +226,13 @@ export async function handleGoogleNotification(
   options: GoogleNotificationOptions,
 ): Promise<NotificationResult> {
   const { billing, google, body } = options;
+  if (options.verifyPubSub) {
+    try {
+      await verifyPubSubToken(options.verifyPubSub.authorization, options.verifyPubSub);
+    } catch {
+      return { handled: false, platform: 'google', notificationType: 'UNVERIFIED', originalTransactionId: null, reason: 'invalid_signature' };
+    }
+  }
   const message = (body?.message ?? {}) as Record<string, unknown>;
   const encoded = message.data;
   if (typeof encoded !== 'string' || encoded === '') {
@@ -158,6 +240,9 @@ export async function handleGoogleNotification(
   }
 
   const notification = decodeBase64Json(encoded);
+  if (notification.voidedPurchaseNotification) {
+    return handleGoogleVoided(billing, google, notification, String(message.messageId ?? ''));
+  }
   const subscription = (notification.subscriptionNotification ?? {}) as Record<string, unknown>;
   const oneTime = (notification.oneTimeProductNotification ?? {}) as Record<string, unknown>;
   const isTest = Boolean(notification.testNotification);
@@ -197,17 +282,80 @@ export async function handleGoogleNotification(
   if (isTest) return { ...base, handled: true, reason: 'test' };
   if (!purchaseToken || !productId) return { ...base, handled: true, reason: 'unsupported' };
 
+  const kind = notification.oneTimeProductNotification ? 'product' : 'subscription';
   const owner = await findOwner(billing, 'google', purchaseToken);
-  if (!owner) return { ...base, handled: true, reason: 'unknown_purchase' };
+  if (owner) {
+    const before = await billing.findPurchase('google', purchaseToken);
+    const verified = await google.verify({ userId: owner, productId, purchaseToken, kind });
+    const purchase = await billing.recordPurchase(verified);
+    return { ...base, handled: true, purchase, ownerFrom: 'chain', event: classifyPurchaseChange(before, purchase) };
+  }
 
-  const verified = await google.verify({
-    userId: owner,
-    productId,
-    purchaseToken,
-    kind: notification.oneTimeProductNotification ? 'product' : 'subscription',
+  // Not verified by any account yet: read it from Play (the RTDN carries no
+  // account). Two ways it can still be someone's:
+  //   - a plan switch or resubscribe: Play issued a NEW token whose
+  //     linkedPurchaseToken is the chain a user already owns;
+  //   - the app's resolver maps the purchase's obfuscatedAccountId.
+  const fetched = await google.verify({ userId: UNRESOLVED, productId, purchaseToken, kind });
+  const linked = typeof fetched.raw?.linkedPurchaseToken === 'string' ? fetched.raw.linkedPurchaseToken : null;
+  const linkedOwner = linked ? await findOwner(billing, 'google', linked) : null;
+  if (linkedOwner) {
+    const purchase = await billing.recordPurchase({ ...fetched, userId: linkedOwner });
+    return { ...base, handled: true, purchase, ownerFrom: 'linked_chain', event: classifyPurchaseChange(null, purchase) };
+  }
+  if (!options.resolveAccount) return { ...base, handled: true, reason: 'unknown_purchase' };
+  const token = playAccountToken(fetched.raw);
+  const resolved = token ? await options.resolveAccount(token, 'google') : null;
+  if (!resolved) return { ...base, handled: true, reason: 'unknown_purchase' };
+  const purchase = await billing.recordPurchase({ ...fetched, userId: resolved });
+  return { ...base, handled: true, purchase, ownerFrom: 'account_token', event: classifyPurchaseChange(null, purchase) };
+}
+
+/**
+ * A refund or chargeback (Play "voided purchase"). It names the token but not
+ * the product, and it is still only a trigger: the purchase this backend
+ * already recorded is re-read from Play and Play's answer is stored — a
+ * revoked subscription comes back expired, a voided one-time product
+ * cancelled, and access stops. A token nobody recorded changes nothing.
+ */
+async function handleGoogleVoided(
+  billing: BillingClient,
+  google: GoogleStore,
+  notification: Record<string, unknown>,
+  messageId: string,
+): Promise<NotificationResult> {
+  const voided = (notification.voidedPurchaseNotification ?? {}) as Record<string, unknown>;
+  const purchaseToken = typeof voided.purchaseToken === 'string' ? voided.purchaseToken : null;
+  // productType 1 = subscription, 2 = one-time product (Play's enum).
+  const kind = Number(voided.productType) === 2 ? 'product' : 'subscription';
+  const base = { platform: 'google' as const, notificationType: 'VOIDED_PURCHASE', originalTransactionId: purchaseToken };
+
+  const recorded = await billing.recordEvent({
+    platform: 'google',
+    notificationType: base.notificationType,
+    originalTransactionId: purchaseToken,
+    eventId: messageId || `google:voided:${purchaseToken ?? generateId()}`,
+    payload: notification,
   });
+  if (!recorded) return { ...base, handled: false, reason: 'duplicate' };
+  if (!purchaseToken) return { ...base, handled: true, reason: 'unsupported' };
+
+  const known = await billing.findPurchase('google', purchaseToken);
+  if (!known) return { ...base, handled: true, reason: 'unknown_purchase' };
+
+  const verified = await google.verify({ userId: known.user_id, productId: known.product_id, purchaseToken, kind });
   const purchase = await billing.recordPurchase(verified);
-  return { ...base, handled: true, purchase };
+  return { ...base, handled: true, purchase, ownerFrom: 'chain', event: classifyPurchaseChange(known, purchase) };
+}
+
+/** Placeholder owner while a Play purchase is read before its account is known. Never recorded. */
+const UNRESOLVED = '__unresolved__';
+
+/** Play's obfuscatedAccountId, as subscriptionsv2 and products return it. */
+function playAccountToken(raw: Record<string, unknown> | undefined): string | null {
+  const ids = (raw?.externalAccountIdentifiers ?? {}) as Record<string, unknown>;
+  const token = ids.obfuscatedExternalAccountId ?? raw?.obfuscatedExternalAccountId;
+  return typeof token === 'string' && token !== '' ? token : null;
 }
 
 /**

@@ -164,7 +164,8 @@ await client.modules.billing.defineProduct({
 });
 
 // anywhere
-const { allowed, daysRemaining, isTrial } = await billing.check(userId, 'premium');
+const { allowed, daysRemaining, isTrial, trialSource, willRenew } = await billing.check(userId, 'premium');
+// trialSource 'store' = the App Store / Play free intro offer (card upfront); 'server' = startTrial()
 ```
 
 Mount the router and the app gets the whole flow over HTTP:
@@ -173,7 +174,7 @@ Mount the router and the app gets the whole flow over HTTP:
 |--------|------|----------|
 | GET | `/billing/products` | Catalog for the paywall (public — shown before sign-in) |
 | GET | `/billing/entitlements` | Every entitlement for the caller |
-| GET | `/billing/entitlements/:key` | `{ allowed, source, expiresAt, daysRemaining, isTrial }` |
+| GET | `/billing/entitlements/:key` | `{ allowed, source, expiresAt, daysRemaining, isTrial, trialSource, willRenew, productId, purchaseStatus }` |
 | POST | `/billing/verify` | `{platform:'apple', transactionId}` or `{platform:'google', productId, purchaseToken}` → verified against the store, recorded, entitlement returned |
 | POST | `/billing/restore` | Re-apply purchases after a reinstall |
 | POST | `/billing/trial` | Start the free trial (length is **server**-side) |
@@ -184,6 +185,13 @@ Gate a feature in one line:
 
 ```ts
 app.use('/coach/*', requireAuth(), requireEntitlement('premium'));
+
+// A hard paywall where one person pays for a household or team:
+app.use('/home/*', requireAuth(), requireEntitlement('premium', {
+  subject: async (c, callerId) => ownerOf(callerId),  // whose subscription decides
+  onBillingError: 'allow',                            // a platform outage does not lock out payers
+}));
+// In the handler: c.get(ENTITLEMENT_CHECK) — e.g. isTrial / expiresAt for "trial ends Friday".
 ```
 
 It answers **402 Payment Required**, not 403, in the SDK's one
@@ -228,10 +236,39 @@ credentials.
   user paid through the period. It resolves by expiry.
 - **Billing-retry grace keeps access.** The card failed and the store is
   retrying; cutting the user off there is a top cause of involuntary churn.
-- **Sandbox never unlocks production.** The environment comes from the host
-  that answered, not from a field in the payload.
+- **The stores' own free trial is a trial.** An introductory offer (card
+  upfront, charged when it ends) is recorded as a purchase, and `check()`
+  reports it as `isTrial: true, trialSource: 'store'` from the store payload
+  (Apple `offerType`/`offerDiscountType`, Play `offerPhase`) — so a hard
+  paywall can say "trial ends Friday". `storeOffer(purchase)` reads it directly.
+- **Sandbox purchases are labelled, not refused.** Every purchase records the
+  environment of the store host that ANSWERED (`'production'` / `'sandbox'`),
+  never a field in the payload, and `check()` reports it as `environment`.
+  Sandbox still unlocks: App Review and TestFlight buy with sandbox accounts
+  against your production server, and an app that refused them would be
+  rejected for a paywall that never opens. Leave `environment: 'sandbox'` out
+  of revenue and conversion numbers instead.
 - **A transaction chain belongs to whoever redeemed it first**, so replaying
   someone else's receipt on another account is refused.
+- **A notification can arrive before the app verifies** (the app was killed
+  mid-purchase). Pass `resolveAccount` to the handlers / `billingRouter` and
+  have the app buy with StoreKit `appAccountToken` / Play
+  `obfuscatedAccountId` set to the user id: the chain is then recorded for
+  that user instead of answering `unknown_purchase` until they tap Restore.
+- **Notifications say what happened, in one vocabulary.** `NotificationResult.event`
+  is `trial_started`, `trial_converted`, `renewed`, `cancelled`, `reactivated`,
+  `grace`, `billing_retry`, `recovered`, `expired`, `refunded`, `revoked` or
+  `unchanged` — derived from the purchase before and after the store re-read
+  (`classifyPurchaseChange`), the same words for Apple and Play. Hang analytics
+  and "your trial converted" emails off it. Play refunds
+  (`voidedPurchaseNotification`) and plan switches (`linkedPurchaseToken`) are
+  handled too.
+- **Signed notifications, checked when you ask.** `billingRouter({
+  verifyAppleSignature: true, verifyGooglePubSub: { audience, serviceAccountEmail } })`
+  (or the same options on the handlers) checks Apple's x5c chain up to the
+  pinned Apple Root CA - G3 and Google's Pub/Sub OIDC token before anything
+  runs; a failure answers `invalid_signature` and records nothing.
+  `verifyJwsX5c` and `verifyPubSubToken` are exported for your own routes.
 - **Store notifications are triggers, not truth.** The body says *which*
   purchase changed; the new state is always re-read from the store. A forged
   notification cannot grant anything.

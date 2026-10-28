@@ -41,7 +41,7 @@ export { inventoryRouter } from './inventory-router';
 export { cartRouter } from './cart-router';
 export { ordersRouter } from './orders-router';
 export { checkoutRouter, verifyStripeSignature } from './checkout-router';
-export { billingRouter, requireEntitlement } from './billing-router';
+export { billingRouter, ENTITLEMENT_CHECK, requireEntitlement } from './billing-router';
 export { jobsRouter } from './jobs-router';
 export type { JobsRouterOptions } from './jobs-router';
 export { notificationsRouter } from './notifications-router';

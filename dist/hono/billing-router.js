@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ENTITLEMENT_CHECK = void 0;
 exports.billingRouter = billingRouter;
 exports.requireEntitlement = requireEntitlement;
 const hono_1 = require("hono");
@@ -161,6 +162,8 @@ function billingRouter(options = {}) {
             billing: billingOf(c),
             apple: appleFrom(c, options),
             signedPayload,
+            resolveAccount: options.resolveAccount,
+            verifySignature: options.verifyAppleSignature,
         });
         return c.json(notificationBody(result));
     });
@@ -172,11 +175,17 @@ function billingRouter(options = {}) {
             billing: billingOf(c),
             google: googleFrom(c, options),
             body,
+            resolveAccount: options.resolveAccount,
+            verifyPubSub: options.verifyGooglePubSub
+                ? { ...options.verifyGooglePubSub, authorization: c.req.header('authorization') }
+                : undefined,
         });
         return c.json(notificationBody(result));
     });
     return app;
 }
+/** The EntitlementCheck `requireEntitlement` decided on, for the handler: `c.get(ENTITLEMENT_CHECK)`. */
+exports.ENTITLEMENT_CHECK = 'xenition:entitlementCheck';
 /**
  * Gate a route on an entitlement — the paywall, as one line per route.
  *
@@ -207,10 +216,22 @@ function requireEntitlement(entitlement, options = {}) {
             throw new client_1.XenitionApiConfigError(`requireEntitlement("${entitlement}"): no authenticated user on this request. ` +
                 'Mount requireAuth() before it.');
         }
-        const check = await resolveClient(c).modules.billing.check(user.id, entitlement);
+        let check;
+        try {
+            const subject = options.subject ? await options.subject(c, user.id) : user.id;
+            check = await resolveClient(c).modules.billing.check(subject, entitlement);
+        }
+        catch (error) {
+            if (options.onBillingError !== 'allow')
+                throw error;
+            console.warn(`requireEntitlement("${entitlement}"): billing did not answer, letting the request through:`, error instanceof Error ? error.message : error);
+            await next();
+            return;
+        }
         if (!check.allowed) {
             return (0, errors_1.paymentRequired)(c, { entitlement, message: options.message, check });
         }
+        c.set(exports.ENTITLEMENT_CHECK, check);
         await next();
     };
 }
@@ -240,6 +261,7 @@ function notificationBody(result) {
         received: true,
         handled: result.handled,
         type: result.notificationType,
+        ...(result.event ? { event: result.event } : {}),
         ...(result.reason ? { reason: result.reason } : {}),
     };
 }

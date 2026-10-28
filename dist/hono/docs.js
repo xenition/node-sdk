@@ -739,7 +739,7 @@ const MODULE_PATHS = {
                 security: [{ bearerAuth: [] }],
                 parameters: [pathParam('key', 'Entitlement name, e.g. "premium"')],
                 responses: {
-                    '200': okJson('EntitlementCheck: { allowed, source, expiresAt, daysRemaining, isTrial }'),
+                    '200': okJson('EntitlementCheck: { allowed, source, expiresAt, daysRemaining, isTrial, trialSource, willRenew, productId, purchaseStatus }'),
                     '401': UNAUTHORIZED,
                 },
             },

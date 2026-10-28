@@ -652,8 +652,18 @@ export interface EntitlementCheck {
   expiresAt: string | null;
   /** Whole days remaining, rounded up. Null when perpetual or not allowed. */
   daysRemaining: number | null;
-  /** True while this is a free trial rather than a paid purchase. */
+  /** True while this is a free trial — the server's startTrial() or the store's intro offer. */
   isTrial: boolean;
+  /** Whose trial: 'server', 'store' (App Store / Play intro offer), or null. */
+  trialSource: 'server' | 'store' | null;
+  /** Store purchases: will it renew (or, in a trial, convert)? */
+  willRenew: boolean | null;
+  /** The store product behind it, when a purchase backs it. */
+  productId: string | null;
+  /** The backing purchase's status ('grace', 'on_hold'…), when a purchase backs it. */
+  purchaseStatus: 'active' | 'grace' | 'on_hold' | 'expired' | 'refunded' | 'revoked' | 'pending' | null;
+  /** 'production' | 'sandbox' for a store purchase (App Review / TestFlight are sandbox); null otherwise. */
+  environment: string | null;
   /** Machine-readable why-not: 'expired' | 'revoked' | 'none'. */
   reason: string | null;
 }

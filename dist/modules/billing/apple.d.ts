@@ -88,7 +88,7 @@ export declare class AppleStore {
     private assertBundle;
 }
 /** Normalize Apple's decoded transaction into the SDK's purchase shape. */
-export declare function toRecordInput(userId: string, transaction: AppleTransaction, status: PurchaseStatus, autoRenewing: boolean, environment?: string): RecordPurchaseInput;
+export declare function toRecordInput(userId: string, transaction: AppleTransaction, status: PurchaseStatus, autoRenewing: boolean, environment?: string, graceUntil?: number | null): RecordPurchaseInput;
 /** Apple sends epoch milliseconds; the SDK stores ISO strings. */
 export declare function msToIso(value: unknown): string | null;
 /**
@@ -96,7 +96,9 @@ export declare function msToIso(value: unknown): string | null;
  *
  * Taken from the host that ANSWERED rather than the `environment` field in
  * the payload: the host is what the request actually reached, and it cannot
- * be stale or absent. A sandbox purchase must never unlock production.
+ * be stale or absent. Sandbox purchases still grant access — App Review buys
+ * with sandbox accounts against production — but are labelled, so revenue
+ * and analytics can leave them out (`EntitlementCheck.environment`).
  */
 export declare function environmentOf(host: string): string;
 //# sourceMappingURL=apple.d.ts.map

@@ -68,6 +68,8 @@ export declare class BillingClient {
      * run.
      */
     check(userId: string, entitlement: string): Promise<EntitlementCheck>;
+    /** The purchase an entitlement row was projected from, when there is one. */
+    private backingPurchase;
     /** Every entitlement row for a user, evaluated the same way as `check`. */
     listEntitlements(userId: string): Promise<EntitlementCheck[]>;
     /**
@@ -139,6 +141,12 @@ export interface RecordPurchaseInput {
     environment?: string;
     raw?: Record<string, unknown>;
 }
+/**
+ * One entitlement row, evaluated at read time (`check` and `listEntitlements`).
+ * The backing purchase, when there is one, says whether this is the store's
+ * free trial and whether it will renew.
+ */
+export declare function evaluateEntitlement(row: Entitlement, purchase: Purchase | null): EntitlementCheck;
 /** Past its expiry. A null expiry is perpetual and never expires. */
 export declare function isExpired(expiresAt: string | null | undefined): boolean;
 /** Whole days until expiry, rounded up. Null when perpetual. */
